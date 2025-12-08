@@ -1,0 +1,31 @@
+{
+  "private": true,
+  "author": "chenkang <chenkang@zhiketong.cn>",
+  "scripts": {
+    "start": "max dev",
+    "start:dev": "UMI_ENV=development max dev",
+    "start:test": "UMI_ENV=test max dev",
+    "start:pre": "UMI_ENV=pre max dev",
+    "build:dev": "UMI_ENV=development max build",
+    "build:test": "UMI_ENV=test max build",
+    "build:pre": "UMI_ENV=pre max build",
+    "build:prod": "UMI_ENV=production max build"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.0.1",
+    "@ant-design/pro-components": "^2.4.4",
+    "@umijs/max": "^4.5.3",
+    "antd": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.33",
+    "@types/react-dom": "^18.0.11",
+    "husky": "^9",
+    "lint-staged": "^13.2.0",
+    "prettier": "^2.8.7",
+    "prettier-plugin-organize-imports": "^3.2.2",
+    "prettier-plugin-packagejson": "^2.4.3",
+    "typescript": "^5.0.3"
+  },
+  "packageManager": "yarn@1.22.22+sha1.ac34549e6aa8e7ead463a7407e1c7390f61a6610"
+}

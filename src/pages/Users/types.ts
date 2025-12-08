@@ -1,0 +1,15 @@
+export enum UserType {
+    SUPER_ADMIN = 'SUPER_ADMIN',
+    ADMIN = 'ADMIN',
+    STAFF = 'STAFF',
+    CUSTOMER_SERVICE = 'CUSTOMER_SERVICE',
+    OPERATION = 'OPERATION',
+    FINANCE = 'FINANCE',
+    REGISTERED_USER = 'REGISTERED_USER',
+}
+
+export enum UserStatus {
+    ACTIVE = 'ACTIVE',
+    FROZEN = 'FROZEN',
+    DISABLED = 'DISABLED',
+}
