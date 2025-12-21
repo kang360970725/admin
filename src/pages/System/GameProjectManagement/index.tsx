@@ -136,6 +136,16 @@ const GameProjectManagement: React.FC = () => {
             },
         },
         {
+            title: '计费模式',
+            dataIndex: 'billingMode',
+            key: 'billingMode',
+            render: (mode: string) => (
+                <Tag color={mode === 'HOURLY' ? 'geekblue' : 'gold'}>
+                    {mode === 'HOURLY' ? '小时单' : '保底单'}
+                </Tag>
+            ),
+        },
+        {
             title: '保底数额',
             dataIndex: 'baseAmount',
             key: 'baseAmount',
@@ -219,10 +229,13 @@ const GameProjectManagement: React.FC = () => {
                 <Form
                     layout="vertical"
                     onFinish={handleSubmit}
-                    initialValues={editingProject || {
-                        type: 'STANDARD',
-                        status: 'ACTIVE',
-                    }}
+                    initialValues={
+                        editingProject || {
+                            type: 'EXPERIENCE',
+                            billingMode: 'GUARANTEED',
+                            status: 'ACTIVE',
+                        }
+                    }
                 >
                     <Form.Item
                         name="name"
@@ -263,7 +276,16 @@ const GameProjectManagement: React.FC = () => {
                             <Option value="CUSTOMIZED">自定义单</Option>
                         </Select>
                     </Form.Item>
-
+                    <Form.Item
+                        name="billingMode"
+                        label="计费模式"
+                        rules={[{ required: true, message: '请选择计费模式' }]}
+                    >
+                        <Select placeholder="请选择计费模式">
+                            <Option value="GUARANTEED">保底单</Option>
+                            <Option value="HOURLY">小时单</Option>
+                        </Select>
+                    </Form.Item>
                     <Form.Item
                         name="baseAmount"
                         label="保底哈夫币数额"

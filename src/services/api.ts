@@ -252,3 +252,125 @@ export async function markBillAsPaid(id: number) {
         method: 'POST',
     });
 }
+// ---------------------- Orders API ----------------------
+
+export async function createOrder(data: any) {
+    return request(`${API_BASE}/orders/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/** 订单列表：POST /orders/list */
+export async function getOrders(data: any) {
+    return request(`${API_BASE}/orders/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/** 订单详情：POST /orders/detail */
+export async function getOrderDetail(id: number) {
+    return request(`${API_BASE}/orders/detail`, {
+        method: 'POST',
+        data: { id },
+    });
+}
+
+/** 派单：POST /orders/dispatch */
+export async function assignDispatch(orderId: number, data: { playerIds: number[]; remark?: string }) {
+    return request(`${API_BASE}/orders/dispatch`, {
+        method: 'POST',
+        data: { orderId, ...data },
+    });
+}
+
+/** 接单：POST /orders/dispatch/accept */
+export async function acceptDispatch(dispatchId: number, data?: { remark?: string }) {
+    return request(`${API_BASE}/orders/dispatch/accept`, {
+        method: 'POST',
+        data: { dispatchId, ...(data || {}) },
+    });
+}
+
+/** 存单：POST /orders/dispatch/archive */
+export async function archiveDispatch(dispatchId: number, data: any) {
+    return request(`${API_BASE}/orders/dispatch/archive`, {
+        method: 'POST',
+        data: { dispatchId, ...data },
+    });
+}
+
+/** 结单：POST /orders/dispatch/complete */
+export async function completeDispatch(dispatchId: number, data: any) {
+    return request(`${API_BASE}/orders/dispatch/complete`, {
+        method: 'POST',
+        data: { dispatchId, ...data },
+    });
+}
+
+/** 我的接单记录：POST /orders/my-dispatches */
+export async function getMyDispatches(data: any) {
+    return request(`${API_BASE}/orders/my-dispatches`, {
+        method: 'POST',
+        data,
+    });
+}
+// 项目下拉（支持 keyword）
+export async function getGameProjectOptions(data: { keyword?: string }) {
+    return request(`${API_BASE}/game-project/options`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// 空闲打手下拉（支持 keyword；默认 onlyIdle=true）
+export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean }) {
+    return request(`${API_BASE}/users/players/options`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---- meta ----
+export async function getEnumDicts() {
+    return request(`${API_BASE}/meta/enums`, { method: 'POST' });
+}
+
+// ---- orders ----
+export async function updateOrderPaidAmount(data: { id: number; paidAmount: number; remark?: string }) {
+    return request(`${API_BASE}/orders/update-paid-amount`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateDispatchParticipants(data: {
+    dispatchId: number;
+    playerIds: number[];
+    remark?: string;
+}) {
+    return request(`${API_BASE}/orders/dispatch/update-participants`, {
+        method: 'POST',
+        data,
+    });
+}
+
+
+// ---------------------- Settlement Batch API (POST style) ----------------------
+
+/** 批次结算查询：POST /settlements/batches */
+export async function querySettlementBatch(data: any) {
+    return request(`${API_BASE}/settlements/batches`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/** 标记打款：POST /settlements/mark-paid */
+export async function markSettlementsPaid(data: { settlementIds: number[]; remark?: string }) {
+    return request(`${API_BASE}/settlements/mark-paid`, {
+        method: 'POST',
+        data,
+    });
+}

@@ -85,25 +85,44 @@ export default defineConfig({
         },
       ],
     },
+    // {
+    //   path: '/bill',
+    //   name: '订单管理',
+    //   icon: 'FileTextOutlined',
+    //   // access: 'canAccessBillManager',
+    //   routes: [
+    //     {
+    //       path: '/bill/list',
+    //       name: '订单列表',
+    //       component: '@/pages/Bill/BillList',
+    //       // access: 'canAccessBillManager',
+    //     },
+    //     {
+    //       path: '/bill/create',
+    //       name: '创建订单',
+    //       component: '@/pages/Bill/CreateBill',
+    //       // access: 'canAccessBillManager',
+    //     },
+    //     // 后续添加其他订单相关页面
+    //   ],
+    // },
     {
-      path: '/bill',
+      path: '/orders',
       name: '订单管理',
-      icon: 'FileTextOutlined',
-      // access: 'canAccessBillManager',
+      icon: 'ProfileOutlined',
       routes: [
-        {
-          path: '/bill/list',
-          name: '订单列表',
-          component: '@/pages/Bill/BillList',
-          // access: 'canAccessBillManager',
-        },
-        {
-          path: '/bill/create',
-          name: '创建订单',
-          component: '@/pages/Bill/CreateBill',
-          // access: 'canAccessBillManager',
-        },
-        // 后续添加其他订单相关页面
+        { path: '/orders', name: '订单列表', component: './Orders' },
+        { path: '/orders/new', name: '新建订单', component: './Orders/New' },
+        { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true },
+      ],
+    },
+    {
+      path: '/settlements',
+      name: '结算模块',
+      icon: 'MoneyCollectOutlined',
+      routes: [
+        { path: '/settlements/experience', name: '体验单结算（3日）', component: './Settlements/Experience' },
+        { path: '/settlements/monthly', name: '月度结算（正价单）', component: './Settlements/Monthly' },
       ],
     },
     {

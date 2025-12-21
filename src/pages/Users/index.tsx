@@ -261,7 +261,7 @@ export default function UsersPage() {
                     labelWidth: 'auto',
                 }}
                 toolBarRender={() => [
-                    access.canCreateUser && (
+                    !access.canCreateUser && (
                         <Button
                             key="add"
                             type="primary"
