@@ -310,12 +310,12 @@ export async function completeDispatch(dispatchId: number, data: any) {
 }
 
 /** 我的接单记录：POST /orders/my-dispatches */
-export async function getMyDispatches(data: any) {
-    return request(`${API_BASE}/orders/my-dispatches`, {
-        method: 'POST',
-        data,
-    });
-}
+// export async function getMyDispatches(data: any) {
+//     return request(`${API_BASE}/orders/my-dispatches`, {
+//         method: 'POST',
+//         data,
+//     });
+// }
 // 项目下拉（支持 keyword）
 export async function getGameProjectOptions(data: { keyword?: string }) {
     return request(`${API_BASE}/game-project/options`, {
@@ -373,4 +373,34 @@ export async function markSettlementsPaid(data: { settlementIds: number[]; remar
         method: 'POST',
         data,
     });
+}
+// 我的接单记录（陪玩端）
+export async function getMyDispatches(data: { page?: number; limit?: number; status?: string }) {
+    return request(`${API_BASE}/orders/my-dispatches`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/** 陪玩接单相关*/
+export async function acceptDispatchAsStaff(data: { dispatchId: number; remark?: string }) {
+    return request(`${API_BASE}/orders/dispatch/accept`, { method: 'POST', data });
+}
+
+export async function archiveDispatchAsStaff(data: {
+    dispatchId: number;
+    deductMinutesOption?: string;
+    remark?: string;
+    progresses?: Array<{ userId: number; progressBaseWan?: number }>;
+}) {
+    return request(`${API_BASE}/orders/dispatch/archive`, { method: 'POST', data });
+}
+
+export async function completeDispatchAsStaff(data: {
+    dispatchId: number;
+    deductMinutesOption?: string;
+    remark?: string;
+    progresses?: Array<{ userId: number; progressBaseWan?: number }>;
+}) {
+    return request(`${API_BASE}/orders/dispatch/complete`, { method: 'POST', data });
 }

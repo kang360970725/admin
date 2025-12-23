@@ -51,6 +51,7 @@ const OrderDetailPage: React.FC = () => {
     }, [order]);
 
     const isHourly = billingMode === 'HOURLY';
+    const isGuaranteed = billingMode === 'GUARANTEED';
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
@@ -62,7 +63,6 @@ const OrderDetailPage: React.FC = () => {
             const res = await getEnumDicts();
             setDicts(res || {});
         } catch (e) {
-            // 不阻塞页面
             console.error(e);
         }
     };
@@ -107,10 +107,16 @@ const OrderDetailPage: React.FC = () => {
     // 打开派单/更新参与者弹窗
     const openDispatchModal = async () => {
         setDispatchRemark('');
-        // 默认带入当前参与者（如果有）
-        const actives =
-            currentDispatch?.participants?.filter((p: any) => p.isActive !== false) || [];
-        setSelectedPlayers(actives.map((p: any) => Number(p.userId)).filter((n: number) => !Number.isNaN(n)));
+
+        // ✅ 若当前派单已存单（ARCHIVED），再次派单必须重新选择，不带入旧参与者
+        if (currentDispatch?.status === 'ARCHIVED') {
+            setSelectedPlayers([]);
+        } else {
+            const actives = currentDispatch?.participants?.filter((p: any) => p.isActive !== false) || [];
+            setSelectedPlayers(
+                actives.map((p: any) => Number(p.userId)).filter((n: number) => !Number.isNaN(n)),
+            );
+        }
 
         setDispatchModalOpen(true);
         await fetchPlayers('');
@@ -126,8 +132,13 @@ const OrderDetailPage: React.FC = () => {
 
             setDispatchSubmitting(true);
 
-            // 有 currentDispatch => 更新参与者；无 => 派单（创建 dispatch）
-            if (currentDispatch?.id) {
+            // ✅ 只有在 WAIT_ASSIGN / WAIT_ACCEPT 才允许更新参与者
+            // ✅ ARCHIVED（存单）必须创建新 dispatch（重新派单）
+            const canUpdateParticipants =
+                currentDispatch?.id &&
+                (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT');
+
+            if (canUpdateParticipants) {
                 await updateDispatchParticipants({
                     dispatchId: Number(currentDispatch.id),
                     playerIds: selectedPlayers,
@@ -136,7 +147,7 @@ const OrderDetailPage: React.FC = () => {
             } else {
                 await assignDispatch(Number(order.id), {
                     playerIds: selectedPlayers,
-                    remark: dispatchRemark || '详情页派单',
+                    remark: dispatchRemark || '详情页派单/重新派单',
                 });
             }
 
@@ -181,9 +192,9 @@ const OrderDetailPage: React.FC = () => {
         }
     };
 
+    // 当前参与者（仅展示 active）
     const participantRows = useMemo(() => {
         const list = currentDispatch?.participants || [];
-        // 只展示 active（历史替换掉的不展示）
         return list.filter((p: any) => p.isActive !== false);
     }, [currentDispatch]);
 
@@ -215,18 +226,145 @@ const OrderDetailPage: React.FC = () => {
 
     const statusTag = (group: keyof DictMap, value: any) => {
         const text = t(group, value, String(value));
-        // 简单颜色策略
         const v = String(value);
         const color =
-            v.includes('WAIT') ? 'orange' :
-                v.includes('ACCEPT') ? 'blue' :
-                    v.includes('ARCH') ? 'gold' :
-                        v.includes('COMP') ? 'green' :
-                            v.includes('CANCEL') || v.includes('REFUND') ? 'red' :
-                                'default';
+            v.includes('WAIT') ? 'orange'
+                : v.includes('ACCEPT') ? 'blue'
+                : v.includes('ARCH') ? 'gold'
+                    : v.includes('COMP') ? 'green'
+                        : v.includes('CANCEL') || v.includes('REFUND') ? 'red'
+                            : 'default';
 
         return <Tag color={color}>{text}</Tag>;
     };
+
+    // -----------------------------
+    // ✅ 顶部：剩余保底计算（累计所有轮次 progressBaseWan）
+    // -----------------------------
+    const baseAmountWan = useMemo(() => {
+        // 订单创建时你落库 baseAmountWan
+        const v = order?.baseAmountWan;
+        return v == null ? null : Number(v);
+    }, [order]);
+
+    const totalProgressWan = useMemo(() => {
+        const dispatches = Array.isArray(order?.dispatches) ? order.dispatches : [];
+        let sum = 0;
+        for (const d of dispatches) {
+            const parts = Array.isArray(d?.participants) ? d.participants : [];
+            for (const p of parts) {
+                sum += Number(p?.progressBaseWan ?? 0);
+            }
+        }
+        return sum;
+    }, [order]);
+
+    const remainingBaseWan = useMemo(() => {
+        if (!isGuaranteed) return null;
+        if (baseAmountWan == null || !Number.isFinite(baseAmountWan) || baseAmountWan <= 0) return null;
+        return baseAmountWan - totalProgressWan;
+    }, [isGuaranteed, baseAmountWan, totalProgressWan]);
+
+    const remainingBaseColor = useMemo(() => {
+        if (remainingBaseWan == null) return 'default';
+        return remainingBaseWan >= 0 ? 'green' : 'red';
+    }, [remainingBaseWan]);
+
+    // -----------------------------
+    // ✅ 历史参与者：按 dispatchId + userId 匹配 settlement.finalEarnings
+    // -----------------------------
+    const settlementMap = useMemo(() => {
+        const map = new Map<string, any>();
+        const list = Array.isArray(order?.settlements) ? order.settlements : [];
+        for (const s of list) {
+            const key = `${s.dispatchId}_${s.userId}`;
+            map.set(key, s);
+        }
+        return map;
+    }, [order]);
+
+    const historyDispatches = useMemo(() => {
+        const list = Array.isArray(order?.dispatches) ? order.dispatches : [];
+        return list;
+    }, [order]);
+
+    const historyColumns = [
+        { title: '轮次', dataIndex: 'round', width: 80 },
+        {
+            title: '派单状态',
+            dataIndex: 'status',
+            width: 120,
+            render: (v: any) => statusTag('DispatchStatus', v),
+        },
+        {
+            title: '派单时间',
+            dataIndex: 'assignedAt',
+            width: 180,
+            render: (v: any) => (v ? new Date(v).toLocaleString() : '-'),
+        },
+        {
+            title: '全员接单',
+            dataIndex: 'acceptedAllAt',
+            width: 180,
+            render: (v: any) => (v ? new Date(v).toLocaleString() : '-'),
+        },
+        {
+            title: '存单时间',
+            dataIndex: 'archivedAt',
+            width: 180,
+            render: (v: any) => (v ? new Date(v).toLocaleString() : '-'),
+        },
+        {
+            title: '结单时间',
+            dataIndex: 'completedAt',
+            width: 180,
+            render: (v: any) => (v ? new Date(v).toLocaleString() : '-'),
+        },
+        {
+            title: '备注',
+            dataIndex: 'remark',
+            ellipsis: true,
+            render: (v: any) => v || '-',
+        },
+    ];
+
+    const historyParticipantColumns = [
+        {
+            title: '打手',
+            dataIndex: 'user',
+            render: (_: any, row: any) => {
+                const u = row.user;
+                return `${u?.name || '未命名'}（${u?.phone || '-'}）`;
+            },
+        },
+        {
+            title: '接单时间',
+            dataIndex: 'acceptedAt',
+            render: (v: any) => (v ? new Date(v).toLocaleString() : '-'),
+        },
+        {
+            title: '保底进度（万）',
+            dataIndex: 'progressBaseWan',
+            render: (v: any) => (v == null ? '-' : v),
+        },
+        {
+            title: '贡献金额',
+            dataIndex: 'contributionAmount',
+            render: (v: any) => (v == null ? '-' : v),
+        },
+        {
+            title: '实际收益',
+            dataIndex: 'finalEarnings',
+            render: (_: any, row: any) => {
+                const key = `${row.dispatchId}_${row.userId}`;
+                const s = settlementMap.get(key);
+                const v = s?.finalEarnings;
+                return v == null ? '-' : `¥${v}`;
+            },
+        },
+    ];
+
+    const hideCurrentParticipants = order?.status === 'COMPLETED';
 
     return (
         <PageContainer>
@@ -237,7 +375,10 @@ const OrderDetailPage: React.FC = () => {
                     extra={
                         <Space>
                             <Button onClick={openDispatchModal}>
-                                {currentDispatch?.id ? '更新参与者' : '派单'}
+                                {/* ✅ 存单/无派单/不可更新时统一叫“派单”，其余才叫“更新参与者” */}
+                                {currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')
+                                    ? '更新参与者'
+                                    : '派单'}
                             </Button>
 
                             <Button disabled={!isHourly} onClick={openPaidModal}>
@@ -270,7 +411,14 @@ const OrderDetailPage: React.FC = () => {
                             {isHourly ? <Tag style={{ marginLeft: 8 }}>小时单可补收</Tag> : null}
                         </Descriptions.Item>
 
-                        <Descriptions.Item label="订单保底（万）">{order?.baseAmountWan ?? '-'}</Descriptions.Item>
+                        <Descriptions.Item label="订单保底（万）">
+                            {baseAmountWan ?? '-'}
+                            {isGuaranteed ? <Tag style={{ marginLeft: 8 }}>保底单</Tag> : null}
+                        </Descriptions.Item>
+
+                        <Descriptions.Item label="剩余保底（万）">
+                            {remainingBaseWan == null ? '-' : <Tag color={remainingBaseColor as any}>{remainingBaseWan}</Tag>}
+                        </Descriptions.Item>
 
                         <Descriptions.Item label="客户游戏ID">{order?.customerGameId ?? '-'}</Descriptions.Item>
 
@@ -288,16 +436,51 @@ const OrderDetailPage: React.FC = () => {
                     </Descriptions>
                 </Card>
 
-                <Card title="当前参与者（本轮）" loading={loading}>
+                {/* ✅ 已结单后不再显示“当前参与者（本轮）” */}
+                {!hideCurrentParticipants ? (
+                    <Card title="当前参与者（本轮）" loading={loading}>
+                        <Table
+                            rowKey="id"
+                            columns={participantColumns as any}
+                            dataSource={participantRows}
+                            pagination={false}
+                        />
+                        {!currentDispatch?.id ? (
+                            <div style={{ marginTop: 12 }}>
+                                <Tag color="orange">当前还未派单</Tag>
+                            </div>
+                        ) : null}
+                    </Card>
+                ) : null}
+
+                {/* ✅ 新增：历史参与者（按轮次） */}
+                <Card title="历史参与者（按轮次）" loading={loading}>
                     <Table
                         rowKey="id"
-                        columns={participantColumns as any}
-                        dataSource={participantRows}
+                        columns={historyColumns as any}
+                        dataSource={historyDispatches}
                         pagination={false}
+                        scroll={{ x: 1100 }}
+                        expandable={{
+                            expandedRowRender: (dispatchRow: any) => {
+                                const parts = Array.isArray(dispatchRow?.participants) ? dispatchRow.participants : [];
+                                // 给子表补 dispatchId 便于 settlement 匹配
+                                const data = parts.map((p: any) => ({ ...p, dispatchId: dispatchRow.id }));
+                                return (
+                                    <Table
+                                        rowKey="id"
+                                        columns={historyParticipantColumns as any}
+                                        dataSource={data}
+                                        pagination={false}
+                                        size="small"
+                                    />
+                                );
+                            },
+                        }}
                     />
-                    {!currentDispatch?.id ? (
+                    {historyDispatches.length === 0 ? (
                         <div style={{ marginTop: 12 }}>
-                            <Tag color="orange">当前还未派单</Tag>
+                            <Tag>暂无历史派单</Tag>
                         </div>
                     ) : null}
                 </Card>
@@ -305,7 +488,7 @@ const OrderDetailPage: React.FC = () => {
 
             {/* 派单 / 更新参与者 */}
             <Modal
-                title={currentDispatch?.id ? '更新参与者' : '派单'}
+                title={(currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')) ? '更新参与者' : '派单'}
                 open={dispatchModalOpen}
                 onCancel={() => setDispatchModalOpen(false)}
                 onOk={submitDispatchOrUpdate}
@@ -345,11 +528,11 @@ const OrderDetailPage: React.FC = () => {
                     />
                 </div>
 
-                {currentDispatch?.id && (
+                {(currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')) ? (
                     <div style={{ marginTop: 12 }}>
                         <Tag color="gold">提示：若已有打手接单，将禁止修改参与者（请存单后重新派单）。</Tag>
                     </div>
-                )}
+                ) : null}
             </Modal>
 
             {/* 小时单补收：修改实付金额 */}
