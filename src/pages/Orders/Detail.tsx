@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Descriptions, Table, Tag, Button, Space, Modal, Select, message, Form, InputNumber, Input } from 'antd';
 import { useParams } from '@umijs/max';
+import OrderUpsertModal from './components/OrderForm';
 
 import {
     getOrderDetail,
@@ -11,8 +12,10 @@ import {
     getPlayerOptions,
     updateOrderPaidAmount,
     getEnumDicts,
-    adjustSettlementFinalEarnings
+    adjustSettlementFinalEarnings,
+    refundOrder, updateOrder,
 } from '@/services/api';
+import dayjs from "dayjs";
 
 type DictMap = Record<string, Record<string, string>>;
 
@@ -48,13 +51,30 @@ const OrderDetailPage: React.FC = () => {
     const [adjustForm] = Form.useForm();
     const [currentSettlement, setCurrentSettlement] = useState<any>(null);
 
+    const [refundOpen, setRefundOpen] = useState(false);
+    const [refundRemark, setRefundRemark] = useState('');
+    const [refundLoading, setRefundLoading] = useState(false);
+
+    const [editOpen, setEditOpen] = useState(false);
+    const openEditModal = () => setEditOpen(true);
+
+
+    const submitRefund = async () => {
+        setRefundLoading(true);
+        await refundOrder({ id: order?.id, remark: refundRemark });
+        message.success('退款成功');
+        setRefundOpen(false);
+        loadDetail();
+        setRefundLoading(false);
+    };
+
     const canDispatch = useMemo(() => {
         if (!order) return false;
         // 已结单/已退款：不允许
-        if (order.status === 'COMPLETED' || order.status === 'REFUNDED') return false;
+        if (order?.status === 'COMPLETED' || order?.status === 'REFUNDED') return false;
 
         // 没有 currentDispatch：WAIT_ASSIGN 才能派
-        if (!currentDispatch?.id) return order.status === 'WAIT_ASSIGN';
+        if (!currentDispatch?.id) return order?.status === 'WAIT_ASSIGN';
 
         // 有 currentDispatch：
         // - 当前派单 WAIT_ASSIGN / WAIT_ACCEPT 才允许“更新参与者”
@@ -199,7 +219,7 @@ const OrderDetailPage: React.FC = () => {
                     remark: dispatchRemark || undefined,
                 });
             } else {
-                await assignDispatch(Number(order.id), {
+                await assignDispatch(Number(order?.id), {
                     playerIds: selectedPlayers,
                     remark: dispatchRemark || '详情页派单/重新派单',
                 });
@@ -218,7 +238,7 @@ const OrderDetailPage: React.FC = () => {
     const openPaidModal = () => {
         if (!order) return;
         paidForm.setFieldsValue({
-            paidAmount: order.paidAmount,
+            paidAmount: order?.paidAmount,
             remark: '',
         });
         setPaidModalOpen(true);
@@ -230,7 +250,7 @@ const OrderDetailPage: React.FC = () => {
             setPaidSubmitting(true);
 
             await updateOrderPaidAmount({
-                id: Number(order.id),
+                id: Number(order?.id),
                 paidAmount: Number(values.paidAmount),
                 remark: values.remark || undefined,
             });
@@ -302,7 +322,7 @@ const OrderDetailPage: React.FC = () => {
     }, [order]);
 
     const totalProgressWan = useMemo(() => {
-        const dispatches = Array.isArray(order?.dispatches) ? order.dispatches : [];
+        const dispatches = Array.isArray(order?.dispatches) ? order?.dispatches : [];
         let sum = 0;
         for (const d of dispatches) {
             const parts = Array.isArray(d?.participants) ? d.participants : [];
@@ -329,7 +349,7 @@ const OrderDetailPage: React.FC = () => {
     // -----------------------------
     const settlementMap = useMemo(() => {
         const map = new Map<string, any>();
-        const list = Array.isArray(order?.settlements) ? order.settlements : [];
+        const list = Array.isArray(order?.settlements) ? order?.settlements : [];
         for (const s of list) {
             const key = `${s.dispatchId}_${s.userId}`;
             map.set(key, s);
@@ -338,7 +358,7 @@ const OrderDetailPage: React.FC = () => {
     }, [order]);
 
     const historyDispatches = useMemo(() => {
-        const list = Array.isArray(order?.dispatches) ? order.dispatches : [];
+        const list = Array.isArray(order?.dispatches) ? order?.dispatches : [];
         return list;
     }, [order]);
 
@@ -442,6 +462,8 @@ const OrderDetailPage: React.FC = () => {
                     loading={loading}
                     extra={
                         <Space>
+                            <Button danger onClick={() => setRefundOpen(true)}>退款</Button>
+                            <Button type="primary" onClick={openEditModal}>编辑订单</Button>
                             {/*<Button onClick={openDispatchModal}>*/}
                             {/*    /!* ✅ 存单/无派单/不可更新时统一叫“派单”，其余才叫“更新参与者” *!/*/}
                             {/*    {currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')*/}
@@ -497,21 +519,21 @@ const OrderDetailPage: React.FC = () => {
                         <Descriptions.Item label="客户游戏ID">{order?.customerGameId ?? '-'}</Descriptions.Item>
 
                         <Descriptions.Item label="派单客服">
-                            {order?.dispatcher ? `${order.dispatcher.name || '-'}（${order.dispatcher.phone || '-'}）` : '-'}
+                            {order?.dispatcher ? `${order?.dispatcher.name || '-'}（${order?.dispatcher.phone || '-'}）` : '-'}
                         </Descriptions.Item>
 
                         <Descriptions.Item label="下单时间">
-                            {order?.orderTime ? new Date(order.orderTime).toLocaleString() : '-'}
+                            {order?.orderTime ? new Date(order?.orderTime).toLocaleString() : '-'}
                         </Descriptions.Item>
 
                         <Descriptions.Item label="付款时间">
-                            {order?.paymentTime ? new Date(order.paymentTime).toLocaleString() : '-'}
+                            {order?.paymentTime ? new Date(order?.paymentTime).toLocaleString() : '-'}
                         </Descriptions.Item>
                     </Descriptions>
                 </Card>
 
                 {/* ✅ 已结单后不再显示“当前参与者（本轮）” */}
-                {!hideCurrentParticipants ? (
+                {order?.status !== 'REFUNDED' && !hideCurrentParticipants ? (
                     <Card title="当前参与者（本轮）" loading={loading}>
                         <Table
                             rowKey="id"
@@ -628,7 +650,7 @@ const OrderDetailPage: React.FC = () => {
                                 validator: async (_, v) => {
                                     const nv = Number(v);
                                     if (!Number.isFinite(nv) || nv < 0) throw new Error('金额非法');
-                                    if (order?.paidAmount != null && nv < Number(order.paidAmount)) {
+                                    if (order?.paidAmount != null && nv < Number(order?.paidAmount)) {
                                         throw new Error('仅允许增加（超时补收），不允许减少');
                                     }
                                 },
@@ -675,6 +697,42 @@ const OrderDetailPage: React.FC = () => {
                     <Tag color="gold">该操作会写入操作日志（ADJUST_SETTLEMENT）。</Tag>
                 </Form>
             </Modal>
+            <Modal
+                open={refundOpen}
+                onCancel={() => setRefundOpen(false)}
+                onOk={submitRefund}
+                confirmLoading={refundLoading}
+                title="订单退款"
+            >
+                <Input.TextArea
+                    rows={3}
+                    value={refundRemark}
+                    onChange={e => setRefundRemark(e.target.value)}
+                    placeholder="退款备注（可选）"
+                />
+            </Modal>
+            <OrderUpsertModal
+                open={editOpen}
+                title="编辑订单"
+                initialValues={{
+                    id: order?.id,
+                    projectId: order?.projectId,
+                    customerGameId: order?.customerGameId,
+                    orderTime: order?.orderTime,
+                    paymentTime: order?.paymentTime,
+                    csRate: order?.csRate,
+                    inviteRate: order?.inviteRate,
+                    inviter: order?.inviter,
+                    customClubRate: order?.customClubRate,
+                    remark: '',
+                }}
+                onCancel={() => setEditOpen(false)}
+                onSubmit={async (payload) => {
+                    await updateOrder(payload);
+                    setEditOpen(false);
+                    loadDetail();
+                }}
+            />
         </PageContainer>
     );
 };

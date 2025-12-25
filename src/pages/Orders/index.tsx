@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useRef , useState } from 'react';
 import { useNavigate } from '@umijs/max';
 import { PageContainer, ProTable, type ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Tag, Space } from 'antd';
-import { getOrders } from '@/services/api';
+import { Button, Tag, Space , message} from 'antd';
+import { getOrders, createOrder, assignDispatch } from '@/services/api';
+import OrderUpsertModal from './components/OrderForm';
 
 const statusText: Record<string, { text: string; color?: string }> = {
     WAIT_ASSIGN: { text: '待派单', color: 'default' },
@@ -20,6 +21,7 @@ const statusText: Record<string, { text: string; color?: string }> = {
 const OrdersPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const navigate = useNavigate();
+    const [createOpen, setCreateOpen] = useState(false);
 
     const columns:any = [
         {
@@ -107,7 +109,7 @@ const OrdersPage: React.FC = () => {
                 search={{ labelWidth: 90 }}
                 toolbar={{
                     actions: [
-                        <Button key="new" type="primary" onClick={() => navigate('/orders/new')}>
+                        <Button key="new" type="primary" onClick={() => setCreateOpen(true)}>
                             新建订单
                         </Button>,
                     ],
@@ -126,6 +128,40 @@ const OrdersPage: React.FC = () => {
                         success: true,
                         total: res.total || 0,
                     };
+                }}
+            />
+            <OrderUpsertModal
+                open={createOpen}
+                title="创建订单"
+                showPlayers
+                onCancel={() => setCreateOpen(false)}
+                onSubmit={async (payload) => {
+                    const created = await createOrder({
+                        projectId: payload?.projectId,
+                        receivableAmount: payload?.receivableAmount,
+                        paidAmount: payload?.paidAmount,
+                        baseAmountWan: payload?.baseAmountWan ?? undefined,
+                        customerGameId: payload?.customerGameId,
+                        orderTime: payload?.orderTime,
+                        paymentTime: payload?.paymentTime,
+                        csRate: payload?.csRate,
+                        inviteRate: payload?.inviteRate,
+                        inviter: payload?.inviter,
+                        customClubRate: payload?.customClubRate,
+                        remark: payload?.remark,
+                    });
+
+                    const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
+                    if (!orderId) throw new Error('创建订单失败：未返回订单ID');
+
+                    if (payload?.playerIds?.length) {
+                        await assignDispatch(orderId, { playerIds: payload?.playerIds, remark: '新建订单时派单' });
+                    }
+
+                    message.success('创建成功');
+                    setCreateOpen(false);
+                    actionRef.current?.reload?.();
+                    navigate(`/orders/${orderId}`);
                 }}
             />
         </PageContainer>
