@@ -57,6 +57,7 @@ const OrderDetailPage: React.FC = () => {
 
     const [editOpen, setEditOpen] = useState(false);
     const openEditModal = () => setEditOpen(true);
+    const forbidEdit = ['COMPLETED', 'REFUNDED'].includes(order?.status);
 
 
     const submitRefund = async () => {
@@ -462,8 +463,9 @@ const OrderDetailPage: React.FC = () => {
                     loading={loading}
                     extra={
                         <Space>
-                            <Button danger onClick={() => setRefundOpen(true)}>退款</Button>
-                            <Button type="primary" onClick={openEditModal}>编辑订单</Button>
+                            {order?.status !== 'REFUNDED' && (
+                            <Button danger onClick={() => setRefundOpen(true)}>退款</Button>)}
+                            <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button>
                             {/*<Button onClick={openDispatchModal}>*/}
                             {/*    /!* ✅ 存单/无派单/不可更新时统一叫“派单”，其余才叫“更新参与者” *!/*/}
                             {/*    {currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')*/}

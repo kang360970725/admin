@@ -121,7 +121,7 @@ export default defineConfig({
       icon: 'ProfileOutlined',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders' },
-        { path: '/orders/new', name: '新建订单', component: './Orders/New' },
+        // { path: '/orders/new', name: '新建订单', component: './Orders/New' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true },
       ],
     },

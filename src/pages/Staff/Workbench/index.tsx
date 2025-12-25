@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from '@umijs/max';
 import {Button, Form, Input, InputNumber, message, Modal, Select, Space, Tabs, Tag} from 'antd';
+import { DISPATCH_STATUS_META, pickStatusColor, pickStatusText } from '@/constants/status';
 
 import {
     acceptDispatch,
@@ -13,15 +14,6 @@ import {
 import {PageContainer, ProTable, type ActionType, type ProColumns} from '@ant-design/pro-components';
 
 type DictMap = Record<string, Record<string, string>>;
-
-const statusText: Record<string, { text: string; color?: string }> = {
-    WAIT_ASSIGN: {text: '待派单', color: 'default'},
-    WAIT_ACCEPT: {text: '待接单', color: 'orange'},
-    ACCEPTED: {text: '已接单', color: 'blue'},
-    ARCHIVED: {text: '已存单', color: 'purple'},
-    COMPLETED: {text: '已结单', color: 'green'},
-    CANCELLED: {text: '已取消', color: 'red'},
-};
 
 const WorkbenchPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
@@ -253,7 +245,7 @@ const WorkbenchPage: React.FC = () => {
         }
     };
 
-    const columns = useMemo<ProColumns<any>[]>(() => {
+    const columns = useMemo<any>(() => {
         return [
             {
                 title: '订单号',
@@ -283,12 +275,16 @@ const WorkbenchPage: React.FC = () => {
                 dataIndex: 'status',
                 width: 110,
                 render: (_, row) => {
-                    const s = statusText[row.status] || {text: row.status};
-                    return <Tag color={s.color as any}>{t('DispatchStatus', row.status, s.text)}</Tag>;
+                    const v = row?.status;
+                    return (
+                        <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
+                            {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
+                        </Tag>
+                    );
                 },
                 valueType: 'select',
                 valueEnum: Object.fromEntries(
-                    Object.keys(statusText).map((k) => [k, {text: statusText[k].text}]),
+                    Object.keys(DISPATCH_STATUS_META).map((k) => [k, { text: DISPATCH_STATUS_META[k].text }]),
                 ),
             },
             {
@@ -298,8 +294,11 @@ const WorkbenchPage: React.FC = () => {
                 search: false,
                 render: (_, row) => {
                     const v = row?.order?.status;
-                    const s = statusText[v] || {text: v};
-                    return <Tag color={s.color as any}>{t('OrderStatus', v, s.text)}</Tag>;
+                    return (
+                        <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
+                            {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
+                        </Tag>
+                    );
                 },
             },
             {

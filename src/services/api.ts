@@ -415,10 +415,10 @@ export async function adjustSettlementFinalEarnings(data: { settlementId: number
 
 // 订单退款
 export async function refundOrder(data: { id: number; remark?: string }) {
-    return request('/orders/refund', { method: 'POST', data });
+    return request(`${API_BASE}/orders/refund`, { method: 'POST', data });
 }
 
 // 更新订单
 export async function updateOrder(data: any) {
-    return request('/orders/update', { method: 'POST', data });
+    return request(`${API_BASE}/orders/update`, { method: 'POST', data });
 }

@@ -3,6 +3,7 @@ import { useNavigate } from '@umijs/max';
 import { PageContainer, ProTable, type ProColumns } from '@ant-design/pro-components';
 import { Button, Space, Tag } from 'antd';
 import { getEnumDicts, getMyDispatches } from '@/services/api';
+import { pickStatusColor, pickStatusText, DISPATCH_STATUS_META } from '@/constants/status';
 
 type DictMap = Record<string, Record<string, string>>;
 
@@ -38,7 +39,7 @@ const MyOrdersPage: React.FC = () => {
         })();
     }, []);
 
-    const columns = useMemo<ProColumns<any>[]>(() => {
+    const columns = useMemo<any>(() => {
         return [
             {
                 title: '订单号',
@@ -70,7 +71,9 @@ const MyOrdersPage: React.FC = () => {
                 valueType: 'select',
                 render: (_, row) => {
                     const v = row?.order?.status;
-                    return <Tag color={statusColor(v)}>{t('OrderStatus', v, v)}</Tag>;
+                    return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
+                        {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
+                    </Tag>;
                 },
             },
             {
@@ -80,7 +83,11 @@ const MyOrdersPage: React.FC = () => {
                 valueType: 'select',
                 render: (_, row) => {
                     const v = row?.status;
-                    return <Tag color={statusColor(v)}>{t('DispatchStatus', v, v)}</Tag>;
+                    return (
+                        <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
+                            {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
+                        </Tag>
+                    );
                 },
             },
             {
