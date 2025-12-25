@@ -12,6 +12,12 @@ import {
     getPlayerOptions,
 } from '@/services/api';
 
+type ProjectOptionItem = {
+    label: string;
+    value: number;
+    baseAmount?: number | null; // ✅ 项目默认保底（用于自动同步到订单）
+};
+
 type OptionItem = { label: string; value: number };
 
 const MAX_PLAYERS = 2;
@@ -22,7 +28,7 @@ const NewOrderPage: React.FC = () => {
     const [submitting, setSubmitting] = useState(false);
 
     // 项目下拉
-    const [projectOptions, setProjectOptions] = useState<OptionItem[]>([]);
+    const [projectOptions, setProjectOptions] = useState<ProjectOptionItem[]>([]);
     const [projectLoading, setProjectLoading] = useState(false);
 
     // 打手下拉（默认只取空闲）
@@ -49,10 +55,14 @@ const NewOrderPage: React.FC = () => {
         try {
             const res = await getGameProjectOptions({ keyword: keyword || '' });
             const list = Array.isArray(res) ? res : (res?.data ?? []);
-            const options: OptionItem[] = list.map((p: any) => ({
+
+            const options: ProjectOptionItem[] = list.map((p: any) => ({
                 value: Number(p.id),
                 label: `${p.name}${p.price != null ? `（¥${p.price}）` : ''}`,
+                // ✅ 同步用：项目默认保底（字段名按你后端 GameProject：baseAmount）
+                baseAmount: p.baseAmount ?? null,
             }));
+
             setProjectOptions(options);
         } catch (e) {
             // 不打断用户填写
@@ -119,7 +129,7 @@ const NewOrderPage: React.FC = () => {
                 remark: values.remark?.trim() || undefined,
             };
 
-            // 1) 创建订单
+            // 1) 创建订单（✅ 以表单传递值为准）
             const created = await createOrder(payload);
 
             const orderId = Number(created?.id ?? created?.data?.id);
@@ -167,9 +177,16 @@ const NewOrderPage: React.FC = () => {
                                     placeholder="输入筛选项目"
                                     filterOption={false}
                                     onSearch={(v) => fetchProjects(v)}
-                                    options={projectOptions}
+                                    options={projectOptions as any}
                                     loading={projectLoading}
                                     allowClear
+                                    // ✅ 选择项目后同步“订单保底（万）”
+                                    onChange={(_, option: any) => {
+                                        const base = option?.baseAmount;
+                                        form.setFieldsValue({
+                                            baseAmountWan: base != null ? Number(base) : null,
+                                        });
+                                    }}
                                 />
                             </Form.Item>
                         </Col>

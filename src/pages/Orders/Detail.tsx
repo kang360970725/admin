@@ -11,6 +11,7 @@ import {
     getPlayerOptions,
     updateOrderPaidAmount,
     getEnumDicts,
+    adjustSettlementFinalEarnings
 } from '@/services/api';
 
 type DictMap = Record<string, Record<string, string>>;
@@ -41,6 +42,59 @@ const OrderDetailPage: React.FC = () => {
     const [paidModalOpen, setPaidModalOpen] = useState(false);
     const [paidSubmitting, setPaidSubmitting] = useState(false);
     const [paidForm] = Form.useForm();
+
+    const [adjustOpen, setAdjustOpen] = useState(false);
+    const [adjustSubmitting, setAdjustSubmitting] = useState(false);
+    const [adjustForm] = Form.useForm();
+    const [currentSettlement, setCurrentSettlement] = useState<any>(null);
+
+    const canDispatch = useMemo(() => {
+        if (!order) return false;
+        // 已结单/已退款：不允许
+        if (order.status === 'COMPLETED' || order.status === 'REFUNDED') return false;
+
+        // 没有 currentDispatch：WAIT_ASSIGN 才能派
+        if (!currentDispatch?.id) return order.status === 'WAIT_ASSIGN';
+
+        // 有 currentDispatch：
+        // - 当前派单 WAIT_ASSIGN / WAIT_ACCEPT 才允许“更新参与者”
+        // - ARCHIVED 状态下必须创建新 dispatch（你已有逻辑：点击派单创建新 dispatch）
+        const ds = String(currentDispatch.status);
+        if (ds === 'WAIT_ASSIGN' || ds === 'WAIT_ACCEPT') return true;
+
+        // 已接单/已结单：不允许从详情页直接改参与者
+        return false;
+    }, [order, currentDispatch]);
+
+    const openAdjust = (settlement: any) => {
+        setCurrentSettlement(settlement);
+        adjustForm.setFieldsValue({
+            finalEarnings: settlement?.finalEarnings,
+            remark: '',
+        });
+        setAdjustOpen(true);
+    };
+
+    const submitAdjust = async () => {
+        try {
+            const v = await adjustForm.validateFields();
+            setAdjustSubmitting(true);
+            await adjustSettlementFinalEarnings({
+                settlementId: Number(currentSettlement.id),
+                finalEarnings: Number(v.finalEarnings),
+                remark: v.remark || undefined,
+            });
+            message.success('已调整实际收益');
+            setAdjustOpen(false);
+            await loadDetail();
+        } catch (e: any) {
+            if (e?.errorFields) return;
+            message.error(e?.response?.data?.message || '调整失败');
+        } finally {
+            setAdjustSubmitting(false);
+        }
+    };
+
 
     const currentDispatch = order?.currentDispatch;
 
@@ -347,11 +401,11 @@ const OrderDetailPage: React.FC = () => {
             dataIndex: 'progressBaseWan',
             render: (v: any) => (v == null ? '-' : v),
         },
-        {
-            title: '贡献金额',
-            dataIndex: 'contributionAmount',
-            render: (v: any) => (v == null ? '-' : v),
-        },
+        // {
+        //     title: '贡献金额',
+        //     dataIndex: 'contributionAmount',
+        //     render: (v: any) => (v == null ? '-' : v),
+        // },
         {
             title: '实际收益',
             dataIndex: 'finalEarnings',
@@ -362,6 +416,20 @@ const OrderDetailPage: React.FC = () => {
                 return v == null ? '-' : `¥${v}`;
             },
         },
+        {
+            title: '操作',
+            width: 120,
+            render: (_: any, row: any) => {
+                const key = `${row.dispatchId}_${row.userId}`;
+                const s = settlementMap.get(key);
+                if (!s) return '-';
+                return (
+                    <Button size="small" onClick={() => openAdjust(s)}>
+                        调整收益
+                    </Button>
+                );
+            },
+        }
     ];
 
     const hideCurrentParticipants = order?.status === 'COMPLETED';
@@ -374,8 +442,14 @@ const OrderDetailPage: React.FC = () => {
                     loading={loading}
                     extra={
                         <Space>
-                            <Button onClick={openDispatchModal}>
-                                {/* ✅ 存单/无派单/不可更新时统一叫“派单”，其余才叫“更新参与者” */}
+                            {/*<Button onClick={openDispatchModal}>*/}
+                            {/*    /!* ✅ 存单/无派单/不可更新时统一叫“派单”，其余才叫“更新参与者” *!/*/}
+                            {/*    {currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')*/}
+                            {/*        ? '更新参与者'*/}
+                            {/*        : '派单'}*/}
+                            {/*</Button>*/}
+                            <Button onClick={openDispatchModal} disabled={!canDispatch}>
+                                {/*{currentDispatch?.id ? '更新参与者' : '派单'}*/}
                                 {currentDispatch?.id && (currentDispatch.status === 'WAIT_ASSIGN' || currentDispatch.status === 'WAIT_ACCEPT')
                                     ? '更新参与者'
                                     : '派单'}
@@ -569,6 +643,36 @@ const OrderDetailPage: React.FC = () => {
                     </Form.Item>
 
                     <Tag color="blue">该操作会写入操作日志（UPDATE_PAID_AMOUNT）。</Tag>
+                </Form>
+            </Modal>
+            <Modal
+                title="调整实际收益（奖惩/纠错）"
+                open={adjustOpen}
+                onCancel={() => setAdjustOpen(false)}
+                onOk={submitAdjust}
+                confirmLoading={adjustSubmitting}
+                destroyOnClose
+            >
+                <Form form={adjustForm} layout="vertical">
+                    <Form.Item
+                        name="finalEarnings"
+                        label="实际收益"
+                        rules={[
+                            { required: true, message: '请输入实际收益' },
+                            () => ({
+                                validator: async (_, val) => {
+                                    const n = Number(val);
+                                    if (!Number.isFinite(n)) throw new Error('金额非法');
+                                },
+                            }),
+                        ]}
+                    >
+                        <InputNumber precision={2} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="remark" label="调整原因（必填建议）" rules={[{ required: true, message: '请填写调整原因' }]}>
+                        <Input placeholder="例如：违规扣款/优秀奖励/客服补偿" allowClear />
+                    </Form.Item>
+                    <Tag color="gold">该操作会写入操作日志（ADJUST_SETTLEMENT）。</Tag>
                 </Form>
             </Modal>
         </PageContainer>

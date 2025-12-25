@@ -1,25 +1,26 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PageContainer, ProTable, type ActionType, type ProColumns } from '@ant-design/pro-components';
-import { useNavigate } from '@umijs/max';
-import { Button, Modal, Form, Input, message, Tabs, Tag, Space, InputNumber, Select } from 'antd';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {useNavigate} from '@umijs/max';
+import {Button, Form, Input, InputNumber, message, Modal, Select, Space, Tabs, Tag} from 'antd';
 
 import {
-    getMyDispatches,
     acceptDispatch,
     archiveDispatch,
     completeDispatch,
     getEnumDicts,
+    getMyDispatches,
+    getOrderDetail
 } from '@/services/api';
+import {PageContainer, ProTable, type ActionType, type ProColumns} from '@ant-design/pro-components';
 
 type DictMap = Record<string, Record<string, string>>;
 
 const statusText: Record<string, { text: string; color?: string }> = {
-    WAIT_ASSIGN: { text: '待派单', color: 'default' },
-    WAIT_ACCEPT: { text: '待接单', color: 'orange' },
-    ACCEPTED: { text: '已接单', color: 'blue' },
-    ARCHIVED: { text: '已存单', color: 'purple' },
-    COMPLETED: { text: '已结单', color: 'green' },
-    CANCELLED: { text: '已取消', color: 'red' },
+    WAIT_ASSIGN: {text: '待派单', color: 'default'},
+    WAIT_ACCEPT: {text: '待接单', color: 'orange'},
+    ACCEPTED: {text: '已接单', color: 'blue'},
+    ARCHIVED: {text: '已存单', color: 'purple'},
+    COMPLETED: {text: '已结单', color: 'green'},
+    CANCELLED: {text: '已取消', color: 'red'},
 };
 
 const WorkbenchPage: React.FC = () => {
@@ -44,6 +45,7 @@ const WorkbenchPage: React.FC = () => {
     const [finishSubmitting, setFinishSubmitting] = useState(false);
     const [finishForm] = Form.useForm();
     const watchedTotalProgressWan = Form.useWatch('totalProgressWan', finishForm);
+    const [guaranteedCompleteRemainingWan, setGuaranteedCompleteRemainingWan] = useState<number | null>(null);
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
@@ -119,7 +121,7 @@ const WorkbenchPage: React.FC = () => {
     const openAccept = async (row: any) => {
         await loadDictsOnce();
         setCurrentRow(row);
-        acceptForm.setFieldsValue({ remark: '' });
+        acceptForm.setFieldsValue({remark: ''});
         setAcceptOpen(true);
     };
 
@@ -129,7 +131,7 @@ const WorkbenchPage: React.FC = () => {
             if (!currentRow?.id) return;
 
             setAcceptSubmitting(true);
-            await acceptDispatch(Number(currentRow.id), { remark: values.remark || undefined });
+            await acceptDispatch(Number(currentRow.id), {remark: values.remark || undefined});
 
             message.success('已接单');
             setAcceptOpen(false);
@@ -162,7 +164,38 @@ const WorkbenchPage: React.FC = () => {
             })),
         });
 
-        // 打开弹窗并刷新一次 tick，保证“当前时间”立即更新
+
+        // ✅ 保底单结单：回显剩余保底（不允许输入）
+        if (isGuaranteed(row) && mode === 'COMPLETE') {
+            try {
+                const orderId = Number(row?.order?.id);
+                if (orderId) {
+                    const detail = await getOrderDetail(orderId);
+
+                    const base = Number(detail?.baseAmountWan ?? 0);
+                    const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+
+                    // 只统计 ARCHIVED 的累计进度（和你结算口径一致）
+                    let archivedProgress = 0;
+                    for (const d of dispatches) {
+                        if (String(d?.status) !== 'ARCHIVED') continue;
+                        const parts = Array.isArray(d?.participants) ? d.participants : [];
+                        for (const p of parts) archivedProgress += Number(p?.progressBaseWan ?? 0);
+                    }
+
+                    const remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
+
+                    setGuaranteedCompleteRemainingWan(remaining);
+                    // 这里写入 form，只用于“展示本次默认打了多少”，不让用户编辑
+                    finishForm.setFieldsValue({totalProgressWan: remaining});
+                }
+            } catch (e) {
+                // 拉详情失败不阻塞结单：后端仍会兜底按剩余补齐
+                console.error(e);
+            }
+        }
+
+        // // 打开弹窗并刷新一次 tick，保证“当前时间”立即更新
         setTick(Date.now());
         setFinishOpen(true);
     };
@@ -179,10 +212,10 @@ const WorkbenchPage: React.FC = () => {
 
             // ✅ 保底单：只填总数，提交时均分到 progresses
             let progresses = values.progresses;
-            if (isGuaranteed(currentRow)) {
+            if (isGuaranteed(currentRow) && finishMode === 'ARCHIVE') {
                 const total = Number(values.totalProgressWan);
                 if (!Number.isFinite(total)) {
-                    message.error('保底进度（万）非法');
+                    message.error('存单请填写保底进度');
                     return;
                 }
                 const each = total / count;
@@ -190,6 +223,10 @@ const WorkbenchPage: React.FC = () => {
                     userId: Number(p.userId),
                     progressBaseWan: each,
                 }));
+            }
+            // ✅ 保底单：结单 COMPLETE 时不传 progresses（后端会按剩余保底兜底补齐）
+            if (isGuaranteed(currentRow) && finishMode === 'COMPLETE') {
+                progresses = undefined;
             }
 
             const payload: any = {
@@ -246,12 +283,12 @@ const WorkbenchPage: React.FC = () => {
                 dataIndex: 'status',
                 width: 110,
                 render: (_, row) => {
-                    const s = statusText[row.status] || { text: row.status };
+                    const s = statusText[row.status] || {text: row.status};
                     return <Tag color={s.color as any}>{t('DispatchStatus', row.status, s.text)}</Tag>;
                 },
                 valueType: 'select',
                 valueEnum: Object.fromEntries(
-                    Object.keys(statusText).map((k) => [k, { text: statusText[k].text }]),
+                    Object.keys(statusText).map((k) => [k, {text: statusText[k].text}]),
                 ),
             },
             {
@@ -261,7 +298,7 @@ const WorkbenchPage: React.FC = () => {
                 search: false,
                 render: (_, row) => {
                     const v = row?.order?.status;
-                    const s = statusText[v] || { text: v };
+                    const s = statusText[v] || {text: v};
                     return <Tag color={s.color as any}>{t('OrderStatus', v, s.text)}</Tag>;
                 },
             },
@@ -313,7 +350,8 @@ const WorkbenchPage: React.FC = () => {
                     const ops: React.ReactNode[] = [];
 
                     ops.push(
-                        <Button key="detail" type="link" onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}>
+                        <Button key="detail" type="link"
+                                onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}>
                             详情
                         </Button>,
                     );
@@ -353,20 +391,20 @@ const WorkbenchPage: React.FC = () => {
         const status =
             tab === 'WAIT_ACCEPT' ? 'WAIT_ACCEPT' : tab === 'ACCEPTED' ? 'ACCEPTED' : undefined;
 
-        const res: any = await getMyDispatches({ page, limit, status });
+        const res: any = await getMyDispatches({page, limit, status});
 
         let data = res?.data || [];
         if (tab === 'DONE') {
             data = data.filter((d: any) => d?.status === 'ARCHIVED' || d?.status === 'COMPLETED');
         }
 
-        return { data, success: true, total: res?.total || 0 };
+        return {data, success: true, total: res?.total || 0};
     };
 
     const deductOptions = useMemo(() => {
         // DeductMinutesOption 的 key 集合从 dicts 里拿（若没有就兜底空）
         const m = dicts?.DeductMinutesOption || {};
-        return Object.keys(m).map((k) => ({ value: k, label: m[k] }));
+        return Object.keys(m).map((k) => ({value: k, label: m[k]}));
     }, [dicts]);
 
     return (
@@ -379,18 +417,18 @@ const WorkbenchPage: React.FC = () => {
                     setTimeout(() => actionRef.current?.reload(), 0);
                 }}
                 items={[
-                    { key: 'WAIT_ACCEPT', label: '待接单' },
-                    { key: 'ACCEPTED', label: '进行中' },
-                    { key: 'DONE', label: '已存/已结' },
+                    {key: 'WAIT_ACCEPT', label: '待接单'},
+                    {key: 'ACCEPTED', label: '进行中'},
+                    {key: 'DONE', label: '已存/已结'},
                 ]}
-                style={{ marginBottom: 12 }}
+                style={{marginBottom: 12}}
             />
 
             <ProTable
                 rowKey="id"
                 actionRef={actionRef}
                 columns={columns}
-                search={{ labelWidth: 90 }}
+                search={{labelWidth: 90}}
                 toolbar={{
                     actions: [
                         <Button key="refresh" onClick={() => actionRef.current?.reload()}>
@@ -399,7 +437,7 @@ const WorkbenchPage: React.FC = () => {
                     ],
                 }}
                 request={requestList}
-                pagination={{ pageSize: 20 }}
+                pagination={{pageSize: 20}}
             />
 
             {/* 接单 */}
@@ -413,7 +451,7 @@ const WorkbenchPage: React.FC = () => {
             >
                 <Form form={acceptForm} layout="vertical">
                     <Form.Item name="remark" label="备注（可选）">
-                        <Input placeholder="例如：已联系客户/准备开打" allowClear />
+                        <Input placeholder="例如：已联系客户/准备开打" allowClear/>
                     </Form.Item>
                     <Tag color="blue">该操作会写入操作日志（ACCEPT_DISPATCH）。</Tag>
                 </Form>
@@ -432,11 +470,12 @@ const WorkbenchPage: React.FC = () => {
                     {/* 小时单：显示当前时间 / 时长预估 + 扣时选项（选项从 /meta/enums 同步） */}
                     {currentRow && isHourly(currentRow) ? (
                         <>
-                            <div style={{ marginBottom: 8 }}>
-                                <Tag color="blue">当前{finishMode === 'ARCHIVE' ? '存单' : '结单'}时间：{new Date(tick).toLocaleString()}</Tag>
+                            <div style={{marginBottom: 8}}>
+                                <Tag
+                                    color="blue">当前{finishMode === 'ARCHIVE' ? '存单' : '结单'}时间：{new Date(tick).toLocaleString()}</Tag>
                             </div>
 
-                            <div style={{ marginBottom: 8 }}>
+                            <div style={{marginBottom: 8}}>
                                 {(() => {
                                     const start = currentRow?.acceptedAllAt ? new Date(currentRow.acceptedAllAt) : null;
                                     if (!start) return <Tag color="orange">缺少 acceptedAllAt，无法预估时长（后端会校验）</Tag>;
@@ -477,42 +516,53 @@ const WorkbenchPage: React.FC = () => {
                     {/* 保底单：必须填写总进度，并实时显示“剩余保底” */}
                     {currentRow && isGuaranteed(currentRow) ? (
                         <>
-                            <Form.Item
-                                name="totalProgressWan"
-                                label="本轮已打保底（万）- 总数"
-                                rules={[
-                                    { required: true, message: '请输入本轮已打保底（万）' },
-                                    () => ({
-                                        validator: async (_, v) => {
-                                            const nv = Number(v);
-                                            if (!Number.isFinite(nv)) throw new Error('进度非法');
-                                            // ✅ 允许负数（炸单）
-                                        },
-                                    }),
-                                ]}
-                            >
-                                <InputNumber precision={0} style={{ width: '100%' }} />
-                            </Form.Item>
+                            {finishMode === 'ARCHIVE' ? (
+                                <>
+                                    <Form.Item
+                                        name="totalProgressWan"
+                                        label="本轮已打保底（万）- 总数"
+                                        rules={[
+                                            {required: true, message: '请输入本轮已打保底（万）'},
+                                            () => ({
+                                                validator: async (_, v) => {
+                                                    const nv = Number(v);
+                                                    if (!Number.isFinite(nv)) throw new Error('进度非法');
+                                                    // ✅ 允许负数（炸单）
+                                                },
+                                            }),
+                                        ]}
+                                    >
+                                        <InputNumber precision={0} style={{width: '100%'}}/>
+                                    </Form.Item>
+                                    {(() => {
+                                        const base = Number(currentRow?.order?.baseAmountWan ?? currentRow?.order?.projectSnapshot?.baseAmount ?? 0);
+                                        // const total = Number(finishForm.getFieldValue('totalProgressWan') ?? 0);
+                                        const total = Number(watchedTotalProgressWan ?? 0);
+                                        if (!Number.isFinite(base) || base <= 0) return <Tag
+                                            color="orange">订单未设置保底基数，无法计算剩余</Tag>;
 
-                            {(() => {
-                                const base = Number(currentRow?.order?.baseAmountWan ?? currentRow?.order?.projectSnapshot?.baseAmount ?? 0);
-                                // const total = Number(finishForm.getFieldValue('totalProgressWan') ?? 0);
-                                const total = Number(watchedTotalProgressWan ?? 0);
-                                if (!Number.isFinite(base) || base <= 0) return <Tag color="orange">订单未设置保底基数，无法计算剩余</Tag>;
+                                        const remaining = base - total;
+                                        const ps = participantsActive(currentRow);
+                                        const each = ps.length > 0 ? total / ps.length : total;
 
-                                const remaining = base - total;
-                                const ps = participantsActive(currentRow);
-                                const each = ps.length > 0 ? total / ps.length : total;
-
-                                return (
-                                    <Space wrap style={{ marginBottom: 8 }}>
-                                        <Tag>订单保底：{base} 万</Tag>
-                                        <Tag color={remaining >= 0 ? 'green' : 'red'}>剩余保底：{remaining} 万</Tag>
-                                        <Tag>本轮均分：{each} 万 / 人</Tag>
-                                    </Space>
-                                );
-                            })()}
-                            <Tag color="gold">多人时无需逐个录入：只填总数，系统均分提交。</Tag>
+                                        return (
+                                            <Space wrap style={{marginBottom: 8}}>
+                                                <Tag>订单保底：{base} 万</Tag>
+                                                <Tag color={remaining >= 0 ? 'green' : 'red'}>剩余保底：{remaining} 万</Tag>
+                                                <Tag>本轮均分：{each} 万 / 人</Tag>
+                                            </Space>
+                                        );
+                                    })()}
+                                    <Tag color="gold">多人时无需逐个录入：只填总数，系统均分提交。</Tag>
+                                </>
+                            ) : (
+                                <Space direction="vertical" style={{width: '100%'}}>
+                                    <Tag color="gold">结单默认结算剩余全部保底，无需填写进度。</Tag>
+                                    <Tag color="green">
+                                        本次默认打保底（万）：{guaranteedCompleteRemainingWan ?? finishForm.getFieldValue('totalProgressWan') ?? '-'}
+                                    </Tag>
+                                </Space>
+                            )}
                         </>
                     ) : null}
 

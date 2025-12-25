@@ -404,3 +404,11 @@ export async function completeDispatchAsStaff(data: {
 }) {
     return request(`${API_BASE}/orders/dispatch/complete`, { method: 'POST', data });
 }
+
+//  手动修改陪玩收益
+export async function adjustSettlementFinalEarnings(data: { settlementId: number; finalEarnings: number; remark?: string }) {
+    return request(`${API_BASE}/orders/settlements/adjust`, {
+        method: 'POST',
+        data,
+    });
+}
