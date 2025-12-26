@@ -1,7 +1,22 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {useNavigate} from '@umijs/max';
-import {Button, Form, Input, InputNumber, message, Modal, Select, Space, Tabs, Tag} from 'antd';
-import { DISPATCH_STATUS_META, pickStatusColor, pickStatusText } from '@/constants/status';
+import {useModel, useNavigate} from '@umijs/max';
+import {
+    Button,
+    Descriptions,
+    Divider,
+    Form,
+    Input,
+    InputNumber,
+    message,
+    Modal,
+    Select,
+    Space,
+    Tabs,
+    Tag,
+    Typography,
+    Watermark
+} from 'antd';
+import {DISPATCH_STATUS_META, pickStatusColor, pickStatusText} from '@/constants/status';
 
 import {
     acceptDispatch,
@@ -18,6 +33,9 @@ type DictMap = Record<string, Record<string, string>>;
 const WorkbenchPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const navigate = useNavigate();
+    const {initialState} = useModel('@@initialState');
+    const currentUser = initialState?.currentUser;
+
 
     // enums dicts
     const [dicts, setDicts] = useState<DictMap>({});
@@ -38,6 +56,10 @@ const WorkbenchPage: React.FC = () => {
     const [finishForm] = Form.useForm();
     const watchedTotalProgressWan = Form.useWatch('totalProgressWan', finishForm);
     const [guaranteedCompleteRemainingWan, setGuaranteedCompleteRemainingWan] = useState<number | null>(null);
+    // accept modal preview
+    const [acceptGuaranteedRemainingWan, setAcceptGuaranteedRemainingWan] = useState<number | null>(null);
+    const [acceptHourlyEstimatedHours, setAcceptHourlyEstimatedHours] = useState<number | null>(null);
+
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
@@ -111,9 +133,59 @@ const WorkbenchPage: React.FC = () => {
     };
 
     const openAccept = async (row: any) => {
+        // await loadDictsOnce();
+        // setCurrentRow(row);
+        // acceptForm.setFieldsValue({remark: ''});
         await loadDictsOnce();
         setCurrentRow(row);
-        acceptForm.setFieldsValue({remark: ''});
+
+        // 重置预览
+        setAcceptGuaranteedRemainingWan(null);
+        setAcceptHourlyEstimatedHours(null);
+
+        // 1) 保底单：展示剩余保底（按“已存单 ARCHIVED 累计进度”口径）
+        if (row && isGuaranteed(row)) {
+            try {
+                const orderId = Number(row?.order?.id ?? row?.orderId);
+                if (orderId) {
+                    const detail = await getOrderDetail(orderId);
+                    const base = Number(detail?.baseAmountWan ?? 0);
+
+                    const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+                    let archivedProgress = 0;
+                    for (const d of dispatches) {
+                        if (String(d?.status) !== 'ARCHIVED') continue;
+                        const parts = Array.isArray(d?.participants) ? d.participants : [];
+                        for (const p of parts) archivedProgress += Number(p?.progressBaseWan ?? 0);
+                    }
+
+                    const remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
+                    setAcceptGuaranteedRemainingWan(remaining);
+                }
+            } catch (e) {
+                console.error(e);
+                // 不阻塞接单：展示失败就留空
+                setAcceptGuaranteedRemainingWan(null);
+            }
+        }
+
+        // 2) 小时单：展示预计小时（尽量用已有数据，缺字段则不展示）
+        if (row && isHourly(row)) {
+            const order = row?.order || {};
+            const snap = order?.projectSnapshot || {};
+            const project = order?.project || {};
+
+            const unitPrice = Number(snap?.price ?? project?.price); // 单价（一般为小时价）
+            const total = Number(order?.paidAmount ?? order?.receivableAmount); // 总金额
+
+            if (Number.isFinite(unitPrice) && unitPrice > 0 && Number.isFinite(total) && total >= 0) {
+                setAcceptHourlyEstimatedHours(total / unitPrice);
+            } else {
+                setAcceptHourlyEstimatedHours(null);
+            }
+        }
+
+
         setAcceptOpen(true);
     };
 
@@ -132,6 +204,11 @@ const WorkbenchPage: React.FC = () => {
             if (e?.errorFields) return;
             message.error(e?.response?.data?.message || '接单失败');
         } finally {
+            // 接单弹窗无需填写任何内容
+            Modal.success({
+                title: '已接单',
+                content: '成功接单，若有多个陪玩，请等待其他陪玩均确认接单。',
+            })
             setAcceptSubmitting(false);
         }
     };
@@ -250,110 +327,120 @@ const WorkbenchPage: React.FC = () => {
             {
                 title: '订单号',
                 dataIndex: ['order', 'autoSerial'],
-                width: 160,
+                // width: 160,
                 copyable: true,
                 ellipsis: true,
             },
-            {
-                title: '项目',
-                dataIndex: ['order', 'project', 'name'],
-                ellipsis: true,
-                render: (_, row) => row?.order?.project?.name || row?.order?.projectSnapshot?.name || '-',
-            },
-            {
-                title: '计费',
-                dataIndex: ['order', 'projectSnapshot', 'billingMode'],
-                width: 110,
-                search: false,
-                render: (_, row) => {
-                    const m = billingModeOf(row);
-                    return <Tag>{t('BillingMode', m, m)}</Tag>;
-                },
-            },
+            // {
+            //     title: '项目',
+            //     dataIndex: ['order', 'project', 'name'],
+            //     ellipsis: true,
+            //     render: (_, row) => row?.order?.project?.name || row?.order?.projectSnapshot?.name || '-',
+            // },
+            // {
+            //     title: '计费',
+            //     dataIndex: ['order', 'projectSnapshot', 'billingMode'],
+            //     width: 110,
+            //     search: false,
+            //     render: (_, row) => {
+            //         const m = billingModeOf(row);
+            //         return <Tag>{t('BillingMode', m, m)}</Tag>;
+            //     },
+            // },
             {
                 title: '派单状态',
                 dataIndex: 'status',
-                width: 110,
+                // width: 110,
                 render: (_, row) => {
                     const v = row?.status;
                     return (
-                        <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
-                            {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
+                        <Tag color={pickStatusColor({group: 'DispatchStatus', key: v})}>
+                            {pickStatusText({dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-')})}
                         </Tag>
                     );
                 },
                 valueType: 'select',
                 valueEnum: Object.fromEntries(
-                    Object.keys(DISPATCH_STATUS_META).map((k) => [k, { text: DISPATCH_STATUS_META[k].text }]),
+                    Object.keys(DISPATCH_STATUS_META).map((k) => [k, {text: DISPATCH_STATUS_META[k].text}]),
                 ),
             },
             {
                 title: '订单状态',
                 dataIndex: ['order', 'status'],
-                width: 110,
+                // width: 110,
                 search: false,
                 render: (_, row) => {
                     const v = row?.order?.status;
                     return (
-                        <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
-                            {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
+                        <Tag color={pickStatusColor({group: 'OrderStatus', key: v})}>
+                            {pickStatusText({dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-')})}
                         </Tag>
                     );
                 },
             },
             {
-                title: '实付',
-                dataIndex: ['order', 'paidAmount'],
-                width: 90,
+                title: '开单时间',
+                dataIndex: ['order', 'openedAt'],
+                valueType: 'dateTime',
                 search: false,
-                render: (_, row) => {
-                    const v = row?.order?.paidAmount;
-                    return v == null ? '-' : `¥${v}`;
-                },
             },
             {
-                title: '客户游戏ID',
-                dataIndex: ['order', 'customerGameId'],
-                ellipsis: true,
-            },
-            {
-                title: '本轮参与者',
-                dataIndex: 'participants',
+                title: '派单时间',
+                dataIndex: 'assignedAt',
+                valueType: 'dateTime',
                 search: false,
+            },
+            // {
+            //     title: '客户游戏ID',
+            //     dataIndex: ['order', 'customerGameId'],
+            //     ellipsis: true,
+            // },
+            // {
+            //     title: '本轮参与者',
+            //     dataIndex: 'participants',
+            //     search: false,
+            //     render: (_, row) => {
+            //         const ps = participantsActive(row);
+            //         if (ps.length === 0) return '-';
+            //         return (
+            //             <Space wrap>
+            //                 {ps.map((p: any) => {
+            //                     const u = p?.user;
+            //                     const name = u?.name || u?.phone || '未命名';
+            //                     return <Tag key={p.id}>{name}</Tag>;
+            //                 })}
+            //             </Space>
+            //         );
+            //     },
+            // },
+            {
+                title: '派单客服',
+                dataIndex: 'updatedAt',
+                valueType: 'dateTime',
+                width: 220,
                 render: (_, row) => {
                     const ps = participantsActive(row);
                     if (ps.length === 0) return '-';
                     return (
-                        <Space wrap>
-                            {ps.map((p: any) => {
-                                const u = p?.user;
-                                const name = u?.name || u?.phone || '未命名';
-                                return <Tag key={p.id}>{name}</Tag>;
-                            })}
-                        </Space>
+                        <Tag>
+                            {row?.order?.dispatcher ? `${row?.order?.dispatcher.name || '-'}（${row?.order?.dispatcher.phone || '-'}）` : '-'}
+                        </Tag>
                     );
                 },
             },
             {
-                title: '更新时间',
-                dataIndex: 'updatedAt',
-                valueType: 'dateTime',
-                width: 170,
-                search: false,
-            },
-            {
                 title: '操作',
                 valueType: 'option',
-                width: 260,
+                width: 160,
                 render: (_, row) => {
                     const ops: React.ReactNode[] = [];
 
-                    ops.push(
-                        <Button key="detail" type="link"
-                                onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}>
-                            详情
-                        </Button>,
-                    );
+                    // ops.push(
+                    //     <Button key="detail" type="link"
+                    //             onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}>
+                    //         详情
+                    //     </Button>,
+                    // );
 
                     if (row?.status === 'WAIT_ACCEPT') {
                         ops.push(
@@ -440,20 +527,92 @@ const WorkbenchPage: React.FC = () => {
             />
 
             {/* 接单 */}
+            {/*<Modal*/}
+            {/*    title="接单"*/}
+            {/*    open={acceptOpen}*/}
+            {/*    onCancel={() => setAcceptOpen(false)}*/}
+            {/*    onOk={submitAccept}*/}
+            {/*    confirmLoading={acceptSubmitting}*/}
+            {/*    destroyOnClose*/}
+            {/*>*/}
+            {/*    <Form form={acceptForm} layout="vertical">*/}
+            {/*        <Form.Item name="remark" label="备注（可选）">*/}
+            {/*            <Input placeholder="例如：已联系客户/准备开打" allowClear/>*/}
+            {/*        </Form.Item>*/}
+            {/*        <Tag color="blue">该操作会写入操作日志（ACCEPT_DISPATCH）。</Tag>*/}
+            {/*    </Form>*/}
+            {/*</Modal>*/}
             <Modal
-                title="接单"
                 open={acceptOpen}
+                title="确认接单"
                 onCancel={() => setAcceptOpen(false)}
                 onOk={submitAccept}
                 confirmLoading={acceptSubmitting}
                 destroyOnClose
             >
-                <Form form={acceptForm} layout="vertical">
-                    <Form.Item name="remark" label="备注（可选）">
-                        <Input placeholder="例如：已联系客户/准备开打" allowClear/>
-                    </Form.Item>
-                    <Tag color="blue">该操作会写入操作日志（ACCEPT_DISPATCH）。</Tag>
-                </Form>
+                {(() => {
+
+                    const order = currentRow?.order || {};
+                    const projectName =
+                        order?.project?.name || order?.projectSnapshot?.name || '-';
+                    const customerId = order?.customerGameId || '-';
+
+                    const wmText = `${currentUser?.name ?? ''} ${
+                        currentUser?.username || currentUser?.phone || ''
+                    }`;
+
+                    return (
+                        <>
+                            <Watermark
+                                content={[wmText, '蓝猫爽打']}
+                                gap={[-10, -10]}              // ✅ 水印更密
+                                offset={[0, 0]}
+                                font={{
+                                    color: 'rgba(0,0,0,.08)',
+                                    fontSize: 10,
+                                }}
+                            >
+                                {/*<Tag style={{color: 'rgba(0,0,0,.45)'}} color="blue">该操作会写入操作日志（ACCEPT_DISPATCH）。</Tag>*/}
+                                <Tag style={{color: 'rgba(0,0,0,.45)'}} color="red">请务必先对接，复制老板ID后加好友，对接完成上后再确认接单</Tag>
+                                <Tag style={{color: 'rgba(0,0,0,.45)'}}
+                                     color="red">一旦确认开始接单，敏感数据将会脱敏，请务必完成对接后再确认接单</Tag>
+                                <Divider style={{marginTop: 0, marginBottom: 12}}/>
+                                <Descriptions
+                                    bordered
+                                    size="small"
+                                    column={1}
+                                    labelStyle={{width: 140}}
+                                >
+                                    <Descriptions.Item label="客户ID">
+                                        <Typography.Text copyable={{text: String(customerId)}}>
+                                            {String(customerId)}
+                                        </Typography.Text>
+                                    </Descriptions.Item>
+
+                                    <Descriptions.Item label="项目">
+                                        {projectName}
+                                    </Descriptions.Item>
+
+                                    {currentRow && isGuaranteed(currentRow) ? (
+                                        <Descriptions.Item label="订单保底(万)">
+                                            {acceptGuaranteedRemainingWan == null
+                                                ? '-'
+                                                : acceptGuaranteedRemainingWan}
+                                        </Descriptions.Item>
+                                    ) : null}
+
+                                    {currentRow && isHourly(currentRow) ? (
+                                        <Descriptions.Item label="预计小时">
+                                            {acceptHourlyEstimatedHours == null
+                                                ? '-'
+                                                : acceptHourlyEstimatedHours}
+                                        </Descriptions.Item>
+                                    ) : null}
+                                </Descriptions>
+                            </Watermark>
+                        </>
+                    );
+                })()}
             </Modal>
 
             {/* 存单 / 结单 */}
