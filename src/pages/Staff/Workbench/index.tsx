@@ -21,7 +21,7 @@ import {DISPATCH_STATUS_META, pickStatusColor, pickStatusText} from '@/constants
 import {
     acceptDispatch,
     archiveDispatch,
-    completeDispatch,
+    completeDispatch, dispatchRejectOrder,
     getEnumDicts,
     getMyDispatches,
     getOrderDetail
@@ -60,6 +60,10 @@ const WorkbenchPage: React.FC = () => {
     const [acceptGuaranteedRemainingWan, setAcceptGuaranteedRemainingWan] = useState<number | null>(null);
     const [acceptHourlyEstimatedHours, setAcceptHourlyEstimatedHours] = useState<number | null>(null);
 
+    const [rejectOpen, setRejectOpen] = useState(false);
+    const [rejectSubmitting, setRejectSubmitting] = useState(false);
+    const [rejectForm] = Form.useForm();
+
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
@@ -87,6 +91,30 @@ const WorkbenchPage: React.FC = () => {
         else extra = 1;
 
         return hours + extra;
+    };
+
+    const submitReject = async () => {
+        try {
+            const values = await rejectForm.validateFields();
+            if (!currentRow?.id) return;
+
+            setRejectSubmitting(true);
+            await dispatchRejectOrder({ dispatchId: Number(currentRow.id), reason: String(values.reason || '').trim() })
+            // await request('/orders/dispatch/reject', {
+            //     method: 'POST',
+            //     data: { dispatchId: Number(currentRow.id), reason: String(values.reason || '').trim() },
+            // });
+
+            message.success('已拒单');
+            setRejectOpen(false);
+            setAcceptOpen(false);
+            actionRef.current?.reload();
+        } catch (e: any) {
+            if (e?.errorFields) return;
+            message.error(e?.response?.data?.message || '拒单失败');
+        } finally {
+            setRejectSubmitting(false);
+        }
     };
 
     const mapDeductMinutesValue = (option?: string): number => {
@@ -548,6 +576,19 @@ const WorkbenchPage: React.FC = () => {
                 onCancel={() => setAcceptOpen(false)}
                 onOk={submitAccept}
                 confirmLoading={acceptSubmitting}
+                footer={
+                    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                        <Button onClick={() => setAcceptOpen(false)}>取消</Button>
+                        <Space>
+                            <Button danger onClick={() => { rejectForm.resetFields(); setRejectOpen(true); }}>
+                                拒单
+                            </Button>
+                            <Button type="primary" loading={acceptSubmitting} onClick={submitAccept}>
+                                接单
+                            </Button>
+                        </Space>
+                    </Space>
+                }
                 destroyOnClose
             >
                 {(() => {
@@ -614,7 +655,27 @@ const WorkbenchPage: React.FC = () => {
                     );
                 })()}
             </Modal>
-
+            <Modal
+                open={rejectOpen}
+                title="拒单"
+                onCancel={() => setRejectOpen(false)}
+                onOk={submitReject}
+                confirmLoading={rejectSubmitting}
+                destroyOnClose
+            >
+                <Form form={rejectForm} layout="vertical">
+                    <Form.Item
+                        name="reason"
+                        label="拒单原因"
+                        rules={[
+                            { required: true, message: '请填写拒单原因' },
+                            { max: 200, message: '最多 200 字' },
+                        ]}
+                    >
+                        <Input.TextArea placeholder="例如：临时有事/设备异常/已在打单" rows={4} />
+                    </Form.Item>
+                </Form>
+            </Modal>
             {/* 存单 / 结单 */}
             <Modal
                 title={finishMode === 'ARCHIVE' ? '存单' : '结单'}

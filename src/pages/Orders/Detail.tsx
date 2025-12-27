@@ -639,7 +639,7 @@ const OrderDetailPage: React.FC = () => {
             setPlayerOptions(
                 list.map((u: any) => ({
                     value: Number(u.id),
-                    label: `${u.name || '未命名'}（${u.phone || '-'}）`,
+                    label: `${u?.name || '未命名'}-${u?.ratingName ?? '-'}-今日已接${u?.todayHandledCount ?? 0}`,
                 })),
             );
         } catch (e) {
@@ -1040,7 +1040,8 @@ const OrderDetailPage: React.FC = () => {
                             expandedRowRender: (dispatchRow: any) => {
                                 const parts = Array.isArray(dispatchRow?.participants) ? dispatchRow.participants : [];
                                 // 给子表补 dispatchId 便于 settlement 匹配
-                                const data = parts.map((p: any) => ({ ...p, dispatchId: dispatchRow.id }));
+                                // const data = parts.map((p: any) => ({ ...p, dispatchId: dispatchRow.id }));
+                                const data = parts.map((p: any) => ({ ...p, dispatchId: dispatchRow.id, dispatchStatus: dispatchRow.status }));
                                 return (
                                     <Table
                                         rowKey="id"
@@ -1071,7 +1072,11 @@ const OrderDetailPage: React.FC = () => {
                 destroyOnClose
             >
                 <div style={{ marginBottom: 12 }}>
-                    <div style={{ marginBottom: 6 }}>选择打手（仅空闲可选，最多 2 人）</div>
+                    {/*<div style={{ marginBottom: 6 }}>选择打手（仅空闲可选，最多 2 人）</div>*/}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span>选择打手（仅空闲可选，最多 2 人）</span>
+                        <Button size="small" onClick={() => fetchPlayers('')}>刷新</Button>
+                    </div>
                     <Select
                         mode="multiple"
                         value={selectedPlayers}

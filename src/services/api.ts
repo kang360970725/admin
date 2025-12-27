@@ -422,3 +422,8 @@ export async function refundOrder(data: { id: number; remark?: string }) {
 export async function updateOrder(data: any) {
     return request(`${API_BASE}/orders/update`, { method: 'POST', data });
 }
+
+// 更新订单
+export async function dispatchRejectOrder(data: any) {
+    return request(`${API_BASE}/orders/dispatch/reject`, { method: 'POST', data });
+}

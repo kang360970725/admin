@@ -19,6 +19,8 @@ import {
     Modal,
     Row,
     Select,
+    Button,
+    Space
 } from 'antd';
 import dayjs from 'dayjs';
 import { getGameProjectOptions, getPlayerOptions } from '@/services/api';
@@ -148,7 +150,7 @@ export default function OrderUpsertModal(props: {
                 const name = String(u?.name || u?.phone || '未命名');
                 map[id] = name;
                 const phone = String(u?.phone ?? '-');
-                return { value: id, label: `${name}（${phone}）` };
+                return { value: id, label: `${name}-${u?.ratingName ?? '-'}-今日已接${u?.todayHandledCount ?? 0}` };
             });
 
             setPlayerMap(map);
@@ -444,6 +446,7 @@ export default function OrderUpsertModal(props: {
                     {showPlayers ? (
                         <Col xs={24} md={24} lg={12}>
                             <Form.Item name="playerIds" label={`接待陪玩（最多 ${MAX_PLAYERS} 人）`}>
+                                <Space.Compact style={{ width: '100%' }}>
                                 <Select
                                     mode="multiple"
                                     placeholder="可选：新建即派单"
@@ -455,6 +458,13 @@ export default function OrderUpsertModal(props: {
                                     maxTagCount={2}
                                     allowClear
                                 />
+                                    <Button
+                                        loading={playerLoading}
+                                        onClick={() => fetchPlayers('')}
+                                    >
+                                        刷新
+                                    </Button>
+                                </Space.Compact>
                             </Form.Item>
                         </Col>
                     ) : null}
