@@ -1,30 +1,41 @@
 // src/pages/Orders/components/OrderForm.tsx
 // 说明：文件名虽为 OrderForm.tsx，但这里导出的是“新建/编辑订单通用弹窗”组件（OrderUpsertModal）
-// 目标：
-// 1) 弹窗更宽（桌面端一屏录单）
-// 2) 2~3 列栅格布局（lg=3列 / md=2列 / xs=1列）
-// 3) 更美观（分组、间距、信息密度合理）
-// 4) 尽量无滚动（桌面端尽量一屏；小屏仍可能不可避免）
-// 5) 项目变更：强制同步应收/实收金额 + 订单保底(万)（来自项目）
-// 6) “新建可选派单”：showPlayers=true 时展示打手选择（内部获取）
+// 融合点：
+// - 你现有 UI：宽弹窗 + Divider 分组 + 栅格（默认 2 列）+ 更美观
+// - 新需求：小时单选择下单小时，金额（应收/实收）按时长累加（= 项目单价 * 小时）
+// - 兼容：可选派单（showPlayers）
+// - 兼容：链式 ?. 防止空对象导致报错
+// - 额外：提供小票生成所需展示字段（projectName/billingMode/unitPrice/playerNames），不建议传后端
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Col, DatePicker, Divider, Form, Input, InputNumber, message, Modal, Row, Select } from 'antd';
+import {
+    Col,
+    DatePicker,
+    Divider,
+    Form,
+    Input,
+    InputNumber,
+    message,
+    Modal,
+    Row,
+    Select,
+} from 'antd';
 import dayjs from 'dayjs';
 import { getGameProjectOptions, getPlayerOptions } from '@/services/api';
 
 type ProjectItem = {
     id: number;
     name: string;
-    price?: number | null; // 项目单价（用于同步应收/实收）
-    baseAmount?: number | null; // 项目保底（用于同步订单保底(万)）
+    price?: number | null; // 小时单：每小时价格；非小时单：也可能用于默认金额
+    baseAmount?: number | null; // 保底（万）
+    billingMode?: 'HOURLY' | 'GUARANTEED' | string | null; // 计费方式：用于判断小时单
 };
 
 type OptionItem = { label: string; value: number };
 
 const MAX_PLAYERS = 2;
 
-// 注意：这里的字段集合要与后端 /orders/create & /orders/update 可编辑字段一致
+// 注意：字段集合尽量与后端 /orders/create & /orders/update 可编辑字段一致
 export type OrderUpsertValues = {
     id?: number;
 
@@ -32,7 +43,11 @@ export type OrderUpsertValues = {
 
     receivableAmount: number; // 应收
     paidAmount: number; // 实收
+
     baseAmountWan?: number | null; // 订单保底（万）
+
+    // 小时单：下单小时（仅前端创建时用；后端 updateEditable 当前不包含此字段）
+    orderHours?: number;
 
     customerGameId?: string;
 
@@ -48,6 +63,12 @@ export type OrderUpsertValues = {
 
     // 新建时可选派单
     playerIds?: number[];
+
+    // ---- 以下用于小票生成/展示，不建议直接传后端 ----
+    projectName?: string;
+    billingMode?: string;
+    unitPrice?: number;
+    playerNames?: string[];
 };
 
 export default function OrderUpsertModal(props: {
@@ -72,6 +93,7 @@ export default function OrderUpsertModal(props: {
     // 打手下拉（可选）
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
+    const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
 
     const now = useMemo(() => dayjs(), []);
 
@@ -94,9 +116,9 @@ export default function OrderUpsertModal(props: {
                     name,
                     price: p?.price ?? null,
                     baseAmount: p?.baseAmount ?? null,
+                    billingMode: p?.billingMode ?? null,
                 };
 
-                // label 美观：展示名称 + 价格（如果有）
                 const priceText = p?.price != null ? `（¥${p.price}）` : '';
                 return { value: id, label: `${name}${priceText}` };
             });
@@ -104,7 +126,6 @@ export default function OrderUpsertModal(props: {
             setProjectMap(map);
             setProjectOptions(options);
         } catch (e) {
-            // 这里不抛出，避免弹窗无法使用
             console.error(e);
             message.error('获取项目列表失败');
             setProjectMap({});
@@ -119,26 +140,55 @@ export default function OrderUpsertModal(props: {
         setPlayerLoading(true);
         try {
             const res = await getPlayerOptions?.({ keyword: keyword || '', onlyIdle: true });
-
             const list: any[] = Array.isArray(res) ? res : (res?.data ?? []);
+
+            const map: Record<number, string> = {};
             const opts: OptionItem[] = list.map((u: any) => {
                 const id = Number(u?.id);
-                const name = String(u?.name ?? '未命名');
+                const name = String(u?.name || u?.phone || '未命名');
+                map[id] = name;
                 const phone = String(u?.phone ?? '-');
                 return { value: id, label: `${name}（${phone}）` };
             });
 
+            setPlayerMap(map);
             setPlayerOptions(opts);
         } catch (e) {
             console.error(e);
             message.error('获取打手列表失败');
+            setPlayerMap({});
             setPlayerOptions([]);
         } finally {
             setPlayerLoading(false);
         }
     };
 
-    // ---------- 规则：项目变更 -> 同步金额 + 保底 ----------
+    const isHourlyProject = (pid?: number) => {
+        const id = Number(pid);
+        if (!id) return false;
+        const mode = String(projectMap?.[id]?.billingMode ?? '');
+        return mode === 'HOURLY';
+    };
+
+    // 小时单：金额=单价*小时
+    const recalcHourlyAmount = (pid?: number, hours?: number) => {
+        const id = Number(pid);
+        if (!id) return;
+        const p = projectMap?.[id];
+        if (!p) return;
+        if (String(p?.billingMode ?? '') !== 'HOURLY') return;
+
+        const h = Number(hours ?? form?.getFieldValue?.('orderHours') ?? 0) || 0;
+        if (p?.price != null && h > 0) {
+            const total = Number(p.price) * h;
+            form?.setFieldsValue?.({
+                receivableAmount: total,
+                paidAmount: total,
+            } as any);
+        }
+    };
+
+    // 项目变更：同步金额/保底；小时单则开启“按小时计算”
     const syncByProject = (pid?: number) => {
         const id = Number(pid);
         if (!id) return;
@@ -146,16 +196,37 @@ export default function OrderUpsertModal(props: {
         const p = projectMap?.[id];
         if (!p) return;
 
+        // 小票展示字段
+        form?.setFieldsValue?.({
+            projectName: p?.name,
+            billingMode: p?.billingMode ?? undefined,
+            unitPrice: p?.price != null ? Number(p.price) : undefined,
+        } as any);
+
         const patch: Partial<OrderUpsertValues> = {};
 
-        // 应收/实收：强制同步项目价格（你要求“默认填入选择的项目金额”）
-        if (p?.price != null) {
-            patch.receivableAmount = Number(p.price);
-            patch.paidAmount = Number(p.price);
-        }
-
-        // 订单保底（万）：同步项目 baseAmount
+        // 保底同步
         patch.baseAmountWan = p?.baseAmount != null ? Number(p.baseAmount) : null;
+
+        // 小时单：默认给 1 小时并计算金额
+        if (String(p?.billingMode ?? '') === 'HOURLY') {
+            const curHours = Number(form?.getFieldValue?.('orderHours') ?? 0) || 0;
+            const hours = curHours > 0 ? curHours : 1;
+            patch.orderHours = hours;
+
+            if (p?.price != null) {
+                const total = Number(p.price) * hours;
+                patch.receivableAmount = total;
+                patch.paidAmount = total;
+            }
+        } else {
+            // 非小时单：金额默认同步项目 price（你原有规则保持）
+            patch.orderHours = undefined;
+            if (p?.price != null) {
+                patch.receivableAmount = Number(p.price);
+                patch.paidAmount = Number(p.price);
+            }
+        }
 
         form?.setFieldsValue?.(patch as any);
     };
@@ -164,10 +235,8 @@ export default function OrderUpsertModal(props: {
     useEffect(() => {
         if (!open) return;
 
-        // 先清空再填充（防止上一次残留）
         form?.resetFields?.();
 
-        // 统一初始化：时间默认 now；其他字段用 initialValues（不在这里填金额/保底，金额/保底由项目同步规则统一控制）
         form?.setFieldsValue?.({
             orderTime: now,
             paymentTime: now,
@@ -176,13 +245,12 @@ export default function OrderUpsertModal(props: {
             paymentTime: initialValues?.paymentTime ? dayjs(initialValues.paymentTime) : now,
         } as any);
 
-        // 拉基础数据
         void fetchProjects('');
         void fetchPlayers('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
-    // 项目列表加载完成后：用当前 projectId 再同步一次（确保一打开就自动填金额/保底）
+    // 项目列表加载完成后：用当前 projectId 再同步一次（确保一打开就自动填）
     useEffect(() => {
         if (!open) return;
         const pid = (form?.getFieldValue?.('projectId') as any) ?? initialValues?.projectId;
@@ -190,14 +258,26 @@ export default function OrderUpsertModal(props: {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, projectMap]);
 
-    // 值变化：项目变更 + 限制打手数量
+    // 值变化：项目变更 + 小时变更 + 限制打手数量
     const onValuesChange = (changed: any) => {
         if (changed?.projectId) syncByProject(changed.projectId);
 
-        // 新建派单：最多 2 人（超出截断）
+        if (changed?.orderHours != null) {
+            const pid = Number(form?.getFieldValue?.('projectId') ?? 0);
+            recalcHourlyAmount(pid, Number(changed.orderHours));
+        }
+
         if (showPlayers && Array.isArray(changed?.playerIds) && changed.playerIds.length > MAX_PLAYERS) {
             message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
             form?.setFieldValue?.('playerIds' as any, changed.playerIds.slice(0, MAX_PLAYERS));
+        }
+
+        // 维护 playerNames（小票用）
+        if (showPlayers && Array.isArray(changed?.playerIds)) {
+            const names = changed.playerIds
+                .map((id: any) => playerMap?.[Number(id)])
+                .filter(Boolean);
+            form?.setFieldsValue?.({ playerNames: names } as any);
         }
     };
 
@@ -205,46 +285,58 @@ export default function OrderUpsertModal(props: {
     const handleOk = async () => {
         try {
             setSubmitting(true);
+            const v: any = await form?.validateFields?.();
 
-            const v = await form?.validateFields?.();
+            const pid = Number(v?.projectId);
+            const hourly = isHourlyProject(pid);
+
+            // 小时单：必须有下单小时
+            if (hourly && !(Number(v?.orderHours) > 0)) {
+                message.error('小时单必须填写下单小时');
+                return;
+            }
 
             const payload: OrderUpsertValues = {
                 ...(v as any),
                 id: initialValues?.id,
 
-                projectId: Number((v as any)?.projectId),
+                projectId: Number(v?.projectId),
 
-                receivableAmount: Number((v as any)?.receivableAmount),
-                paidAmount: Number((v as any)?.paidAmount),
+                receivableAmount: Number(v?.receivableAmount),
+                paidAmount: Number(v?.paidAmount),
 
                 baseAmountWan:
-                    (v as any)?.baseAmountWan != null && (v as any)?.baseAmountWan !== ''
-                        ? Number((v as any)?.baseAmountWan)
-                        : null,
+                    v?.baseAmountWan != null && v?.baseAmountWan !== '' ? Number(v?.baseAmountWan) : null,
 
-                customerGameId: (v as any)?.customerGameId?.trim?.() || undefined,
+                // 小时单携带 hours（你后续生成小票需要；后端 create 若暂不支持也不会影响前端）
+                orderHours: hourly ? Number(v?.orderHours) : undefined,
 
-                orderTime: (v as any)?.orderTime ? dayjs((v as any).orderTime).toISOString() : now.toISOString(),
-                paymentTime: (v as any)?.paymentTime ? dayjs((v as any).paymentTime).toISOString() : now.toISOString(),
+                customerGameId: v?.customerGameId?.trim?.() || undefined,
 
-                inviter: (v as any)?.inviter?.trim?.() || undefined,
+                orderTime: v?.orderTime ? dayjs(v.orderTime).toISOString() : now.toISOString(),
+                paymentTime: v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString(),
 
-                csRate: (v as any)?.csRate != null && (v as any)?.csRate !== '' ? Number((v as any)?.csRate) : undefined,
-                inviteRate:
-                    (v as any)?.inviteRate != null && (v as any)?.inviteRate !== '' ? Number((v as any)?.inviteRate) : undefined,
+                inviter: v?.inviter?.trim?.() || undefined,
+
+                csRate: v?.csRate != null && v?.csRate !== '' ? Number(v?.csRate) : undefined,
+                inviteRate: v?.inviteRate != null && v?.inviteRate !== '' ? Number(v?.inviteRate) : undefined,
 
                 customClubRate:
-                    (v as any)?.customClubRate != null && (v as any)?.customClubRate !== ''
-                        ? Number((v as any)?.customClubRate)
-                        : undefined,
+                    v?.customClubRate != null && v?.customClubRate !== '' ? Number(v?.customClubRate) : undefined,
 
-                remark: (v as any)?.remark?.trim?.() || undefined,
+                remark: v?.remark?.trim?.() || undefined,
 
                 playerIds: showPlayers
-                    ? (Array.isArray((v as any)?.playerIds)
-                        ? (v as any).playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                    ? (Array.isArray(v?.playerIds)
+                        ? v.playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                         : [])
                     : undefined,
+
+                // 小票展示字段
+                projectName: v?.projectName,
+                billingMode: v?.billingMode,
+                unitPrice: v?.unitPrice != null ? Number(v.unitPrice) : undefined,
+                playerNames: Array.isArray(v?.playerNames) ? v.playerNames : undefined,
             };
 
             await onSubmit?.(payload);
@@ -253,9 +345,12 @@ export default function OrderUpsertModal(props: {
         }
     };
 
-    // ---------- UI：更美观、更宽、更少滚动 ----------
-    // 栅格：桌面 3列（lg=8），中屏 2列（md=12），手机 1列（xs=24）
+    // ---------- UI：默认 2 列（你当前 UI 改动） ----------
+    // 2列：lg=12；要 3 列把 lg 改 8
     const colProps = { xs: 24, md: 12, lg: 12 };
+
+    const curProjectId = Number(form?.getFieldValue?.('projectId') ?? 0);
+    const showHours = isHourlyProject(curProjectId);
 
     return (
         <Modal
@@ -266,13 +361,15 @@ export default function OrderUpsertModal(props: {
             confirmLoading={submitting}
             destroyOnClose
             centered
-            width={700} // ✅ 更宽：桌面一屏录单更舒服
+            width={700}
             okText="保存"
             cancelText="取消"
         >
             <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
                 {/* 1) 订单核心 */}
-                <Row gutter={[16, 6]}>
+                <Divider style={{ marginTop: 0, marginBottom: 12 }}/>
+
+                <Row gutter={[16, 12]}>
                     <Col {...colProps}>
                         <Form.Item name="projectId" label="项目" rules={[{ required: true, message: '请选择项目' }]}>
                             <Select
@@ -287,6 +384,24 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
+                    {showHours ? (
+                        <Col {...colProps}>
+                            <Form.Item
+                                name="orderHours"
+                                label="下单小时"
+                                rules={[{ required: true, message: '请输入下单小时' }]}
+                            >
+                                <InputNumber min={1} step={1} style={{ width: '100%' }} placeholder="例如：1 / 2 / 3 ..." />
+                            </Form.Item>
+                        </Col>
+                    ) : null}
+
+                    <Col {...colProps}>
+                        <Form.Item name="customerGameId" label="客户ID（游戏ID）">
+                            <Input placeholder="ID或昵称" />
+                        </Form.Item>
+                    </Col>
+
                     <Col {...colProps}>
                         <Form.Item name="baseAmountWan" label="订单保底(万)">
                             <InputNumber min={0} style={{ width: '100%' }} placeholder="随项目自动同步，可手改" />
@@ -295,19 +410,21 @@ export default function OrderUpsertModal(props: {
 
                     <Col {...colProps}>
                         <Form.Item name="receivableAmount" label="应收金额" rules={[{ required: true, message: '请输入应收金额' }]}>
-                            <InputNumber min={0} style={{ width: '100%' }} placeholder="随项目自动同步" />
+                            <InputNumber
+                                min={0}
+                                style={{ width: '100%' }}
+                                placeholder={showHours ? '随小时自动计算' : '随项目自动同步'}
+                            />
                         </Form.Item>
                     </Col>
 
                     <Col {...colProps}>
                         <Form.Item name="paidAmount" label="实收金额" rules={[{ required: true, message: '请输入实收金额' }]}>
-                            <InputNumber min={0} style={{ width: '100%' }} placeholder="随项目自动同步" />
-                        </Form.Item>
-                    </Col>
-
-                    <Col span={24}>
-                        <Form.Item name="customerGameId" label="客户游戏ID">
-                            <Input placeholder="可选" />
+                            <InputNumber
+                                min={0}
+                                style={{ width: '100%' }}
+                                placeholder={showHours ? '随小时自动计算' : '随项目自动同步'}
+                            />
                         </Form.Item>
                     </Col>
 
@@ -325,8 +442,8 @@ export default function OrderUpsertModal(props: {
 
                     {/* 新建可选派单 */}
                     {showPlayers ? (
-                        <Col xs={24} md={24} lg={8}>
-                            <Form.Item name="playerIds" label={`打手（最多 ${MAX_PLAYERS} 人）`}>
+                        <Col xs={24} md={24} lg={12}>
+                            <Form.Item name="playerIds" label={`接待陪玩（最多 ${MAX_PLAYERS} 人）`}>
                                 <Select
                                     mode="multiple"
                                     placeholder="可选：新建即派单"
@@ -344,13 +461,13 @@ export default function OrderUpsertModal(props: {
                 </Row>
 
                 {/* 2) 抽成信息 */}
+                <Divider style={{ marginTop: 16, marginBottom: 12 }}/>
                 <Row gutter={[16, 12]}>
-
-                    <Col {...colProps}>
-                        <Form.Item name="inviter" label="邀请人">
-                            <Input placeholder="可选" />
-                        </Form.Item>
-                    </Col>
+                    {/*<Col {...colProps}>*/}
+                    {/*    <Form.Item name="csRate" label="客服抽成">*/}
+                    {/*        <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} placeholder="0~1" />*/}
+                    {/*    </Form.Item>*/}
+                    {/*</Col>*/}
 
                     {/*<Col {...colProps}>*/}
                     {/*    <Form.Item name="inviteRate" label="邀请抽成">*/}
@@ -359,19 +476,20 @@ export default function OrderUpsertModal(props: {
                     {/*</Col>*/}
 
                     <Col {...colProps}>
-                        <Form.Item name="customClubRate" label="特殊单自定义抽成比例">
-                            <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} placeholder="0~1" />
+                        <Form.Item name="inviter" label="邀请人">
+                            <Input placeholder="可选" />
                         </Form.Item>
                     </Col>
 
-                    {/*<Col {...colProps}>*/}
-                    {/*    <Form.Item name="csRate" label="客服抽成">*/}
-                    {/*        <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} placeholder="0~1" />*/}
-                    {/*    </Form.Item>*/}
-                    {/*</Col>*/}
+                    <Col {...colProps}>
+                        <Form.Item name="customClubRate" label="特殊单固定抽成">
+                            <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} placeholder="0~1" />
+                        </Form.Item>
+                    </Col>
                 </Row>
 
                 {/* 3) 备注 */}
+                <Divider style={{ marginTop: 16, marginBottom: 12 }}/>
                 <Row gutter={[16, 12]}>
                     <Col span={24}>
                         <Form.Item name="remark" label="备注">
@@ -379,6 +497,20 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
                 </Row>
+
+                {/* 隐藏字段：小票展示用 */}
+                <Form.Item name="projectName" hidden>
+                    <Input />
+                </Form.Item>
+                <Form.Item name="billingMode" hidden>
+                    <Input />
+                </Form.Item>
+                <Form.Item name="unitPrice" hidden>
+                    <InputNumber />
+                </Form.Item>
+                <Form.Item name="playerNames" hidden>
+                    <Input />
+                </Form.Item>
             </Form>
         </Modal>
     );
