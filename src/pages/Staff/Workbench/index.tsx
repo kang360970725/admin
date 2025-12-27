@@ -1,7 +1,8 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {useModel, useNavigate} from '@umijs/max';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Button,
+    Card,
+    Col,
     Descriptions,
     Divider,
     Form,
@@ -9,106 +10,275 @@ import {
     InputNumber,
     message,
     Modal,
-    Select,
+    Row,
     Space,
-    Tabs,
+    Statistic,
     Tag,
-    Typography,
-    Watermark
+    Watermark,
 } from 'antd';
-import {DISPATCH_STATUS_META, pickStatusColor, pickStatusText} from '@/constants/status';
-
+import { PageContainer } from '@ant-design/pro-components';
+import { useModel } from '@umijs/max';
+import dayjs from 'dayjs';
 import {
     acceptDispatch,
     archiveDispatch,
-    completeDispatch, dispatchRejectOrder,
+    completeDispatch,
+    dispatchRejectOrder,
     getEnumDicts,
     getMyDispatches,
-    getOrderDetail
+    getOrderDetail, usersWorkStatus,
 } from '@/services/api';
-import {PageContainer, ProTable, type ActionType, type ProColumns} from '@ant-design/pro-components';
+import { pickStatusColor, pickStatusText } from '@/constants/status';
 
 type DictMap = Record<string, Record<string, string>>;
 
 const WorkbenchPage: React.FC = () => {
-    const actionRef = useRef<ActionType>();
-    const navigate = useNavigate();
-    const {initialState} = useModel('@@initialState');
+    const { initialState, setInitialState, refresh } = useModel('@@initialState');
     const currentUser = initialState?.currentUser;
 
+    const [myWorkStatus, setLocalWorkStatus] = useState<string>(
+        String(initialState?.currentUser?.workStatus || 'IDLE'),
+    );
 
     // enums dicts
     const [dicts, setDicts] = useState<DictMap>({});
 
-    // tabs
-    const [tab, setTab] = useState<'WAIT_ACCEPT' | 'ACCEPTED' | 'DONE'>('WAIT_ACCEPT');
+    // 工作状态（来自用户信息）
+    const workStatus = myWorkStatus;
 
-    // accept modal
-    const [acceptOpen, setAcceptOpen] = useState(false);
-    const [acceptSubmitting, setAcceptSubmitting] = useState(false);
-    const [acceptForm] = Form.useForm();
-    const [currentRow, setCurrentRow] = useState<any>(null);
+    // 统计
+    const [statsLoading, setStatsLoading] = useState(false);
+    const [todayCount, setTodayCount] = useState(0);
+    const [todayIncome, setTodayIncome] = useState(0);
+    const [monthCount, setMonthCount] = useState(0);
+    const [monthIncome, setMonthIncome] = useState(0);
 
-    // archive/complete modal
+    // 订单池
+    const [poolLoading, setPoolLoading] = useState(false);
+    const [poolDispatch, setPoolDispatch] = useState<any>(null); // 当前展示的一条（待接/进行中）
+    const [poolMode, setPoolMode] = useState<'WAITING' | 'WORKING' | 'RESTING'>('WAITING');
+
+    // 拒单
+    const [rejectOpen, setRejectOpen] = useState(false);
+    const [rejectSubmitting, setRejectSubmitting] = useState(false);
+    const [rejectForm] = Form.useForm();
+
+    // 存单/结单
     const [finishOpen, setFinishOpen] = useState(false);
     const [finishMode, setFinishMode] = useState<'ARCHIVE' | 'COMPLETE'>('ARCHIVE');
     const [finishSubmitting, setFinishSubmitting] = useState(false);
     const [finishForm] = Form.useForm();
     const watchedTotalProgressWan = Form.useWatch('totalProgressWan', finishForm);
     const [guaranteedCompleteRemainingWan, setGuaranteedCompleteRemainingWan] = useState<number | null>(null);
-    // accept modal preview
-    const [acceptGuaranteedRemainingWan, setAcceptGuaranteedRemainingWan] = useState<number | null>(null);
-    const [acceptHourlyEstimatedHours, setAcceptHourlyEstimatedHours] = useState<number | null>(null);
 
-    const [rejectOpen, setRejectOpen] = useState(false);
-    const [rejectSubmitting, setRejectSubmitting] = useState(false);
-    const [rejectForm] = Form.useForm();
 
+    // 小时单预览 tick
+    const [tick, setTick] = useState(Date.now());
+    useEffect(() => {
+        if (!finishOpen) return;
+        const timer = window.setInterval(() => setTick(Date.now()), 30_000);
+        return () => window.clearInterval(timer);
+    }, [finishOpen]);
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
         return dicts?.[group]?.[k] || fallback || k || '-';
     };
 
-    // ---- Hourly preview tick ----
-    const [tick, setTick] = useState<number>(Date.now());
+    const loadDictsOnce = async () => {
+        if (Object.keys(dicts || {}).length > 0) return;
+        try {
+            const res = await getEnumDicts();
+            setDicts((res || {}) as any);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const billingModeOf = (dispatchRow: any) => {
+        const order = dispatchRow?.order || {};
+        const snap = order?.projectSnapshot || {};
+        return snap?.billingMode || order?.project?.billingMode;
+    };
+    const isGuaranteed = (dispatchRow: any) => billingModeOf(dispatchRow) === 'GUARANTEED';
+    const isHourly = (dispatchRow: any) => billingModeOf(dispatchRow) === 'HOURLY';
+
+    const participantsActive = (dispatchRow: any) => {
+        const ps = dispatchRow?.participants || dispatchRow?.order?.currentDispatch?.participants || [];
+        return (Array.isArray(ps) ? ps : []).filter((p: any) => p?.isActive !== false && !p?.rejectedAt);
+    };
+
+    // 估算：从 dispatch.settlements 里取本人的 finalEarnings（若不存在就返回 0）
+    const calcMyIncomeFromDispatch = (d: any) => {
+        const uid = Number(currentUser?.id);
+        const ss = Array.isArray(d?.settlements) ? d.settlements : [];
+        if (!uid || ss.length === 0) return 0;
+        return ss
+            .filter((s: any) => Number(s?.userId) === uid)
+            .reduce((sum: number, s: any) => sum + Number(s?.finalEarnings ?? 0), 0);
+    };
+
+    const refreshStats = async () => {
+        setStatsLoading(true);
+        try {
+            // 拉一批（用于今日/月统计）；不依赖后端新接口
+            const res: any = await getMyDispatches({ page: 1, limit: 200 });
+            const list = Array.isArray(res?.data) ? res.data : [];
+
+            const now = dayjs();
+            const startToday = now.startOf('day');
+            const endToday = now.endOf('day');
+
+            const startMonth = now.startOf('month');
+            const endMonth = now.endOf('month');
+
+            const isDone = (d: any) => String(d?.status) === 'ARCHIVED' || String(d?.status) === 'COMPLETED';
+
+            const doneToday = list.filter((d: any) => {
+                if (!isDone(d)) return false;
+                const at = d?.archivedAt || d?.completedAt;
+                if (!at) return false;
+                const t = dayjs(at);
+                return t.isAfter(startToday) && t.isBefore(endToday);
+            });
+
+            const doneMonth = list.filter((d: any) => {
+                if (!isDone(d)) return false;
+                const at = d?.archivedAt || d?.completedAt;
+                if (!at) return false;
+                const t = dayjs(at);
+                return t.isAfter(startMonth) && t.isBefore(endMonth);
+            });
+
+            setTodayCount(doneToday.length);
+            setMonthCount(doneMonth.length);
+
+            // 收入：有 settlements 就算，没有就展示 0（避免报错）
+            setTodayIncome(doneToday.reduce((sum: number, d: any) => sum + calcMyIncomeFromDispatch(d), 0));
+            setMonthIncome(doneMonth.reduce((sum: number, d: any) => sum + calcMyIncomeFromDispatch(d), 0));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setStatsLoading(false);
+        }
+    };
+
+    const refreshPool = async () => {
+        setPoolLoading(true);
+        try {
+            await loadDictsOnce();
+
+            // 规则：
+            // - WORKING：优先展示 ACCEPTED 的进行中订单
+            // - IDLE：展示 WAIT_ACCEPT 的待接单
+            // - RESTING：不拉（也可拉，但不展示敏感）
+            if (workStatus === 'RESTING') {
+                setPoolMode('RESTING');
+                setPoolDispatch(null);
+                return;
+            }
+
+            if (workStatus === 'WORKING') {
+                setPoolMode('WORKING');
+                const res: any = await getMyDispatches({ page: 1, limit: 10, status: 'ACCEPTED' });
+                const list = Array.isArray(res?.data) ? res.data : [];
+                setPoolDispatch(list?.[0] || null);
+                return;
+            }
+
+            // 默认 IDLE：等待中
+            setPoolMode('WAITING');
+            const res: any = await getMyDispatches({ page: 1, limit: 10, status: 'WAIT_ACCEPT' });
+            // const list = Array.isArray(res?.data) ? res.data : [];
+            // setPoolDispatch(list?.[0] || null);
+            const list = Array.isArray(res?.data) ? res.data : [];
+            const first = list?.[0] || null;
+
+            if (!first) {
+                setPoolDispatch(null);
+                return;
+            }
+
+            // ✅ 融合：拉完整订单详情（填充订单池展示所需数据）
+            const orderId = Number(first?.orderId ?? first?.order?.id);
+            if (orderId) {
+                try {
+                    const detail = await getOrderDetail(orderId);
+                    setPoolDispatch({ ...first, order: detail });
+                } catch (e) {
+                    // 详情失败也不阻断订单池展示
+                    setPoolDispatch(first);
+                }
+            } else {
+                setPoolDispatch(first);
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setPoolLoading(false);
+        }
+    };
 
     useEffect(() => {
-        if (!finishOpen) return;
-        // 弹窗打开后每 30s 刷新一次“当前时间/时长预估”
-        const timer = window.setInterval(() => setTick(Date.now()), 30_000);
-        return () => window.clearInterval(timer);
-    }, [finishOpen]);
+        void loadDictsOnce();
+        void refreshStats();
+        void refreshPool();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    const minutesToBillableHours = (totalMinutes: number): number => {
-        if (totalMinutes < 15) return 0;
-        const hours = Math.floor(totalMinutes / 60);
-        const minutes = totalMinutes % 60;
+    // workStatus 变化时刷新订单池
+    useEffect(() => {
+        void refreshPool();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [workStatus]);
 
-        let extra = 0;
-        if (minutes < 15) extra = 0;
-        else if (minutes <= 45) extra = 0.5;
-        else extra = 1;
+    const updateMyWorkStatus = async (next: 'IDLE' | 'RESTING') => {
+        try {
+            await usersWorkStatus({ workStatus: next });
 
-        return hours + extra;
+            // ✅ 1) 立即更新本地状态（状态模块秒更新）
+            setLocalWorkStatus(next);
+
+            // ✅ 2) 同步到 initialState，避免其它地方仍读旧值
+            setInitialState?.((s: any) => ({
+                ...s,
+                currentUser: {
+                    ...(s?.currentUser || {}),
+                    workStatus: next,
+                },
+            }));
+
+            message.success(next === 'IDLE' ? '已开始接单（等待中）' : '已进入休息中');
+
+            // ❌ 不再 refreshPool/refreshStats，不刷新整个页面
+            // （如果你后续想“只刷新订单池”，我再单独给你一个按钮触发 refreshPool）
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || '更新状态失败');
+
+            // 可选：失败时从服务端拉一次最新用户状态兜底（只刷新状态模块）
+            // await refresh?.();
+            // updateMyWorkStatus(String(initialState?.currentUser?.workStatus || 'IDLE'));
+        }
+    };
+
+    const openReject = () => {
+        rejectForm.resetFields();
+        setRejectOpen(true);
     };
 
     const submitReject = async () => {
         try {
-            const values = await rejectForm.validateFields();
-            if (!currentRow?.id) return;
+            const v = await rejectForm.validateFields();
+            if (!poolDispatch?.id) return;
 
             setRejectSubmitting(true);
-            await dispatchRejectOrder({ dispatchId: Number(currentRow.id), reason: String(values.reason || '').trim() })
-            // await request('/orders/dispatch/reject', {
-            //     method: 'POST',
-            //     data: { dispatchId: Number(currentRow.id), reason: String(values.reason || '').trim() },
-            // });
+            await dispatchRejectOrder({ dispatchId: Number(poolDispatch.id), reason: String(v.reason || '').trim() });
 
-            message.success('已拒单');
+            message.success('已拒单，已进入休息中');
             setRejectOpen(false);
-            setAcceptOpen(false);
-            actionRef.current?.reload();
+
+            // ✅ 要求：拒单后默认休息中
+            await updateMyWorkStatus('RESTING');
         } catch (e: any) {
             if (e?.errorFields) return;
             message.error(e?.response?.data?.message || '拒单失败');
@@ -117,68 +287,39 @@ const WorkbenchPage: React.FC = () => {
         }
     };
 
-    const mapDeductMinutesValue = (option?: string): number => {
-        switch (option) {
-            case 'M10':
-                return 10;
-            case 'M20':
-                return 20;
-            case 'M30':
-                return 30;
-            case 'M40':
-                return 40;
-            case 'M50':
-                return 50;
-            case 'M60':
-                return 60;
-            default:
-                return 0;
-        }
-    };
-
-    const loadDictsOnce = async () => {
-        if (Object.keys(dicts || {}).length > 0) return;
+    const submitAccept = async () => {
         try {
-            const res = await getEnumDicts();
-            setDicts(res || {});
-        } catch (e) {
-            console.error(e);
+            if (!poolDispatch?.id) return;
+            await acceptDispatch(Number(poolDispatch.id), {});
+            message.success('已接单');
+            // 接单后后端一般会把 workStatus 置 WORKING；这里直接刷新即可
+            void refreshPool();
+            void refreshStats();
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || '接单失败');
         }
     };
 
-    const billingModeOf = (row: any) => {
-        const order = row?.order || {};
-        const snap = order?.projectSnapshot || {};
-        return snap.billingMode || order?.project?.billingMode;
-    };
-
-    const isGuaranteed = (row: any) => billingModeOf(row) === 'GUARANTEED';
-    const isHourly = (row: any) => billingModeOf(row) === 'HOURLY';
-
-    const participantsActive = (row: any) => {
-        const ps = row?.participants || row?.order?.currentDispatch?.participants || [];
-        return (Array.isArray(ps) ? ps : []).filter((p: any) => p?.isActive !== false);
-    };
-
-    const openAccept = async (row: any) => {
-        // await loadDictsOnce();
-        // setCurrentRow(row);
-        // acceptForm.setFieldsValue({remark: ''});
+    // --- 存单/结单（沿用你现有逻辑，只是从“订单池”入口打开） ---
+    const openFinish = async (row: any, mode: 'ARCHIVE' | 'COMPLETE') => {
         await loadDictsOnce();
-        setCurrentRow(row);
+        setFinishMode(mode);
 
-        // 重置预览
-        setAcceptGuaranteedRemainingWan(null);
-        setAcceptHourlyEstimatedHours(null);
+        const ps = participantsActive(row);
+        finishForm.setFieldsValue({
+            remark: '',
+            deductMinutesOption: undefined,
+            totalProgressWan: 0,
+            progresses: ps.map((p: any) => ({ userId: Number(p.userId), progressBaseWan: 0 })),
+        });
 
-        // 1) 保底单：展示剩余保底（按“已存单 ARCHIVED 累计进度”口径）
-        if (row && isGuaranteed(row)) {
+        // 保底单结单：回显剩余保底（不允许输入）
+        if (isGuaranteed(row) && mode === 'COMPLETE') {
             try {
                 const orderId = Number(row?.order?.id ?? row?.orderId);
                 if (orderId) {
                     const detail = await getOrderDetail(orderId);
                     const base = Number(detail?.baseAmountWan ?? 0);
-
                     const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
                     let archivedProgress = 0;
                     for (const d of dispatches) {
@@ -186,113 +327,17 @@ const WorkbenchPage: React.FC = () => {
                         const parts = Array.isArray(d?.participants) ? d.participants : [];
                         for (const p of parts) archivedProgress += Number(p?.progressBaseWan ?? 0);
                     }
-
                     const remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
-                    setAcceptGuaranteedRemainingWan(remaining);
-                }
-            } catch (e) {
-                console.error(e);
-                // 不阻塞接单：展示失败就留空
-                setAcceptGuaranteedRemainingWan(null);
-            }
-        }
-
-        // 2) 小时单：展示预计小时（尽量用已有数据，缺字段则不展示）
-        if (row && isHourly(row)) {
-            const order = row?.order || {};
-            const snap = order?.projectSnapshot || {};
-            const project = order?.project || {};
-
-            const unitPrice = Number(snap?.price ?? project?.price); // 单价（一般为小时价）
-            const total = Number(order?.paidAmount ?? order?.receivableAmount); // 总金额
-
-            if (Number.isFinite(unitPrice) && unitPrice > 0 && Number.isFinite(total) && total >= 0) {
-                setAcceptHourlyEstimatedHours(total / unitPrice);
-            } else {
-                setAcceptHourlyEstimatedHours(null);
-            }
-        }
-
-
-        setAcceptOpen(true);
-    };
-
-    const submitAccept = async () => {
-        try {
-            const values = await acceptForm.validateFields();
-            if (!currentRow?.id) return;
-
-            setAcceptSubmitting(true);
-            await acceptDispatch(Number(currentRow.id), {remark: values.remark || undefined});
-
-            message.success('已接单');
-            setAcceptOpen(false);
-            actionRef.current?.reload();
-        } catch (e: any) {
-            if (e?.errorFields) return;
-            message.error(e?.response?.data?.message || '接单失败');
-        } finally {
-            // 接单弹窗无需填写任何内容
-            Modal.success({
-                title: '已接单',
-                content: '成功接单，若有多个陪玩，请等待其他陪玩均确认接单。',
-            })
-            setAcceptSubmitting(false);
-        }
-    };
-
-    const openFinish = async (row: any, mode: 'ARCHIVE' | 'COMPLETE') => {
-        await loadDictsOnce();
-        setCurrentRow(row);
-        setFinishMode(mode);
-
-        const ps = participantsActive(row);
-        const count = ps.length || 1;
-
-        // 保底单：只填“本轮总进度（万）”，后续均分写入 progresses
-        // 小时单：只选扣时 + 备注（时长由后端按 acceptedAllAt->now 计算，这里仅做预览）
-        finishForm.setFieldsValue({
-            remark: '',
-            deductMinutesOption: undefined,
-            totalProgressWan: 0, // ✅ 新增字段
-            progresses: ps.map((p: any) => ({
-                userId: Number(p.userId),
-                progressBaseWan: 0,
-            })),
-        });
-
-
-        // ✅ 保底单结单：回显剩余保底（不允许输入）
-        if (isGuaranteed(row) && mode === 'COMPLETE') {
-            try {
-                const orderId = Number(row?.order?.id);
-                if (orderId) {
-                    const detail = await getOrderDetail(orderId);
-
-                    const base = Number(detail?.baseAmountWan ?? 0);
-                    const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
-
-                    // 只统计 ARCHIVED 的累计进度（和你结算口径一致）
-                    let archivedProgress = 0;
-                    for (const d of dispatches) {
-                        if (String(d?.status) !== 'ARCHIVED') continue;
-                        const parts = Array.isArray(d?.participants) ? d.participants : [];
-                        for (const p of parts) archivedProgress += Number(p?.progressBaseWan ?? 0);
-                    }
-
-                    const remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
-
                     setGuaranteedCompleteRemainingWan(remaining);
-                    // 这里写入 form，只用于“展示本次默认打了多少”，不让用户编辑
-                    finishForm.setFieldsValue({totalProgressWan: remaining});
+                    finishForm.setFieldsValue({ totalProgressWan: remaining });
                 }
             } catch (e) {
-                // 拉详情失败不阻塞结单：后端仍会兜底按剩余补齐
                 console.error(e);
             }
+        } else {
+            setGuaranteedCompleteRemainingWan(null);
         }
 
-        // // 打开弹窗并刷新一次 tick，保证“当前时间”立即更新
         setTick(Date.now());
         setFinishOpen(true);
     };
@@ -300,29 +345,27 @@ const WorkbenchPage: React.FC = () => {
     const submitFinish = async () => {
         try {
             const values = await finishForm.validateFields();
-            if (!currentRow?.id) return;
+            if (!poolDispatch?.id) return;
 
             setFinishSubmitting(true);
-
-            const ps = participantsActive(currentRow);
+            const ps = participantsActive(poolDispatch);
             const count = ps.length || 1;
 
-            // ✅ 保底单：只填总数，提交时均分到 progresses
             let progresses = values.progresses;
-            if (isGuaranteed(currentRow) && finishMode === 'ARCHIVE') {
+
+            // 保底单存单：只填总数，均分
+            if (isGuaranteed(poolDispatch) && finishMode === 'ARCHIVE') {
                 const total = Number(values.totalProgressWan);
                 if (!Number.isFinite(total)) {
                     message.error('存单请填写保底进度');
                     return;
                 }
                 const each = total / count;
-                progresses = ps.map((p: any) => ({
-                    userId: Number(p.userId),
-                    progressBaseWan: each,
-                }));
+                progresses = ps.map((p: any) => ({ userId: Number(p.userId), progressBaseWan: each }));
             }
-            // ✅ 保底单：结单 COMPLETE 时不传 progresses（后端会按剩余保底兜底补齐）
-            if (isGuaranteed(currentRow) && finishMode === 'COMPLETE') {
+
+            // 保底单结单：不传 progresses（后端兜底补齐）
+            if (isGuaranteed(poolDispatch) && finishMode === 'COMPLETE') {
                 progresses = undefined;
             }
 
@@ -333,15 +376,16 @@ const WorkbenchPage: React.FC = () => {
             };
 
             if (finishMode === 'ARCHIVE') {
-                await archiveDispatch(Number(currentRow.id), payload);
+                await archiveDispatch(Number(poolDispatch.id), payload);
                 message.success('已存单');
             } else {
-                await completeDispatch(Number(currentRow.id), payload);
+                await completeDispatch(Number(poolDispatch.id), payload);
                 message.success('已结单');
             }
 
             setFinishOpen(false);
-            actionRef.current?.reload();
+            void refreshPool();
+            void refreshStats();
         } catch (e: any) {
             if (e?.errorFields) return;
             message.error(e?.response?.data?.message || (finishMode === 'ARCHIVE' ? '存单失败' : '结单失败'));
@@ -350,311 +394,391 @@ const WorkbenchPage: React.FC = () => {
         }
     };
 
-    const columns = useMemo<any>(() => {
-        return [
-            {
-                title: '订单号',
-                dataIndex: ['order', 'autoSerial'],
-                // width: 160,
-                copyable: true,
-                ellipsis: true,
-            },
-            // {
-            //     title: '项目',
-            //     dataIndex: ['order', 'project', 'name'],
-            //     ellipsis: true,
-            //     render: (_, row) => row?.order?.project?.name || row?.order?.projectSnapshot?.name || '-',
-            // },
-            // {
-            //     title: '计费',
-            //     dataIndex: ['order', 'projectSnapshot', 'billingMode'],
-            //     width: 110,
-            //     search: false,
-            //     render: (_, row) => {
-            //         const m = billingModeOf(row);
-            //         return <Tag>{t('BillingMode', m, m)}</Tag>;
-            //     },
-            // },
-            {
-                title: '派单状态',
-                dataIndex: 'status',
-                // width: 110,
-                render: (_, row) => {
-                    const v = row?.status;
-                    return (
-                        <Tag color={pickStatusColor({group: 'DispatchStatus', key: v})}>
-                            {pickStatusText({dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-')})}
-                        </Tag>
-                    );
-                },
-                valueType: 'select',
-                valueEnum: Object.fromEntries(
-                    Object.keys(DISPATCH_STATUS_META).map((k) => [k, {text: DISPATCH_STATUS_META[k].text}]),
-                ),
-            },
-            {
-                title: '订单状态',
-                dataIndex: ['order', 'status'],
-                // width: 110,
-                search: false,
-                render: (_, row) => {
-                    const v = row?.order?.status;
-                    return (
-                        <Tag color={pickStatusColor({group: 'OrderStatus', key: v})}>
-                            {pickStatusText({dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-')})}
-                        </Tag>
-                    );
-                },
-            },
-            {
-                title: '开单时间',
-                dataIndex: ['order', 'openedAt'],
-                valueType: 'dateTime',
-                search: false,
-            },
-            {
-                title: '派单时间',
-                dataIndex: 'assignedAt',
-                valueType: 'dateTime',
-                search: false,
-            },
-            // {
-            //     title: '客户游戏ID',
-            //     dataIndex: ['order', 'customerGameId'],
-            //     ellipsis: true,
-            // },
-            // {
-            //     title: '本轮参与者',
-            //     dataIndex: 'participants',
-            //     search: false,
-            //     render: (_, row) => {
-            //         const ps = participantsActive(row);
-            //         if (ps.length === 0) return '-';
-            //         return (
-            //             <Space wrap>
-            //                 {ps.map((p: any) => {
-            //                     const u = p?.user;
-            //                     const name = u?.name || u?.phone || '未命名';
-            //                     return <Tag key={p.id}>{name}</Tag>;
-            //                 })}
-            //             </Space>
-            //         );
-            //     },
-            // },
-            {
-                title: '派单客服',
-                dataIndex: 'updatedAt',
-                valueType: 'dateTime',
-                width: 220,
-                render: (_, row) => {
-                    const ps = participantsActive(row);
-                    if (ps.length === 0) return '-';
-                    return (
-                        <Tag>
-                            {row?.order?.dispatcher ? `${row?.order?.dispatcher.name || '-'}（${row?.order?.dispatcher.phone || '-'}）` : '-'}
-                        </Tag>
-                    );
-                },
-            },
-            {
-                title: '操作',
-                valueType: 'option',
-                width: 160,
-                render: (_, row) => {
-                    const ops: React.ReactNode[] = [];
+    const statusMeta = useMemo(() => {
+        const key = workStatus;
+        const text = t('PlayerWorkStatus', key, key);
+        const color = key === 'IDLE' ? 'blue' : key === 'WORKING' ? 'green' : 'default';
+        return { text, color };
+    }, [dicts, workStatus]);
 
-                    // ops.push(
-                    //     <Button key="detail" type="link"
-                    //             onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}>
-                    //         详情
-                    //     </Button>,
-                    // );
+    const renderPoolCard = () => {
+        const statusText = t('PlayerWorkStatus', workStatus, workStatus);
 
-                    if (row?.status === 'WAIT_ACCEPT') {
-                        ops.push(
-                            <Button key="accept" type="link" onClick={() => openAccept(row)}>
-                                接单
-                            </Button>,
-                        );
-                    }
+        const EmptyState = (props: { title: string; desc: string; actions?: React.ReactNode }) => (
+            <div style={{ padding: '12px 0' }}>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>{props.title}</div>
+                <div style={{ color: 'rgba(0,0,0,.45)', lineHeight: 1.7 }}>{props.desc}</div>
+                {props.actions ? <div style={{ marginTop: 12 }}>{props.actions}</div> : null}
+            </div>
+        );
 
-                    if (row?.status === 'ACCEPTED') {
-                        ops.push(
-                            <Button key="archive" type="link" onClick={() => openFinish(row, 'ARCHIVE')}>
-                                存单
-                            </Button>,
-                        );
-                        ops.push(
-                            <Button key="complete" type="link" onClick={() => openFinish(row, 'COMPLETE')}>
-                                结单
-                            </Button>,
-                        );
-                    }
+        // 统一 header 的右侧按钮
+        const extraBtns = (
+            <Space>
+                {/*<Button onClick={() => refreshPool()} loading={poolLoading}>*/}
+                {/*    刷新*/}
+                {/*</Button>*/}
+            </Space>
+        );
 
-                    return ops;
-                },
-            },
-        ];
-    }, [dicts, navigate]);
-
-    const requestList = async (params: any) => {
-        const page = Number(params.current || 1);
-        const limit = Number(params.pageSize || 20);
-
-        // 后端支持 status 单值过滤；DONE 我们用“不传 status + 前端筛 DONE”
-        const status =
-            tab === 'WAIT_ACCEPT' ? 'WAIT_ACCEPT' : tab === 'ACCEPTED' ? 'ACCEPTED' : undefined;
-
-        const res: any = await getMyDispatches({page, limit, status});
-
-        let data = res?.data || [];
-        if (tab === 'DONE') {
-            data = data.filter((d: any) => d?.status === 'ARCHIVED' || d?.status === 'COMPLETED');
+        // --- 休息中：固定展示，不依赖 poolDispatch ---
+        if (workStatus === 'RESTING') {
+            return (
+                <Card title="订单池" extra={extraBtns}>
+                    <EmptyState
+                        title={`当前：${statusText}`}
+                        desc="你现在处于休息中，不会接收新派单。需要接单时点击「开始接单」。"
+                        actions={
+                            <Space>
+                                <Button type="primary" onClick={() => updateMyWorkStatus('IDLE')}>
+                                    开始接单
+                                </Button>
+                                <Button onClick={() => refreshPool()} loading={poolLoading}>
+                                    刷新
+                                </Button>
+                            </Space>
+                        }
+                    />
+                </Card>
+            );
         }
 
-        return {data, success: true, total: res?.total || 0};
+        // --- 等待中/接单中：没有订单时的空态 ---
+        if (!poolDispatch) {
+            if (workStatus === 'WORKING') {
+                // --- 接单中（进行中订单）：展示敏感信息 + 水印 + 存单/结单 ---
+                const extra = buildAcceptedExtraInfo(poolDispatch);
+
+                return (
+                    <Card title="订单池（进行中）" extra={extraBtns}>
+                        <Watermark
+                            content={wmText}
+                            gap={[110, 88]}
+                            font={{ fontSize: 14, color: 'rgba(0,0,0,0.10)' }}
+                            zIndex={9}
+                        >
+                            <Descriptions size="small" column={2} bordered>
+                                <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
+                                <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
+
+                                <Descriptions.Item label="派单时间">{assignedAt}</Descriptions.Item>
+                                <Descriptions.Item label="派单客服">{dispatcherText}</Descriptions.Item>
+
+                                {/* ✅ 接单后才展示敏感信息 */}
+                                <Descriptions.Item label="客户ID（可复制）" span={2}>
+                                    <Space>
+                                        <Tag color="red">{String(customerId)}</Tag>
+                                        <Button size="small" onClick={() => navigator?.clipboard?.writeText?.(String(customerId))}>
+                                            复制
+                                        </Button>
+                                    </Space>
+                                </Descriptions.Item>
+
+                                {/* ✅ 旧接单弹窗内容：小时/保底信息，直接铺在这里 */}
+                                {extra.isGuaranteed ? (
+                                    <>
+                                        <Descriptions.Item label="订单类型">保底单</Descriptions.Item>
+                                        <Descriptions.Item label="剩余保底">
+                                            <Tag color="gold">{extra.remainingWan == null ? '-' : `${extra.remainingWan.toFixed(2)} 万`}</Tag>
+                                        </Descriptions.Item>
+                                    </>
+                                ) : null}
+
+                                {extra.isHourly ? (
+                                    <>
+                                        <Descriptions.Item label="订单类型">小时单</Descriptions.Item>
+                                        <Descriptions.Item label="预计小时">
+                                            <Tag color="blue">{extra.estHours == null ? '-' : `${extra.estHours.toFixed(2)} 小时`}</Tag>
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="预计结单时间" span={2}>
+                                            <Tag color="geekblue">{extra.estEnd ?? '-'}</Tag>
+                                            <span style={{ marginLeft: 8, color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                （按实付/单价估算 + 20 分钟缓冲）
+              </span>
+                                        </Descriptions.Item>
+                                    </>
+                                ) : null}
+
+                                <Descriptions.Item label="参与者（本轮）" span={2}>
+                                    {playerNames}
+                                </Descriptions.Item>
+                            </Descriptions>
+
+                            <Divider style={{ margin: '12px 0' }} />
+
+                            {/* ✅ 操作区：在同位置直接给存单/结单 */}
+                            <Space>
+                                <Button onClick={() => openFinish(poolDispatch, 'ARCHIVE')}>存单</Button>
+                                <Button type="primary" onClick={() => openFinish(poolDispatch, 'COMPLETE')}>结单</Button>
+                                <Button onClick={() => refreshPool()} loading={poolLoading}>刷新</Button>
+                            </Space>
+
+                            <Divider style={{ margin: '12px 0' }} />
+
+                            <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, lineHeight: 1.7 }}>
+                                <div>提示：敏感信息仅接单后可见，禁止截图外传。</div>
+                                <div>存单：记录本轮保底进度；结单：触发结算。</div>
+                            </div>
+                        </Watermark>
+                    </Card>
+                );
+            }
+
+            // 默认等待中（IDLE）
+            return (
+                <Card title="订单池（等待中）" extra={extraBtns}>
+                    <EmptyState
+                        title="暂无派单"
+                        desc="当前没有派给你的待接订单。保持等待中即可接收派单；也可以点击刷新。"
+                        actions={
+                            <Space>
+                                <Button type="primary" onClick={() => refreshPool()} loading={poolLoading}>
+                                    刷新
+                                </Button>
+                                <Button onClick={() => updateMyWorkStatus('RESTING')}>
+                                    休息一下
+                                </Button>
+                            </Space>
+                        }
+                    />
+                    <Divider style={{ margin: '12px 0' }} />
+                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                        提示：等待中（IDLE）会接收派单；接单中（WORKING）不会被再次派单；休息中（RESTING）不会接收新派单。
+                    </div>
+                </Card>
+            );
+        }
+
+        // --- 有订单：按 WAITING / WORKING 展示订单卡 ---
+        const order = poolDispatch?.order || {};
+        const projectName = order?.project?.name || order?.projectSnapshot?.name || '-';
+        const orderNo = String(order?.autoSerial ?? order?.id ?? '-');
+        const dispatchStatus = String(poolDispatch?.status || '-');
+
+        const assignedAt = poolDispatch?.assignedAt
+            ? dayjs(poolDispatch.assignedAt).format('YYYY-MM-DD HH:mm')
+            : '-';
+
+        const dispatcherText = order?.dispatcher
+            ? `${order?.dispatcher?.name || '-'}（${order?.dispatcher?.phone || '-'}）`
+            : '-';
+
+        const wmText = `${currentUser?.name ?? ''} ${currentUser?.username || currentUser?.phone || ''}`.trim() || 'BlueCat';
+
+        // 参与者（仅展示名字，不泄露敏感）
+        const ps = participantsActive(poolDispatch);
+        const playerNames =
+            ps.length > 0
+                ? ps.map((p: any) => p?.user?.name || p?.user?.nickname || p?.user?.phone || p?.userId).filter(Boolean).join('、')
+                : '-';
+
+        // 敏感：客户ID
+        const customerId = order?.customerGameId || '-';
+
+        // 等待中（派给我待接单）：不展示敏感信息，提供接单/拒单
+        if (workStatus === 'IDLE') {
+            return (
+                <Card title="订单池（待接单）" extra={extraBtns}>
+                    <Descriptions size="small" column={2} bordered>
+                        <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
+                        <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
+                        <Descriptions.Item label="派单时间">{assignedAt}</Descriptions.Item>
+                        <Descriptions.Item label="派单客服">{dispatcherText}</Descriptions.Item>
+                        <Descriptions.Item label="参与者（本轮）" span={2}>
+                            {playerNames}
+                        </Descriptions.Item>
+                    </Descriptions>
+
+                    <Divider style={{ margin: '12px 0' }} />
+
+                    <Space>
+                        <Button type="primary" onClick={submitAccept} loading={poolLoading}>
+                            接单
+                        </Button>
+                        <Button danger onClick={openReject}>
+                            拒单
+                        </Button>
+                        <Button onClick={() => refreshPool()} loading={poolLoading}>
+                            刷新
+                        </Button>
+                    </Space>
+
+                    <Divider style={{ margin: '12px 0' }} />
+                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                        接单前不展示敏感信息。确认能及时对接再接单；拒单需填写原因，拒单后将自动进入休息中。
+                    </div>
+                </Card>
+            );
+        }
+
+        // 接单中（进行中订单）：展示敏感信息 + 水印 + 存单/结单
+        return (
+            <Card title="订单池（进行中）" extra={extraBtns}>
+                <Watermark
+                    content={wmText}
+                    gap={[110, 88]}
+                    font={{ fontSize: 14, color: 'rgba(0,0,0,0.10)' }}
+                    zIndex={9}
+                >
+                    <Descriptions size="small" column={2} bordered>
+                        <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
+                        <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
+                        <Descriptions.Item label="派单时间">{assignedAt}</Descriptions.Item>
+                        <Descriptions.Item label="派单客服">{dispatcherText}</Descriptions.Item>
+
+                        <Descriptions.Item label="客户ID（可复制）" span={2}>
+                            <Space>
+                                <Tag color="red">{String(customerId)}</Tag>
+                                <Button size="small" onClick={() => navigator?.clipboard?.writeText?.(String(customerId))}>
+                                    复制
+                                </Button>
+                            </Space>
+                        </Descriptions.Item>
+
+                        <Descriptions.Item label="参与者（本轮）" span={2}>
+                            {playerNames}
+                        </Descriptions.Item>
+                    </Descriptions>
+
+                    <Divider style={{ margin: '12px 0' }} />
+
+                    <Space>
+                        <Button onClick={() => openFinish(poolDispatch, 'ARCHIVE')}>
+                            存单
+                        </Button>
+                        <Button type="primary" onClick={() => openFinish(poolDispatch, 'COMPLETE')}>
+                            结单
+                        </Button>
+                        <Button onClick={() => refreshPool()} loading={poolLoading}>
+                            刷新
+                        </Button>
+                    </Space>
+
+                    <Divider style={{ margin: '12px 0' }} />
+                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                        敏感信息仅接单后可见，禁止截图外传。存单用于记录保底进度；结单会触发结算。
+                    </div>
+                </Watermark>
+            </Card>
+        );
     };
 
-    const deductOptions = useMemo(() => {
-        // DeductMinutesOption 的 key 集合从 dicts 里拿（若没有就兜底空）
-        const m = dicts?.DeductMinutesOption || {};
-        return Object.keys(m).map((k) => ({value: k, label: m[k]}));
-    }, [dicts]);
+
+    const sumArchivedProgressWan = (orderDetail: any) => {
+        const ds = Array.isArray(orderDetail?.dispatches) ? orderDetail.dispatches : [];
+        let sum = 0;
+        for (const d of ds) {
+            if (String(d?.status) !== 'ARCHIVED') continue;
+            const ps = Array.isArray(d?.participants) ? d.participants : [];
+            for (const p of ps) sum += Number(p?.progressBaseWan ?? 0);
+        }
+        return sum;
+    };
+
+    const buildAcceptedExtraInfo = (dispatchRow: any) => {
+        const order = dispatchRow?.order || {};
+        const snap = order?.projectSnapshot || {};
+        const billingMode = String(snap?.billingMode ?? order?.project?.billingMode ?? '');
+
+        const unitPrice = Number(snap?.price ?? order?.project?.price);
+        const paid = Number(order?.paidAmount ?? order?.receivableAmount);
+        const orderTime = order?.orderTime ? dayjs(order.orderTime) : dayjs(order?.createdAt || new Date());
+
+        const isHourly = billingMode === 'HOURLY';
+        const isGuaranteed = billingMode === 'GUARANTEED';
+
+        // 小时单：预计小时 / 预计结单时间
+        let estHours: number | null = null;
+        let estEnd: string | null = null;
+        if (isHourly && Number.isFinite(unitPrice) && unitPrice > 0 && Number.isFinite(paid) && paid >= 0) {
+            estHours = paid / unitPrice;
+            estEnd = orderTime.add(estHours, 'hour').add(20, 'minute').format('YYYY-MM-DD HH:mm');
+        }
+
+        // 保底单：剩余保底（总保底 - 历史存单进度）
+        let remainingWan: number | null = null;
+        if (isGuaranteed) {
+            const base = Number(order?.baseAmountWan ?? 0);
+            const done = sumArchivedProgressWan(order);
+            remainingWan = Math.max(0, base - done);
+        }
+
+        return { billingMode, isHourly, isGuaranteed, estHours, estEnd, remainingWan };
+    };
+
 
     return (
-        <PageContainer>
-            <Tabs
-                activeKey={tab}
-                onChange={(k) => {
-                    setTab(k as any);
-                    // 切 tab 立即刷新
-                    setTimeout(() => actionRef.current?.reload(), 0);
-                }}
-                items={[
-                    {key: 'WAIT_ACCEPT', label: '待接单'},
-                    {key: 'ACCEPTED', label: '进行中'},
-                    {key: 'DONE', label: '已存/已结'},
-                ]}
-                style={{marginBottom: 12}}
-            />
+        <PageContainer title="打手工作台" loading={false}>
+            {/* 顶部看板 */}
+            <Row gutter={[12, 12]}>
+                <Col xs={24} md={12} lg={6}>
+                    <Card loading={statsLoading}>
+                        <Statistic title="今日接单" value={todayCount} />
+                    </Card>
+                </Col>
+                <Col xs={24} md={12} lg={6}>
+                    <Card loading={statsLoading}>
+                        <Statistic title="今日收入" value={todayIncome} precision={2} prefix="¥" />
+                    </Card>
+                </Col>
+                <Col xs={24} md={12} lg={6}>
+                    <Card loading={statsLoading}>
+                        <Statistic title="本月累计接单" value={monthCount} />
+                    </Card>
+                </Col>
+                <Col xs={24} md={12} lg={6}>
+                    <Card loading={statsLoading}>
+                        <Statistic title="本月累计收入" value={monthIncome} precision={2} prefix="¥" />
+                    </Card>
+                </Col>
+            </Row>
 
-            <ProTable
-                rowKey="id"
-                actionRef={actionRef}
-                columns={columns}
-                search={{labelWidth: 90}}
-                toolbar={{
-                    actions: [
-                        <Button key="refresh" onClick={() => actionRef.current?.reload()}>
-                            刷新
-                        </Button>,
-                    ],
-                }}
-                request={requestList}
-                pagination={{pageSize: 20}}
-            />
+            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+                {/*<Col xs={24} lg={8}>*/}
+                {/*    <Card*/}
+                {/*        title="当前接单状态"*/}
+                {/*        extra={*/}
+                {/*            <Space>*/}
+                {/*                /!*<Button onClick={() => refreshStats()} loading={statsLoading}>刷新数据</Button>*!/*/}
+                {/*            </Space>*/}
+                {/*        }*/}
+                {/*    >*/}
+                {/*        <Space direction="vertical" style={{ width: '100%' }}>*/}
+                {/*            <div>*/}
+                {/*                <Tag color={statusMeta.color} style={{ fontSize: 14, padding: '3px 10px' }}>*/}
+                {/*                    {statusMeta.text}*/}
+                {/*                </Tag>*/}
+                {/*            </div>*/}
 
-            {/* 接单 */}
-            {/*<Modal*/}
-            {/*    title="接单"*/}
-            {/*    open={acceptOpen}*/}
-            {/*    onCancel={() => setAcceptOpen(false)}*/}
-            {/*    onOk={submitAccept}*/}
-            {/*    confirmLoading={acceptSubmitting}*/}
-            {/*    destroyOnClose*/}
-            {/*>*/}
-            {/*    <Form form={acceptForm} layout="vertical">*/}
-            {/*        <Form.Item name="remark" label="备注（可选）">*/}
-            {/*            <Input placeholder="例如：已联系客户/准备开打" allowClear/>*/}
-            {/*        </Form.Item>*/}
-            {/*        <Tag color="blue">该操作会写入操作日志（ACCEPT_DISPATCH）。</Tag>*/}
-            {/*    </Form>*/}
-            {/*</Modal>*/}
-            <Modal
-                open={acceptOpen}
-                title="确认接单"
-                onCancel={() => setAcceptOpen(false)}
-                onOk={submitAccept}
-                confirmLoading={acceptSubmitting}
-                footer={
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                        <Button onClick={() => setAcceptOpen(false)}>取消</Button>
-                        <Space>
-                            <Button danger onClick={() => { rejectForm.resetFields(); setRejectOpen(true); }}>
-                                拒单
-                            </Button>
-                            <Button type="primary" loading={acceptSubmitting} onClick={submitAccept}>
-                                接单
-                            </Button>
-                        </Space>
-                    </Space>
-                }
-                destroyOnClose
-            >
-                {(() => {
+                {/*            <Space>*/}
+                {/*                <Button*/}
+                {/*                    type="primary"*/}
+                {/*                    disabled={workStatus === 'IDLE'}*/}
+                {/*                    onClick={() => updateMyWorkStatus('IDLE')}*/}
+                {/*                >*/}
+                {/*                    开始接单*/}
+                {/*                </Button>*/}
+                {/*                <Button*/}
+                {/*                    disabled={workStatus === 'RESTING'}*/}
+                {/*                    onClick={() => updateMyWorkStatus('RESTING')}*/}
+                {/*                >*/}
+                {/*                    休息一下*/}
+                {/*                </Button>*/}
+                {/*            </Space>*/}
 
-                    const order = currentRow?.order || {};
-                    const projectName =
-                        order?.project?.name || order?.projectSnapshot?.name || '-';
-                    const customerId = order?.customerGameId || '-';
+                {/*            <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>*/}
+                {/*                等待中会接收派单；接单中不会被再次派单；休息中不会接收新派单。*/}
+                {/*            </div>*/}
+                {/*        </Space>*/}
+                {/*    </Card>*/}
+                {/*</Col>*/}
 
-                    const wmText = `${currentUser?.name ?? ''} ${
-                        currentUser?.username || currentUser?.phone || ''
-                    }`;
+                <Col xs={24} lg={16}>
+                    {renderPoolCard()}
+                </Col>
+            </Row>
 
-                    return (
-                        <>
-                            <Watermark
-                                content={[wmText, '蓝猫爽打']}
-                                gap={[-10, -10]}              // ✅ 水印更密
-                                offset={[0, 0]}
-                                font={{
-                                    color: 'rgba(0,0,0,.08)',
-                                    fontSize: 10,
-                                }}
-                            >
-                                {/*<Tag style={{color: 'rgba(0,0,0,.45)'}} color="blue">该操作会写入操作日志（ACCEPT_DISPATCH）。</Tag>*/}
-                                <Tag style={{color: 'rgba(0,0,0,.45)'}} color="red">请务必先对接，复制老板ID后加好友，对接完成上后再确认接单</Tag>
-                                <Tag style={{color: 'rgba(0,0,0,.45)'}}
-                                     color="red">一旦确认开始接单，敏感数据将会脱敏，请务必完成对接后再确认接单</Tag>
-                                <Divider style={{marginTop: 0, marginBottom: 12}}/>
-                                <Descriptions
-                                    bordered
-                                    size="small"
-                                    column={1}
-                                    labelStyle={{width: 140}}
-                                >
-                                    <Descriptions.Item label="客户ID">
-                                        <Typography.Text copyable={{text: String(customerId)}}>
-                                            {String(customerId)}
-                                        </Typography.Text>
-                                    </Descriptions.Item>
-
-                                    <Descriptions.Item label="项目">
-                                        {projectName}
-                                    </Descriptions.Item>
-
-                                    {currentRow && isGuaranteed(currentRow) ? (
-                                        <Descriptions.Item label="订单保底(万)">
-                                            {acceptGuaranteedRemainingWan == null
-                                                ? '-'
-                                                : acceptGuaranteedRemainingWan}
-                                        </Descriptions.Item>
-                                    ) : null}
-
-                                    {currentRow && isHourly(currentRow) ? (
-                                        <Descriptions.Item label="预计小时">
-                                            {acceptHourlyEstimatedHours == null
-                                                ? '-'
-                                                : acceptHourlyEstimatedHours}
-                                        </Descriptions.Item>
-                                    ) : null}
-                                </Descriptions>
-                            </Watermark>
-                        </>
-                    );
-                })()}
-            </Modal>
+            {/* 拒单 */}
             <Modal
                 open={rejectOpen}
                 title="拒单"
@@ -672,131 +796,71 @@ const WorkbenchPage: React.FC = () => {
                             { max: 200, message: '最多 200 字' },
                         ]}
                     >
-                        <Input.TextArea placeholder="例如：临时有事/设备异常/已在打单" rows={4} />
+                        <Input.TextArea rows={4} placeholder="例如：临时有事 / 设备异常 / 正在打单" />
                     </Form.Item>
                 </Form>
+                <div style={{ marginTop: 8, color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                    拒单后将自动切换为“休息中”。
+                </div>
             </Modal>
-            {/* 存单 / 结单 */}
+
+            {/* 存单/结单 */}
             <Modal
-                title={finishMode === 'ARCHIVE' ? '存单' : '结单'}
                 open={finishOpen}
+                title={finishMode === 'ARCHIVE' ? '存单' : '结单'}
                 onCancel={() => setFinishOpen(false)}
                 onOk={submitFinish}
                 confirmLoading={finishSubmitting}
                 destroyOnClose
+                width={720}
             >
                 <Form form={finishForm} layout="vertical">
-                    {/* 小时单：显示当前时间 / 时长预估 + 扣时选项（选项从 /meta/enums 同步） */}
-                    {currentRow && isHourly(currentRow) ? (
+                    {poolDispatch && isHourly(poolDispatch) ? (
                         <>
-                            <div style={{marginBottom: 8}}>
-                                <Tag
-                                    color="blue">当前{finishMode === 'ARCHIVE' ? '存单' : '结单'}时间：{new Date(tick).toLocaleString()}</Tag>
+                            <Divider style={{ marginTop: 0 }}>小时单</Divider>
+                            <div style={{ marginBottom: 8, color: 'rgba(0,0,0,.45)' }}>
+                                当前时间：{dayjs(tick).format('YYYY-MM-DD HH:mm')}
                             </div>
-
-                            <div style={{marginBottom: 8}}>
-                                {(() => {
-                                    const start = currentRow?.acceptedAllAt ? new Date(currentRow.acceptedAllAt) : null;
-                                    if (!start) return <Tag color="orange">缺少 acceptedAllAt，无法预估时长（后端会校验）</Tag>;
-
-                                    const rawMinutes = Math.max(0, Math.floor((tick - start.getTime()) / 60000));
-                                    const deduct = mapDeductMinutesValue(finishForm.getFieldValue('deductMinutesOption'));
-                                    const effective = Math.max(0, rawMinutes - deduct);
-                                    const hours = minutesToBillableHours(effective);
-
-                                    return (
-                                        <Space wrap>
-                                            <Tag>开始：{start.toLocaleString()}</Tag>
-                                            <Tag>原始分钟：{rawMinutes}</Tag>
-                                            <Tag>扣除：{deduct} 分钟</Tag>
-                                            <Tag color="green">计费分钟：{effective}</Tag>
-                                            <Tag color="green">计费时长：{hours} 小时</Tag>
-                                        </Space>
-                                    );
-                                })()}
-                            </div>
-
-                            <Form.Item name="deductMinutesOption" label="扣除分钟（可选）">
-                                <Select
-                                    allowClear
-                                    placeholder="不允许手输负数，选择即扣时"
-                                    options={deductOptions}
-                                    showSearch
-                                    optionFilterProp="label"
-                                    onChange={() => {
-                                        // 立即刷新预估显示
-                                        setTick(Date.now());
-                                    }}
-                                />
+                            <Form.Item name="deductMinutesOption" label="扣时选项（可选）">
+                                <Input placeholder="例如：M10/M20/M30（由后端枚举兜底）" />
                             </Form.Item>
                         </>
                     ) : null}
 
-                    {/* 保底单：必须填写总进度，并实时显示“剩余保底” */}
-                    {currentRow && isGuaranteed(currentRow) ? (
+                    {poolDispatch && isGuaranteed(poolDispatch) ? (
                         <>
-                            {finishMode === 'ARCHIVE' ? (
-                                <>
-                                    <Form.Item
-                                        name="totalProgressWan"
-                                        label="本轮已打保底（万）- 总数"
-                                        rules={[
-                                            {required: true, message: '请输入本轮已打保底（万）'},
-                                            () => ({
-                                                validator: async (_, v) => {
-                                                    const nv = Number(v);
-                                                    if (!Number.isFinite(nv)) throw new Error('进度非法');
-                                                    // ✅ 允许负数（炸单）
-                                                },
-                                            }),
-                                        ]}
-                                    >
-                                        <InputNumber precision={0} style={{width: '100%'}}/>
-                                    </Form.Item>
-                                    {(() => {
-                                        const base = Number(currentRow?.order?.baseAmountWan ?? currentRow?.order?.projectSnapshot?.baseAmount ?? 0);
-                                        // const total = Number(finishForm.getFieldValue('totalProgressWan') ?? 0);
-                                        const total = Number(watchedTotalProgressWan ?? 0);
-                                        if (!Number.isFinite(base) || base <= 0) return <Tag
-                                            color="orange">订单未设置保底基数，无法计算剩余</Tag>;
+                            <Divider style={{ marginTop: 0 }}>保底单</Divider>
 
-                                        const remaining = base - total;
-                                        const ps = participantsActive(currentRow);
-                                        const each = ps.length > 0 ? total / ps.length : total;
-
-                                        return (
-                                            <Space wrap style={{marginBottom: 8}}>
-                                                <Tag>订单保底：{base} 万</Tag>
-                                                <Tag color={remaining >= 0 ? 'green' : 'red'}>剩余保底：{remaining} 万</Tag>
-                                                <Tag>本轮均分：{each} 万 / 人</Tag>
-                                            </Space>
-                                        );
-                                    })()}
-                                    <Tag color="gold">多人时无需逐个录入：只填总数，系统均分提交。</Tag>
-                                </>
+                            {finishMode === 'COMPLETE' ? (
+                                <Card size="small" style={{ marginBottom: 12 }}>
+                                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                                        本轮结单将按剩余保底兜底补齐（后端口径）。当前剩余：
+                                    </div>
+                                    <div style={{ fontSize: 18, fontWeight: 600 }}>
+                                        {guaranteedCompleteRemainingWan == null ? '-' : guaranteedCompleteRemainingWan} 万
+                                    </div>
+                                </Card>
                             ) : (
-                                <Space direction="vertical" style={{width: '100%'}}>
-                                    <Tag color="gold">结单默认结算剩余全部保底，无需填写进度。</Tag>
-                                    <Tag color="green">
-                                        本次默认打保底（万）：{guaranteedCompleteRemainingWan ?? finishForm.getFieldValue('totalProgressWan') ?? '-'}
-                                    </Tag>
-                                </Space>
+                                <Form.Item
+                                    name="totalProgressWan"
+                                    label="本轮总保底进度(万)"
+                                    rules={[{ required: true, message: '请填写本轮总保底进度' }]}
+                                >
+                                    <InputNumber min={0} style={{ width: '100%' }} />
+                                </Form.Item>
                             )}
+
+                            {finishMode === 'ARCHIVE' ? (
+                                <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, marginTop: -6 }}>
+                                    系统会按参与者人数均分：当前每人约 {(Number(watchedTotalProgressWan || 0) / (participantsActive(poolDispatch).length || 1)).toFixed(2)} 万
+                                </div>
+                            ) : null}
                         </>
                     ) : null}
 
-                    <Form.Item name="remark" label="备注（建议填写）">
-                        <Input
-                            placeholder={finishMode === 'ARCHIVE' ? '例如：客户临时有事，先存单' : '例如：已完成对局，正常结单'}
-                            allowClear
-                        />
+                    <Form.Item name="remark" label="备注（可选）">
+                        <Input.TextArea rows={3} placeholder="异常说明/备注" />
                     </Form.Item>
-
-                    <Tag color="blue">
-                        {finishMode === 'ARCHIVE'
-                            ? '该操作会写入操作日志（ARCHIVE_DISPATCH）。'
-                            : '该操作会写入操作日志（COMPLETE_DISPATCH）并生成结算。'}
-                    </Tag>
                 </Form>
             </Modal>
         </PageContainer>

@@ -423,7 +423,12 @@ export async function updateOrder(data: any) {
     return request(`${API_BASE}/orders/update`, { method: 'POST', data });
 }
 
-// 更新订单
+//
 export async function dispatchRejectOrder(data: any) {
     return request(`${API_BASE}/orders/dispatch/reject`, { method: 'POST', data });
+}
+
+// 打手修改状态
+export async function usersWorkStatus(data: any) {
+    return request(`${API_BASE}/users/work-status`, { method: 'POST', data });
 }

@@ -949,7 +949,8 @@ const OrderDetailPage: React.FC = () => {
                             {/*        ? '更新参与者'*/}
                             {/*        : '派单'}*/}
                             {/*</Button>*/}
-                            <Button onClick={openDispatchModal} disabled={canDispatch || forbidEdit}>
+                            {/*<Button onClick={openDispatchModal} disabled={canDispatch || forbidEdit}>*/}
+                            <Button onClick={openDispatchModal}>
                                 {/*{currentDispatch?.id ? '更新参与者' : '派单'}*/}
                                 {currentDispatch?.id && ['WAIT_ASSIGN','WAIT_ACCEPT','WAIT_ACCEPT'].includes(currentDispatch.status)
                                     ? '更新参与者'
