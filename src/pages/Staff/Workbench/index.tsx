@@ -26,7 +26,7 @@ import {
     dispatchRejectOrder,
     getEnumDicts,
     getMyDispatches,
-    getOrderDetail, usersWorkStatus,
+    getOrderDetail, ordersMyStats, usersWorkStatus,
 } from '@/services/api';
 import { pickStatusColor, pickStatusText } from '@/constants/status';
 
@@ -166,45 +166,28 @@ const WorkbenchPage: React.FC = () => {
     const refreshStats = async () => {
         setStatsLoading(true);
         try {
-            // 拉一批（用于今日/月统计）；不依赖后端新接口
-            const res: any = await getMyDispatches({ page: 1, limit: 200 });
-            const list = Array.isArray(res?.data) ? res.data : [];
-
-            const now = dayjs();
-            const startToday = now.startOf('day');
-            const endToday = now.endOf('day');
-
-            const startMonth = now.startOf('month');
-            const endMonth = now.endOf('month');
-
-            const isDone = (d: any) => String(d?.status) === 'ARCHIVED' || String(d?.status) === 'COMPLETED';
-
-            const doneToday = list.filter((d: any) => {
-                if (!isDone(d)) return false;
-                const at = d?.archivedAt || d?.completedAt;
-                if (!at) return false;
-                const t = dayjs(at);
-                return t.isAfter(startToday) && t.isBefore(endToday);
-            });
-
-            const doneMonth = list.filter((d: any) => {
-                if (!isDone(d)) return false;
-                const at = d?.archivedAt || d?.completedAt;
-                if (!at) return false;
-                const t = dayjs(at);
-                return t.isAfter(startMonth) && t.isBefore(endMonth);
-            });
-
-            setTodayCount(doneToday.length);
-            setMonthCount(doneMonth.length);
-
-            // 收入：有 settlements 就算，没有就展示 0（避免报错）
-            setTodayIncome(doneToday.reduce((sum: number, d: any) => sum + calcMyIncomeFromDispatch(d), 0));
-            setMonthIncome(doneMonth.reduce((sum: number, d: any) => sum + calcMyIncomeFromDispatch(d), 0));
-        } catch (e) {
-            console.error(e);
+            const res = await ordersMyStats({});
+            setTodayCount(Number(res?.todayCount ?? 0));
+            setTodayIncome(Number(res?.todayIncome ?? 0));
+            setMonthCount(Number(res?.monthCount ?? 0));
+            setMonthIncome(Number(res?.monthIncome ?? 0));
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || '获取统计失败');
         } finally {
             setStatsLoading(false);
+        }
+    };
+
+    // ✅ 补全：把 dispatch 行补成带完整 order detail 的结构（详情失败也不阻断）
+    const hydrateDispatchWithOrder = async (row: any) => {
+        if (!row) return null;
+        const orderId = Number(row?.orderId ?? row?.order?.id);
+        if (!orderId) return row;
+        try {
+            const detail = await getOrderDetail(orderId);
+            return { ...row, order: detail };
+        } catch (e) {
+            return row;
         }
     };
 
@@ -213,74 +196,75 @@ const WorkbenchPage: React.FC = () => {
         try {
             await loadDictsOnce();
 
-            // 规则：
-            // - WORKING：优先展示 ACCEPTED 的进行中订单
-            // - IDLE：展示 WAIT_ACCEPT 的待接单
-            // - RESTING：不拉（也可拉，但不展示敏感）
             if (workStatus === 'RESTING') {
                 setPoolMode('RESTING');
                 setPoolDispatch(null);
                 return;
             }
 
+            const fetchFirst = async (status: 'WAIT_ACCEPT' | 'ACCEPTED') => {
+                const res: any = await getMyDispatches({ page: 1, limit: 10, status });
+                const list = Array.isArray(res?.data) ? res.data : [];
+                return list?.[0] || null;
+            };
+
+            // ✅ WORKING：优先进行中，否则兜底待接并纠正状态
             if (workStatus === 'WORKING') {
                 setPoolMode('WORKING');
-                const res: any = await getMyDispatches({ page: 1, limit: 10, status: 'ACCEPTED' });
-                const list = Array.isArray(res?.data) ? res.data : [];
-                const first = list?.[0] || null;
 
-                if (!first) {
-                    setPoolDispatch(null);
+                let first = await fetchFirst('ACCEPTED');
+                if (first) {
+                    setPoolDispatch(await hydrateDispatchWithOrder(first));
                     return;
                 }
 
-                const orderId = Number(first?.orderId ?? first?.order?.id);
-                if (orderId) {
-                    try {
-                        const detail = await getOrderDetail(orderId);
-                        setPoolDispatch({ ...first, order: detail });
-                    } catch (e) {
-                        setPoolDispatch(first);
-                    }
-                } else {
-                    setPoolDispatch(first);
+                first = await fetchFirst('WAIT_ACCEPT');
+                if (first) {
+                    // 自动纠正：实际上是等待中
+                    setLocalWorkStatus('IDLE');
+                    setInitialState?.((s: any) => ({
+                        ...s,
+                        currentUser: { ...(s?.currentUser || {}), workStatus: 'IDLE' },
+                    }));
+                    setPoolMode('WAITING');
+                    setPoolDispatch(await hydrateDispatchWithOrder(first));
+                    return;
                 }
-                return;
 
-            }
-
-            // 默认 IDLE：等待中
-            setPoolMode('WAITING');
-            const res: any = await getMyDispatches({ page: 1, limit: 10, status: 'WAIT_ACCEPT' });
-            // const list = Array.isArray(res?.data) ? res.data : [];
-            // setPoolDispatch(list?.[0] || null);
-            const list = Array.isArray(res?.data) ? res.data : [];
-            const first = list?.[0] || null;
-
-            if (!first) {
                 setPoolDispatch(null);
                 return;
             }
 
-            // ✅ 融合：拉完整订单详情（填充订单池展示所需数据）
-            const orderId = Number(first?.orderId ?? first?.order?.id);
-            if (orderId) {
-                try {
-                    const detail = await getOrderDetail(orderId);
-                    setPoolDispatch({ ...first, order: detail });
-                } catch (e) {
-                    // 详情失败也不阻断订单池展示
-                    setPoolDispatch(first);
-                }
-            } else {
-                setPoolDispatch(first);
+            // ✅ 默认 IDLE：优先待接，否则兜底进行中并纠正状态（解决你说的“已接单但待接为空”）
+            setPoolMode('WAITING');
+
+            let first = await fetchFirst('WAIT_ACCEPT');
+            if (first) {
+                setPoolDispatch(await hydrateDispatchWithOrder(first));
+                return;
             }
+
+            first = await fetchFirst('ACCEPTED');
+            if (first) {
+                // 自动纠正：实际上是接单中
+                setLocalWorkStatus('WORKING');
+                setInitialState?.((s: any) => ({
+                    ...s,
+                    currentUser: { ...(s?.currentUser || {}), workStatus: 'WORKING' },
+                }));
+                setPoolMode('WORKING');
+                setPoolDispatch(await hydrateDispatchWithOrder(first));
+                return;
+            }
+
+            setPoolDispatch(null);
         } catch (e) {
             console.error(e);
         } finally {
             setPoolLoading(false);
         }
     };
+
 
     useEffect(() => {
         void loadDictsOnce();
@@ -355,19 +339,20 @@ const WorkbenchPage: React.FC = () => {
             if (!poolDispatch?.id) return;
             await acceptDispatch(Number(poolDispatch.id), {});
             message.success('已接单');
-            // 接单后后端一般会把 workStatus 置 WORKING；这里直接刷新即可
-            // ✅ 接单后立即进入接单中（WORKING）
+
             setLocalWorkStatus('WORKING');
             setInitialState?.((s: any) => ({
                 ...s,
                 currentUser: { ...(s?.currentUser || {}), workStatus: 'WORKING' },
             }));
-            void refreshPool();
+
+            // ✅ 删掉这里的 refreshPool（避免读旧状态）
             void refreshStats();
         } catch (e: any) {
             message.error(e?.response?.data?.message || '接单失败');
         }
     };
+
 
     // --- 存单/结单（沿用你现有逻辑，只是从“订单池”入口打开） ---
     const openFinish = async (row: any, mode: 'ARCHIVE' | 'COMPLETE') => {
@@ -469,7 +454,6 @@ const WorkbenchPage: React.FC = () => {
         const color = key === 'IDLE' ? 'blue' : key === 'WORKING' ? 'green' : 'default';
         return { text, color };
     }, [dicts, workStatus]);
-
     const renderPoolCard = () => {
         const extraBtns = (
             <Button onClick={() => refreshPool()} loading={poolLoading}>
@@ -481,7 +465,9 @@ const WorkbenchPage: React.FC = () => {
         if (workStatus === 'RESTING') {
             return (
                 <Card title="订单池" extra={extraBtns}>
-                    <div style={{ color: 'rgba(0,0,0,.45)' }}>休息中不会接收新派单。</div>
+                    <div style={{ color: 'rgba(0,0,0,.45)' }}>
+                        当前为休息中，不会接收新派单。
+                    </div>
                     <div style={{ marginTop: 12 }}>
                         <Button type="primary" onClick={() => updateMyWorkStatus('IDLE')}>
                             开始接单
@@ -491,11 +477,20 @@ const WorkbenchPage: React.FC = () => {
             );
         }
 
-        // 无订单
+        // 空态
         if (!poolDispatch) {
             return (
                 <Card title={workStatus === 'WORKING' ? '订单池（进行中）' : '订单池（待接单）'} extra={extraBtns}>
-                    <div style={{ color: 'rgba(0,0,0,.45)' }}>暂无订单。</div>
+                    <div style={{ color: 'rgba(0,0,0,.45)' }}>
+                        暂未派单。
+                    </div>
+                    <div style={{ marginTop: 12 }}>
+                        {workStatus === 'WORKING' ? (
+                            <Button onClick={() => updateMyWorkStatus('RESTING')}>休息一下</Button>
+                        ) : (
+                            <Button onClick={() => updateMyWorkStatus('RESTING')}>休息一下</Button>
+                        )}
+                    </div>
                 </Card>
             );
         }
@@ -504,16 +499,20 @@ const WorkbenchPage: React.FC = () => {
         const projectName = order?.project?.name || order?.projectSnapshot?.name || '-';
         const orderNo = String(order?.autoSerial ?? order?.id ?? '-');
         const assignedAt = poolDispatch?.assignedAt ? dayjs(poolDispatch.assignedAt).format('YYYY-MM-DD HH:mm') : '-';
-        const dispatcherText = order?.dispatcher ? `${order?.dispatcher?.name || '-'}（${order?.dispatcher?.phone || '-'}）` : '-';
-        const customerId = order?.customerGameId || '-';
+        const dispatcherText = order?.dispatcher
+            ? `${order?.dispatcher?.name || '-'}（${order?.dispatcher?.phone || '-'}）`
+            : '-';
 
         const ps = participantsActive(poolDispatch);
         const playerNames =
             ps.length > 0
-                ? ps.map((p: any) => p?.user?.name || p?.user?.nickname || p?.user?.phone || p?.userId).filter(Boolean).join('、')
+                ? ps
+                    .map((p: any) => p?.user?.name || p?.user?.nickname || p?.user?.phone || p?.userId)
+                    .filter(Boolean)
+                    .join('、')
                 : '-';
 
-        // 待接单（IDLE）：不展示敏感信息
+        // 待接单（等待中）
         if (workStatus === 'IDLE') {
             return (
                 <Card title="订单池（待接单）" extra={extraBtns}>
@@ -528,6 +527,7 @@ const WorkbenchPage: React.FC = () => {
                     </Descriptions>
 
                     <Divider style={{ margin: '12px 0' }} />
+
                     <Space>
                         <Button type="primary" onClick={submitAccept} loading={poolLoading}>
                             接单
@@ -538,20 +538,27 @@ const WorkbenchPage: React.FC = () => {
                     </Space>
 
                     <Divider style={{ margin: '12px 0' }} />
-                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
-                        接单前不展示敏感信息。拒单后默认进入休息中。
+                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, lineHeight: 1.7 }}>
+                        <div>接单前不展示敏感信息。</div>
+                        <div>拒单需填写原因，拒单后将自动进入休息中。</div>
                     </div>
                 </Card>
             );
         }
 
-        // 已接单（WORKING）：把旧接单弹窗信息“整合到这里”
+        // 进行中（接单中）：把旧接单弹窗内容整合到此处，并展示存单/结单
+        const customerId = order?.customerGameId || '-';
         const wmText = `${currentUser?.name ?? ''} ${currentUser?.username || currentUser?.phone || ''}`.trim() || 'BlueCat';
         const extra = buildAcceptedExtraInfo(poolDispatch);
 
         return (
             <Card title="订单池（进行中）" extra={extraBtns}>
-                <Watermark content={wmText} gap={[110, 88]} font={{ fontSize: 14, color: 'rgba(0,0,0,0.10)' }} zIndex={9}>
+                <Watermark
+                    content={wmText}
+                    gap={[110, 88]}
+                    font={{ fontSize: 14, color: 'rgba(0,0,0,0.10)' }}
+                    zIndex={9}
+                >
                     <Descriptions size="small" column={2} bordered>
                         <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
                         <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
@@ -597,14 +604,22 @@ const WorkbenchPage: React.FC = () => {
                     </Descriptions>
 
                     <Divider style={{ margin: '12px 0' }} />
+
                     <Space>
                         <Button onClick={() => openFinish(poolDispatch, 'ARCHIVE')}>存单</Button>
                         <Button type="primary" onClick={() => openFinish(poolDispatch, 'COMPLETE')}>结单</Button>
                     </Space>
+
+                    <Divider style={{ margin: '12px 0' }} />
+                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, lineHeight: 1.7 }}>
+                        <div>敏感信息仅接单后可见，禁止截图外传。</div>
+                        <div>存单：记录本轮保底进度；结单：触发结算。</div>
+                    </div>
                 </Watermark>
             </Card>
         );
     };
+
 
     return (
         <PageContainer title="打手工作台" loading={false}>
@@ -652,13 +667,14 @@ const WorkbenchPage: React.FC = () => {
                             <Space>
                                 <Button
                                     type="primary"
-                                    disabled={workStatus === 'IDLE'}
+                                    disabled={workStatus === 'WORKING' || workStatus === 'IDLE'}
                                     onClick={() => updateMyWorkStatus('IDLE')}
                                 >
                                     开始接单
                                 </Button>
+
                                 <Button
-                                    disabled={workStatus === 'RESTING'}
+                                    disabled={workStatus === 'WORKING' || workStatus === 'RESTING'}
                                     onClick={() => updateMyWorkStatus('RESTING')}
                                 >
                                     休息一下

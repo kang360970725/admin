@@ -432,3 +432,7 @@ export async function dispatchRejectOrder(data: any) {
 export async function usersWorkStatus(data: any) {
     return request(`${API_BASE}/users/work-status`, { method: 'POST', data });
 }
+// 获取收入统计
+export async function ordersMyStats(data: any) {
+    return request(`${API_BASE}/orders/my/stats`, { method: 'POST', data });
+}
