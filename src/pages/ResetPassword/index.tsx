@@ -2,7 +2,7 @@ import React from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Form, Input, Button, message } from 'antd';
 import { useModel } from 'umi';
-import { updateUser } from '@/services/api';
+import {updateMyPassword, updateUser} from '@/services/api';
 
 export default function ResetPasswordPage() {
     const { initialState } = useModel('@@initialState');
@@ -19,10 +19,7 @@ export default function ResetPasswordPage() {
             }
 
             // 调用更新用户接口，只更新密码
-            await updateUser(initialState?.currentUser?.id, {
-                password: values.newPassword,
-                needResetPwd: false // 重置标记
-            });
+            await updateMyPassword({ newPassword: values.newPassword });
 
             message.success('密码修改成功，请重新登录');
 

@@ -436,3 +436,10 @@ export async function usersWorkStatus(data: any) {
 export async function ordersMyStats(data: any) {
     return request(`${API_BASE}/orders/my/stats`, { method: 'POST', data });
 }
+//修改密码
+export async function updateMyPassword(body: { newPassword: string }) {
+    return request(`${API_BASE}/users/me/password`, {
+        method: 'POST',
+        data: body,
+    });
+}

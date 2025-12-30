@@ -69,50 +69,29 @@ export default defineConfig({
           path: '/system/role-management',
           name: '角色管理',
           component: './System/RoleManagement',
-          // access: 'canAccessUserManager', // 同用户管理权限
+          access: 'canViewRoleManagement'
         },
         {
           path: '/system/permission-management',
           name: '权限管理',
           component: './System/PermissionManagement',
-          // access: 'canAccessUserManager',
+          access: 'canViewPermissionManagement'
         },
         {
           path: '/system/game-project-management',
           name: '菜单项目管理',
           component: '@/pages/System/GameProjectManagement',
-          // access: 'canAccessUserManager',
+          access: 'canViewGameProjectManagement'
         },
       ],
     },
-    // {
-    //   path: '/bill',
-    //   name: '订单管理',
-    //   icon: 'FileTextOutlined',
-    //   // access: 'canAccessBillManager',
-    //   routes: [
-    //     {
-    //       path: '/bill/list',
-    //       name: '订单列表',
-    //       component: '@/pages/Bill/BillList',
-    //       // access: 'canAccessBillManager',
-    //     },
-    //     {
-    //       path: '/bill/create',
-    //       name: '创建订单',
-    //       component: '@/pages/Bill/CreateBill',
-    //       // access: 'canAccessBillManager',
-    //     },
-    //     // 后续添加其他订单相关页面
-    //   ],
-    // },
     {
       path: '/staff',
       name: '陪玩中心',
       icon: 'TeamOutlined',
       routes: [
-        { path: '/staff/my-orders', name: '我的接单记录', component: './Staff/MyOrders' },
-        { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench' },
+        // { path: '/staff/my-orders', name: '我的接单记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
+        { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench',access: 'canViewWorkbench' },
       ],
     },
     {
@@ -120,26 +99,26 @@ export default defineConfig({
       name: '订单管理',
       icon: 'ProfileOutlined',
       routes: [
-        { path: '/orders', name: '订单列表', component: './Orders' },
+        { path: '/orders', name: '订单列表', component: './Orders',access: 'canViewOrdersList' },
         // { path: '/orders/new', name: '新建订单', component: './Orders/New' },
-        { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true },
+        { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },
-    {
-      path: '/settlements',
-      name: '结算模块',
-      icon: 'MoneyCollectOutlined',
-      routes: [
-        { path: '/settlements/experience', name: '体验单结算（3日）', component: './Settlements/Experience' },
-        { path: '/settlements/monthly', name: '月度结算（正价单）', component: './Settlements/Monthly' },
-      ],
-    },
+    // {
+    //   path: '/settlements',
+    //   name: '结算模块',
+    //   icon: 'MoneyCollectOutlined',
+    //   routes: [
+    //     { path: '/settlements/experience', name: '体验单结算（3日）', component: './Settlements/Experience' },
+    //     { path: '/settlements/monthly', name: '月度结算（正价单）', component: './Settlements/Monthly' },
+    //   ],
+    // },
     {
       name: '用户管理',
       path: '/users',
       component: '@/pages/Users',
       icon: 'user',
-      // access: 'canAccessUserManager',
+      access: 'canViewUsers'
     },
     {
       name: '重置密码',
@@ -152,9 +131,9 @@ export default defineConfig({
       path: '/staff-ratings',
       component: '@/pages/StaffRatings',
       icon: 'star',
-      // access: 'canAccessRatingManager',
+      access: 'canViewStaffRatings'
     },
-
+    { path: '/403', component: '@/pages/403', layout: false },
   ],
 
   npmClient: 'yarn',

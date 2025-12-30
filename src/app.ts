@@ -12,6 +12,7 @@ interface CurrentUser {
   balance: number;
   avatar?: string;
   permissions?: string[];
+  needResetPwd?: boolean;
 }
 
 // 全局初始化数据配置，用于 Layout 用户信息和权限初始化
@@ -93,7 +94,15 @@ export const request: RuntimeConfig['request'] = {
       if (response && response.status >= 400) {
         const errorMessage = response.data?.message || '请求失败';
         message.error(errorMessage);
-      } else {
+      }
+
+      if (response && response.status === 403) {
+        message.error(response.data?.message || '无权限访问');
+        window.location.href = '/403';
+        return;
+      }
+
+      else {
         message.error('网络错误，请检查网络连接');
       }
 

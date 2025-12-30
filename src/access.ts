@@ -1,40 +1,29 @@
 export default function access(initialState: { currentUser?: API.CurrentUser } | undefined) {
   const { currentUser } = initialState ?? {};
 
-  // 从后端获取的权限列表
   const permissions = currentUser?.permissions || [];
 
-  // 动态权限检查函数
-  const hasPermission = (permissionKey: string) => {
-    return permissions.includes(permissionKey);
-  };
+  const has = (key: string) => permissions.includes(key);
 
   return {
-    // 页面权限
-    canAccessUserManager: hasPermission('canAccessUserManager'),
-    canAccessBillManager: hasPermission('canAccessBillManager'),
-    canAccessRatingManager: hasPermission('canAccessRatingManager'),
-    canAccessRechargeManager: hasPermission('canAccessRechargeManager'),
-    canAccessRoleManager: hasPermission('canAccessUserManager'), // 角色管理权限同用户管理
+    // 系统管理
+    canViewRoleManagement: has('system:role:page'),
+    canViewPermissionManagement: has('system:permission:page'),
+    canViewGameProjectManagement: has('system:game-project:page'),
 
-    // 用户管理按钮权限
-    canCreateUser: hasPermission('canCreateUser'),
-    canDeleteUser: hasPermission('canDeleteUser'),
-    canEditUser: hasPermission('canEditUser'),
-    canChangeLevel: hasPermission('canChangeLevel'),
-    canResetPassword: hasPermission('canResetPassword'),
+    // 用户/评级
+    canViewUsers: has('users:page'),
+    canViewStaffRatings: has('staff-ratings:page'),
 
-    // 评级管理权限
-    canCreateRating: hasPermission('canCreateRating'),
-    canEditRating: hasPermission('canEditRating'),
-    canDeleteRating: hasPermission('canDeleteRating'),
+    // 陪玩中心
+    canViewMyOrders: has('staff:my-orders:page'),
+    canViewWorkbench: has('staff:workbench:page'),
 
-    // 系统管理权限
-    canAccessSystemSettings: hasPermission('canAccessSystemSettings'),
-
-    // 员工权限
-    canViewOwnBills: hasPermission('canViewOwnBills'),
-    canUpdateProfile: true,
+    // 订单/结算
+    canViewOrdersList: has('orders:list:page'),
+    canViewOrderDetail: has('orders:detail:page'),
+    canViewSettlementExperience: has('settlements:experience:page'),
+    canViewSettlementMonthly: has('settlements:monthly:page'),
   };
 }
 
