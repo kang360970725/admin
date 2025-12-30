@@ -338,7 +338,7 @@ const WorkbenchPage: React.FC = () => {
         try {
             if (!poolDispatch?.id) return;
             await acceptDispatch(Number(poolDispatch.id), {});
-            message.success('已接单');
+            message.success('已接单，请等待所有打手均确认接单');
 
             setLocalWorkStatus('WORKING');
             setInitialState?.((s: any) => ({
@@ -511,6 +511,9 @@ const WorkbenchPage: React.FC = () => {
                     .filter(Boolean)
                     .join('、')
                 : '-';
+        //是否已经接单
+        const isAccept = ps.length > 0
+            && ps.some((p: any) =>  currentUser?.id === p?.userId && !!p?.acceptedAt)
 
         // 待接单（等待中）
         if (workStatus === 'IDLE') {
@@ -528,14 +531,19 @@ const WorkbenchPage: React.FC = () => {
 
                     <Divider style={{ margin: '12px 0' }} />
 
-                    <Space>
+                    {isAccept ? <Space>
+                        <div>您已接单，请等待所有打手均确认接单。</div>
+                        <Button onClick={() => refreshPool()} loading={poolLoading}>
+                            立即刷新
+                        </Button>
+                    </Space> : <Space>
                         <Button type="primary" onClick={submitAccept} loading={poolLoading}>
                             接单
                         </Button>
                         <Button danger onClick={openReject}>
                             拒单
                         </Button>
-                    </Space>
+                    </Space>}
 
                     <Divider style={{ margin: '12px 0' }} />
                     <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, lineHeight: 1.7 }}>
@@ -761,7 +769,7 @@ const WorkbenchPage: React.FC = () => {
                                     label="本轮总保底进度(万)"
                                     rules={[{ required: true, message: '请填写本轮总保底进度' }]}
                                 >
-                                    <InputNumber min={0} style={{ width: '100%' }} />
+                                    <InputNumber style={{ width: '100%' }} />
                                 </Form.Item>
                             )}
 
