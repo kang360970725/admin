@@ -6,7 +6,11 @@ COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+
+# 你的脚本是 build:prod
+ENV UMI_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+RUN npm run build:prod
 
 # ---------- Runtime stage ----------
 FROM nginx:stable-alpine
