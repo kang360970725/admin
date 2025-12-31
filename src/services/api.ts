@@ -7,7 +7,7 @@ logEnvInfo();
 // 动态获取 API 基础路径
 // ✅ 生产环境直连后端域名（来自 config/config.ts 的 define 注入）
 const API_BASE =
-    process.env.NODE_ENV === 'production'
+    process.env.NODE_ENV !== 'production'
         ? 'http://api.welax-tech.com'
         : '/api';
 
@@ -118,7 +118,7 @@ export async function getStaffRatings(params: any) {
 }
 // 获取可用的员工评级
 export async function getAvailableRatings() {
-    return request('/api/users/ratings/available', {
+    return request(`${API_BASE}/users/ratings/available`, {
         method: 'GET',
     });
 }
