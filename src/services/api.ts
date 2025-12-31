@@ -4,8 +4,8 @@ import { getApiBase, logEnvInfo } from '@/utils/env';
 // 记录环境信息
 logEnvInfo();
 
-// 动态获取 API 基础路径
-const API_BASE = '/api';
+// ✅ 生产环境直连后端域名（来自 config/config.ts 的 define 注入）
+const API_BASE = (getApiBase?.() || (process as any)?.env?.API_BASE || '').replace(/\/$/, '');
 
 export interface User {
     id: number;
@@ -51,34 +51,34 @@ export async function register(data: { phone: string; password: string; name?: s
 }
 
 export async function getCurrentUser() {
-    return request<User>(`${API_BASE}/auth/me`, {
+    return request(`${API_BASE}/auth/me`, {
         method: 'GET',
     });
 }
 
 // 用户管理 API
-export async function getUsers(params: any): Promise<PaginationResponse> {
-    return request<PaginationResponse>(`${API_BASE}/users`, {
+export async function getUsers(params: any): Promise<any> {
+    return request(`${API_BASE}/users`, {
         method: 'GET',
         params,
     });
 }
 
-export async function getUserById(id: number): Promise<User> {
-    return request<User>(`${API_BASE}/users/${id}`, {
+export async function getUserById(id: number): Promise<any> {
+    return request(`${API_BASE}/users/${id}`, {
         method: 'GET',
     });
 }
 
-export async function createUser(data: any): Promise<User> {
-    return request<User>(`${API_BASE}/users`, {
+export async function createUser(data: any): Promise<any> {
+    return request(`${API_BASE}/users`, {
         method: 'POST',
         data,
     });
 }
 
-export async function updateUser(id: number, data: any): Promise<User> {
-    return request<User>(`${API_BASE}/users/${id}`, {
+export async function updateUser(id: number, data: any): Promise<any> {
+    return request(`${API_BASE}/users/${id}`, {
         method: 'PATCH',
         data,
     });
@@ -90,19 +90,20 @@ export async function deleteUser(id: number): Promise<{ message: string }> {
     });
 }
 
-export async function changeUserLevel(id: number, data: { level: number; remark?: string }): Promise<User> {
-    return request<User>(`${API_BASE}/users/${id}/level`, {
+export async function changeUserLevel(id: number, data: { level: number; remark?: string }): Promise<any> {
+    return request(`${API_BASE}/users/${id}/level`, {
         method: 'PATCH',
         data,
     });
 }
 
-export async function resetUserPassword(id: number, data?: { remark?: string }): Promise<User & { tempPassword?: string }> {
-    return request<User & { tempPassword?: string }>(`${API_BASE}/users/${id}/reset-password`, {
+export async function resetUserPassword(id: number, data?: { remark?: string }): Promise<any> {
+    return request(`${API_BASE}/users/${id}/reset-password`, {
         method: 'POST',
         data,
     });
 }
+
 // 员工评级相关API
 export async function getStaffRatings(params: any) {
     return request(`${API_BASE}/staff-ratings`, {
@@ -110,9 +111,10 @@ export async function getStaffRatings(params: any) {
         params,
     });
 }
+
 // 获取可用的员工评级
 export async function getAvailableRatings() {
-    return request('/api/users/ratings/available', {
+    return request(`${API_BASE}/users/ratings/available`, {
         method: 'GET',
     });
 }
@@ -157,7 +159,7 @@ export async function deletePermission(id: number) {
     });
 }
 
-// === 角色管理 API  ===
+// === 角色管理 API ===
 export async function getRoles() {
     return request(`${API_BASE}/roles`, {
         method: 'GET',
@@ -206,6 +208,7 @@ export async function updateGameProject(id: number, data: any) {
 export async function deleteGameProject(id: number) {
     return request(`${API_BASE}/game-project/${id}`, {
         method: 'DELETE',
+        data,
     });
 }
 
@@ -252,8 +255,8 @@ export async function markBillAsPaid(id: number) {
         method: 'POST',
     });
 }
-// ---------------------- Orders API ----------------------
 
+// ---------------------- Orders API ----------------------
 export async function createOrder(data: any) {
     return request(`${API_BASE}/orders/create`, {
         method: 'POST',
@@ -309,13 +312,6 @@ export async function completeDispatch(dispatchId: number, data: any) {
     });
 }
 
-/** 我的接单记录：POST /orders/my-dispatches */
-// export async function getMyDispatches(data: any) {
-//     return request(`${API_BASE}/orders/my-dispatches`, {
-//         method: 'POST',
-//         data,
-//     });
-// }
 // 项目下拉（支持 keyword）
 export async function getGameProjectOptions(data: { keyword?: string }) {
     return request(`${API_BASE}/game-project/options`, {
@@ -345,20 +341,14 @@ export async function updateOrderPaidAmount(data: { id: number; paidAmount: numb
     });
 }
 
-export async function updateDispatchParticipants(data: {
-    dispatchId: number;
-    playerIds: number[];
-    remark?: string;
-}) {
+export async function updateDispatchParticipants(data: { dispatchId: number; playerIds: number[]; remark?: string }) {
     return request(`${API_BASE}/orders/dispatch/update-participants`, {
         method: 'POST',
         data,
     });
 }
 
-
 // ---------------------- Settlement Batch API (POST style) ----------------------
-
 /** 批次结算查询：POST /settlements/batches */
 export async function querySettlementBatch(data: any) {
     return request(`${API_BASE}/settlements/batches`, {
@@ -374,6 +364,7 @@ export async function markSettlementsPaid(data: { settlementIds: number[]; remar
         data,
     });
 }
+
 // 我的接单记录（陪玩端）
 export async function getMyDispatches(data: { page?: number; limit?: number; status?: string }) {
     return request(`${API_BASE}/orders/my-dispatches`, {
@@ -405,7 +396,7 @@ export async function completeDispatchAsStaff(data: {
     return request(`${API_BASE}/orders/dispatch/complete`, { method: 'POST', data });
 }
 
-//  手动修改陪玩收益
+// 手动修改陪玩收益
 export async function adjustSettlementFinalEarnings(data: { settlementId: number; finalEarnings: number; remark?: string }) {
     return request(`${API_BASE}/orders/settlements/adjust`, {
         method: 'POST',
@@ -423,20 +414,17 @@ export async function updateOrder(data: any) {
     return request(`${API_BASE}/orders/update`, { method: 'POST', data });
 }
 
-//
-export async function dispatchRejectOrder(data: any) {
-    return request(`${API_BASE}/orders/dispatch/reject`, { method: 'POST', data });
-}
-
 // 打手修改状态
 export async function usersWorkStatus(data: any) {
     return request(`${API_BASE}/users/work-status`, { method: 'POST', data });
 }
+
 // 获取收入统计
 export async function ordersMyStats(data: any) {
     return request(`${API_BASE}/orders/my/stats`, { method: 'POST', data });
 }
-//修改密码
+
+// 修改密码
 export async function updateMyPassword(body: { newPassword: string }) {
     return request(`${API_BASE}/users/me/password`, {
         method: 'POST',

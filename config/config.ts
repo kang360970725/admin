@@ -8,15 +8,18 @@ const envConfig = {
     APP_NAME: '蓝猫陪玩管理系统-开发',
   },
   test: {
+    // 如需可改为你的测试后端
     API_BASE: 'http://test-api.example.com',
     APP_NAME: '蓝猫陪玩管理系统-测试',
   },
   pre: {
+    // 如需可改为你的预发后端
     API_BASE: 'http://pre-api.example.com',
     APP_NAME: '蓝猫陪玩管理系统-预发',
   },
   production: {
-    API_BASE: 'https://api.example.com',
+    // ✅ 生产环境直连后端（不走 /api 反代）
+    API_BASE: 'http://api.welax-tech.com',
     APP_NAME: '蓝猫陪玩管理系统',
   },
 };
@@ -24,13 +27,15 @@ const envConfig = {
 // 安全获取环境配置
 const getEnv = (): keyof typeof envConfig => {
   const env = process.env.UMI_ENV || 'development';
-  return env in envConfig ? env as keyof typeof envConfig : 'development';
+  return env in envConfig ? (env as keyof typeof envConfig) : 'development';
 };
 
 const currentEnv = getEnv();
 const config = envConfig[currentEnv];
 
 export default defineConfig({
+  title: config.APP_NAME,   // ✅ 浏览器 Tab 标题
+  favicon: '/favicon.ico', // ✅ 浏览器图标（下面一步会加）
   // 运行时定义环境变量
   define: {
     'process.env.UMI_ENV': currentEnv,
@@ -38,8 +43,8 @@ export default defineConfig({
     'process.env.APP_NAME': config.APP_NAME,
   },
 
+
   access: {},
-  // Umi Max 核心插件
   model: {},
   initialState: {},
   request: {},
@@ -47,42 +52,18 @@ export default defineConfig({
     title: config.APP_NAME,
   },
 
-  // 路由配置
+  // 路由配置（保持你现有不动）
   routes: [
-    {
-      path: '/login',
-      component: '@/pages/Login',
-      layout: false,
-    },
-    {
-      path: '/',
-      redirect: '/users',
-    },
+    { path: '/login', component: '@/pages/Login', layout: false },
+    { path: '/', redirect: '/users' },
     {
       path: '/system',
       name: '系统管理',
       icon: 'SettingOutlined',
-      // access: 'canAccessUserManager', // 需要有用户管理权限才能访问系统管理
       routes: [
-        // ... 其他系统管理路由
-        {
-          path: '/system/role-management',
-          name: '角色管理',
-          component: './System/RoleManagement',
-          access: 'canViewRoleManagement'
-        },
-        {
-          path: '/system/permission-management',
-          name: '权限管理',
-          component: './System/PermissionManagement',
-          access: 'canViewPermissionManagement'
-        },
-        {
-          path: '/system/game-project-management',
-          name: '菜单项目管理',
-          component: '@/pages/System/GameProjectManagement',
-          access: 'canViewGameProjectManagement'
-        },
+        { path: '/system/role-management', name: '角色管理', component: './System/RoleManagement', access: 'canViewRoleManagement' },
+        { path: '/system/permission-management', name: '权限管理', component: './System/PermissionManagement', access: 'canViewPermissionManagement' },
+        { path: '/system/game-project-management', name: '菜单项目管理', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
       ],
     },
     {
@@ -90,8 +71,7 @@ export default defineConfig({
       name: '陪玩中心',
       icon: 'TeamOutlined',
       routes: [
-        // { path: '/staff/my-orders', name: '我的接单记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
-        { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench',access: 'canViewWorkbench' },
+        { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
       ],
     },
     {
@@ -99,51 +79,27 @@ export default defineConfig({
       name: '订单管理',
       icon: 'ProfileOutlined',
       routes: [
-        { path: '/orders', name: '订单列表', component: './Orders',access: 'canViewOrdersList' },
-        // { path: '/orders/new', name: '新建订单', component: './Orders/New' },
+        { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },
-    // {
-    //   path: '/settlements',
-    //   name: '结算模块',
-    //   icon: 'MoneyCollectOutlined',
-    //   routes: [
-    //     { path: '/settlements/experience', name: '体验单结算（3日）', component: './Settlements/Experience' },
-    //     { path: '/settlements/monthly', name: '月度结算（正价单）', component: './Settlements/Monthly' },
-    //   ],
-    // },
-    {
-      name: '用户管理',
-      path: '/users',
-      component: '@/pages/Users',
-      icon: 'user',
-      access: 'canViewUsers'
-    },
-    {
-      name: '重置密码',
-      path: '/reset-password',
-      component: '@/pages/ResetPassword',
-      layout: false,
-    },
-    {
-      name: '评级管理',
-      path: '/staff-ratings',
-      component: '@/pages/StaffRatings',
-      icon: 'star',
-      access: 'canViewStaffRatings'
-    },
+    { name: '用户管理', path: '/users', component: '@/pages/Users', icon: 'user', access: 'canViewUsers' },
+    { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
+    { name: '评级管理', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },
     { path: '/403', component: '@/pages/403', layout: false },
   ],
 
   npmClient: 'yarn',
 
-  // 代理配置 - 只在开发环境生效
-  proxy: currentEnv === 'development' ? {
-    '/api': {
-      target: config.API_BASE,
-      changeOrigin: true,
-      pathRewrite: { '^/api': '' },
-    },
-  } : undefined,
+  // 代理配置 - 只在开发环境生效（生产环境不需要 /api）
+  proxy:
+      currentEnv === 'development'
+          ? {
+            '/api': {
+              target: config.API_BASE,
+              changeOrigin: true,
+              pathRewrite: { '^/api': '' },
+            },
+          }
+          : undefined,
 });
