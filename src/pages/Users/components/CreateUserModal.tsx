@@ -101,24 +101,24 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             <Input.Password placeholder="请输入密码" />
                         </Form.Item>
 
-                        {/*<Form.Item*/}
-                        {/*    label="用户身份"*/}
-                        {/*    name="userType"*/}
-                        {/*    rules={[{ required: true, message: '请选择用户身份' }]}*/}
-                        {/*>*/}
-                        {/*    <Select*/}
-                        {/*        placeholder="请选择用户身份"*/}
-                        {/*        onChange={handleUserTypeChange}*/}
-                        {/*    >*/}
-                        {/*        <Option value="REGISTERED_USER">注册用户</Option>*/}
-                        {/*        <Option value="STAFF">员工</Option>*/}
-                        {/*        <Option value="CUSTOMER_SERVICE">客服</Option>*/}
-                        {/*        <Option value="OPERATION">运营</Option>*/}
-                        {/*        <Option value="FINANCE">财务</Option>*/}
-                        {/*        <Option value="ADMIN">管理员</Option>*/}
-                        {/*        <Option value="SUPER_ADMIN">超级管理员</Option>*/}
-                        {/*    </Select>*/}
-                        {/*</Form.Item>*/}
+                        <Form.Item
+                            label="用户身份"
+                            name="userType"
+                            rules={[{ required: true, message: '请选择用户身份' }]}
+                        >
+                            <Select
+                                placeholder="请选择用户身份"
+                                onChange={handleUserTypeChange}
+                            >
+                                <Option value="REGISTERED_USER">注册用户</Option>
+                                <Option value="STAFF">员工</Option>
+                                <Option value="CUSTOMER_SERVICE">客服</Option>
+                                <Option value="OPERATION">运营</Option>
+                                <Option value="FINANCE">财务</Option>
+                                <Option value="ADMIN">管理员</Option>
+                                <Option value="SUPER_ADMIN">超级管理员</Option>
+                            </Select>
+                        </Form.Item>
 
                         <Form.Item
                             label="账号状态"
@@ -151,31 +151,31 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         </Form.Item>
 
                         {/* 员工专属字段 */}
-                        {isStaff && (
-                            <>
-                                <Form.Item
-                                    label="真实姓名"
-                                    name="realName"
-                                    rules={[{ required: true, message: '员工必须填写真实姓名' }]}
-                                >
-                                    <Input placeholder="请输入真实姓名" />
-                                </Form.Item>
+                        {/*{isStaff && (*/}
+                        {/*    <>*/}
+                        {/*        <Form.Item*/}
+                        {/*            label="真实姓名"*/}
+                        {/*            name="realName"*/}
+                        {/*            rules={[{ required: true, message: '员工必须填写真实姓名' }]}*/}
+                        {/*        >*/}
+                        {/*            <Input placeholder="请输入真实姓名" />*/}
+                        {/*        </Form.Item>*/}
 
-                                <Form.Item
-                                    label="身份证号"
-                                    name="idCard"
-                                    rules={[
-                                        { required: true, message: '员工必须填写身份证号' },
-                                        { pattern: /^\d{17}[\dXx]$/, message: '身份证号格式不正确' }
-                                    ]}
-                                >
-                                    <Input placeholder="请输入身份证号" />
-                                </Form.Item>
-                            </>
-                        )}
+                        {/*        <Form.Item*/}
+                        {/*            label="身份证号"*/}
+                        {/*            name="idCard"*/}
+                        {/*            rules={[*/}
+                        {/*                { required: true, message: '员工必须填写身份证号' },*/}
+                        {/*                { pattern: /^\d{17}[\dXx]$/, message: '身份证号格式不正确' }*/}
+                        {/*            ]}*/}
+                        {/*        >*/}
+                        {/*            <Input placeholder="请输入身份证号" />*/}
+                        {/*        </Form.Item>*/}
+                        {/*    </>*/}
+                        {/*)}*/}
 
                         {/* 非员工时的普通字段 */}
-                        {!isStaff && (
+                        {/*{!isStaff && (*/}
                             <>
                                 <Form.Item
                                     label="真实姓名"
@@ -191,7 +191,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                                     <Input placeholder="请输入身份证号" />
                                 </Form.Item>
                             </>
-                        )}
+                        {/*)}*/}
                     </div>
                 </div>
 
