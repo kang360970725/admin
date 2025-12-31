@@ -170,31 +170,31 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         </Form.Item>
 
                         {/* 员工专属字段 */}
-                        {isStaff && (
-                            <>
-                                <Form.Item
-                                    label="真实姓名"
-                                    name="realName"
-                                    rules={[{ required: true, message: '员工必须填写真实姓名' }]}
-                                >
-                                    <Input placeholder="请输入真实姓名" />
-                                </Form.Item>
+                        {/*{isStaff && (*/}
+                        {/*    <>*/}
+                        {/*        <Form.Item*/}
+                        {/*            label="真实姓名"*/}
+                        {/*            name="realName"*/}
+                        {/*            rules={[{ required: true, message: '员工必须填写真实姓名' }]}*/}
+                        {/*        >*/}
+                        {/*            <Input placeholder="请输入真实姓名" />*/}
+                        {/*        </Form.Item>*/}
 
-                                <Form.Item
-                                    label="身份证号"
-                                    name="idCard"
-                                    rules={[
-                                        { required: true, message: '员工必须填写身份证号' },
-                                        { pattern: /^\d{17}[\dXx]$/, message: '身份证号格式不正确' }
-                                    ]}
-                                >
-                                    <Input placeholder="请输入身份证号" />
-                                </Form.Item>
-                            </>
-                        )}
+                        {/*        <Form.Item*/}
+                        {/*            label="身份证号"*/}
+                        {/*            name="idCard"*/}
+                        {/*            rules={[*/}
+                        {/*                { required: true, message: '员工必须填写身份证号' },*/}
+                        {/*                { pattern: /^\d{17}[\dXx]$/, message: '身份证号格式不正确' }*/}
+                        {/*            ]}*/}
+                        {/*        >*/}
+                        {/*            <Input placeholder="请输入身份证号" />*/}
+                        {/*        </Form.Item>*/}
+                        {/*    </>*/}
+                        {/*)}*/}
 
                         {/* 非员工时的普通字段 */}
-                        {!isStaff && (
+                        {/*{!isStaff && (*/}
                             <>
                                 <Form.Item
                                     label="真实姓名"
@@ -210,7 +210,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                     <Input placeholder="请输入身份证号" />
                                 </Form.Item>
                             </>
-                        )}
+                        {/*)}*/}
                     </div>
                 </div>
 
