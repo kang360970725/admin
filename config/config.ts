@@ -43,7 +43,7 @@ export default defineConfig({
     'process.env.APP_NAME': config.APP_NAME,
   },
 
-
+  hash: true,
   access: {},
   model: {},
   initialState: {},
