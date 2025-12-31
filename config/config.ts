@@ -48,9 +48,9 @@ export default defineConfig({
   model: {},
   initialState: {},
   request: {},
-  // layout: {
-  //   title: config.APP_NAME,
-  // },
+  layout: {
+    title: config.APP_NAME,
+  },
 
   // 路由配置（保持你现有不动）
   routes: [
