@@ -59,7 +59,7 @@ export async function getInitialState(): Promise<{
     fetchUserInfo,
   };
 }
-
+const loginPath = '/login';
 export const layout: RuntimeConfig['layout'] = {
   logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
   title: '蓝猫陪玩管理系统',
@@ -73,6 +73,14 @@ export const layout: RuntimeConfig['layout'] = {
 
     // 可以调用后端退出接口（如果需要）
     // await logout();
+  },
+  onPageChange: () => {
+    const token = localStorage.getItem('token');
+    const { location } = history;
+
+    if (!token && location.pathname !== loginPath) {
+      history.replace(loginPath);
+    }
   },
 };
 
