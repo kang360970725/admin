@@ -7,13 +7,12 @@ RUN npm install
 
 COPY . .
 
-# ✅ Max/Umi v4 常需要 setup（相当于生成临时文件等前置步骤）
-RUN npx max setup || npx umi setup || true
+RUN npx --yes max setup || npx --yes umi setup || true
 
 ENV UMI_ENV=production
+ENV API_BASE=http://api.welax-tech.com
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# ✅ 构建失败时把 umi.log 打出来（否则你永远看不到真正原因）
 RUN npm run build:prod || ( \
   echo "======== UMI LOG START ========" && \
   (cat /app/node_modules/.cache/logger/umi.log || true) && \
