@@ -35,7 +35,7 @@ const config = envConfig[currentEnv];
 
 export default defineConfig({
   title: config.APP_NAME,   // ✅ 浏览器 Tab 标题
-  favicon: '/favicon.ico', // ✅ 浏览器图标（下面一步会加）
+  links: [{ rel: 'icon', href: '/favicon.ico' }],
   // 运行时定义环境变量
   define: {
     'process.env.UMI_ENV': currentEnv,
@@ -48,9 +48,9 @@ export default defineConfig({
   model: {},
   initialState: {},
   request: {},
-  layout: {
-    title: config.APP_NAME,
-  },
+  // layout: {
+  //   title: config.APP_NAME,
+  // },
 
   // 路由配置（保持你现有不动）
   routes: [
