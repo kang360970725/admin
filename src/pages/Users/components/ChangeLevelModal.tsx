@@ -52,7 +52,8 @@ const ChangeLevelModal: React.FC<ChangeLevelModalProps> = ({
     // 获取当前评级信息
     const currentRating = user?.staffRating;
     const selectedRatingId = form.getFieldValue('rating');
-    const selectedRating = availableRatings.find(r => r.id === selectedRatingId);
+    const ratingsArr = Array.isArray(availableRatings) ? availableRatings : [];
+    const selectedRating = ratingsArr.find((r) => r.id === selectedRatingId);
 
     return (
         <Modal
