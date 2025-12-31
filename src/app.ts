@@ -1,6 +1,6 @@
-import {RuntimeConfig} from '@umijs/max';
-import {message} from 'antd';
-import {getCurrentUser} from './services/api';
+import { RuntimeConfig } from '@umijs/max';
+import { message } from 'antd';
+import { getCurrentUser } from './services/api';
 
 // 定义用户类型
 interface CurrentUser {
@@ -76,11 +76,11 @@ export const layout: RuntimeConfig['layout'] = {
   },
   onPageChange: () => {
     const token = localStorage.getItem('token');
-    const { location } = history;
-    document.title = process.env.APP_NAME || '蓝猫爽打管理系统';
-
-    if (!token && location.pathname !== loginPath) {
-      history.replace(loginPath);
+    // const { location } = history;
+    // const appName = process.env.APP_NAME || '蓝猫爽打管理系统';
+    if(!token){
+      // 跳转到登录页
+      window.location.href = '/login';
     }
   },
 };
