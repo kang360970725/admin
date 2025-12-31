@@ -1,16 +1,9 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { PageContainer } from '@ant-design/pro-components';
-import { ProTable } from '@ant-design/pro-components';
-import { Button, Space, Tag, message, Popconfirm, Badge, Tooltip } from 'antd';
-import { useAccess } from 'umi';
+import React, {useEffect, useRef, useState} from 'react';
+import {PageContainer, ProTable} from '@ant-design/pro-components';
+import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip} from 'antd';
+import {useAccess} from 'umi';
 import dayjs from 'dayjs';
-import {
-    getUsers,
-    createUser,
-    updateUser,
-    deleteUser,
-    getAvailableRatings, User
-} from '@/services/api';
+import {deleteUser, getAvailableRatings, getUsers, updateUser} from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
 import ChangeLevelModal from './components/ChangeLevelModal';
@@ -197,39 +190,65 @@ export default function UsersPage() {
             key: 'action',
             width: 200,
             render: (_, record) => (
+                // <Space>
+                //     {access.canEditUser && (
+                //         <Button type="link" size="small" onClick={() => handleEdit(record)}>
+                //             编辑
+                //         </Button>
+                //     )}
+                //     {access.canEditUser && (
+                //         <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
+                //             分配角色
+                //         </Button>
+                //     )}
+                //     {access.canChangeLevel && record?.userType === 'STAFF' && (
+                //         <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
+                //             升降级
+                //         </Button>
+                //     )}
+                //     {access.canResetPassword && (
+                //         <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
+                //             重置密码
+                //         </Button>
+                //     )}
+                //     {access.canDeleteUser && (
+                //         <Popconfirm
+                //             title="确定删除这个用户吗？"
+                //             onConfirm={() => handleDelete(record.id)}
+                //             okText="确定"
+                //             cancelText="取消"
+                //         >
+                //             <Button type="link" size="small" danger>
+                //                 删除
+                //             </Button>
+                //         </Popconfirm>
+                //     )}
+                // </Space>
                 <Space>
-                    {access.canEditUser && (
-                        <Button type="link" size="small" onClick={() => handleEdit(record)}>
-                            编辑
-                        </Button>
-                    )}
-                    {!access.canEditUser && (
-                        <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
-                            分配角色
-                        </Button>
-                    )}
-                    {access.canChangeLevel && record?.userType === 'STAFF' && (
-                        <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
-                            升降级
-                        </Button>
-                    )}
-                    {access.canResetPassword && (
-                        <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
-                            重置密码
-                        </Button>
-                    )}
-                    {access.canDeleteUser && (
-                        <Popconfirm
-                            title="确定删除这个用户吗？"
-                            onConfirm={() => handleDelete(record.id)}
-                            okText="确定"
-                            cancelText="取消"
-                        >
-                            <Button type="link" size="small" danger>
-                                删除
-                            </Button>
-                        </Popconfirm>
-                    )}
+                    <Button type="link" size="small" onClick={() => handleEdit(record)}>
+                        编辑
+                    </Button>
+                    <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
+                        分配角色
+                    </Button>
+                    <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
+                        升降级
+                    </Button>
+                    <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
+                        重置密码
+                    </Button>
+                    {/*{access.canDeleteUser && (*/}
+                    {/*    <Popconfirm*/}
+                    {/*        title="确定删除这个用户吗？"*/}
+                    {/*        onConfirm={() => handleDelete(record.id)}*/}
+                    {/*        okText="确定"*/}
+                    {/*        cancelText="取消"*/}
+                    {/*    >*/}
+                    {/*        <Button type="link" size="small" danger>*/}
+                    {/*            删除*/}
+                    {/*        </Button>*/}
+                    {/*    </Popconfirm>*/}
+                    {/*)}*/}
                 </Space>
             ),
         },

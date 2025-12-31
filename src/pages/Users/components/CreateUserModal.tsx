@@ -101,24 +101,24 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             <Input.Password placeholder="请输入密码" />
                         </Form.Item>
 
-                        <Form.Item
-                            label="用户身份"
-                            name="userType"
-                            rules={[{ required: true, message: '请选择用户身份' }]}
-                        >
-                            <Select
-                                placeholder="请选择用户身份"
-                                onChange={handleUserTypeChange}
-                            >
-                                <Option value="REGISTERED_USER">注册用户</Option>
-                                <Option value="STAFF">员工</Option>
-                                <Option value="CUSTOMER_SERVICE">客服</Option>
-                                <Option value="OPERATION">运营</Option>
-                                <Option value="FINANCE">财务</Option>
-                                <Option value="ADMIN">管理员</Option>
-                                <Option value="SUPER_ADMIN">超级管理员</Option>
-                            </Select>
-                        </Form.Item>
+                        {/*<Form.Item*/}
+                        {/*    label="用户身份"*/}
+                        {/*    name="userType"*/}
+                        {/*    rules={[{ required: true, message: '请选择用户身份' }]}*/}
+                        {/*>*/}
+                        {/*    <Select*/}
+                        {/*        placeholder="请选择用户身份"*/}
+                        {/*        onChange={handleUserTypeChange}*/}
+                        {/*    >*/}
+                        {/*        <Option value="REGISTERED_USER">注册用户</Option>*/}
+                        {/*        <Option value="STAFF">员工</Option>*/}
+                        {/*        <Option value="CUSTOMER_SERVICE">客服</Option>*/}
+                        {/*        <Option value="OPERATION">运营</Option>*/}
+                        {/*        <Option value="FINANCE">财务</Option>*/}
+                        {/*        <Option value="ADMIN">管理员</Option>*/}
+                        {/*        <Option value="SUPER_ADMIN">超级管理员</Option>*/}
+                        {/*    </Select>*/}
+                        {/*</Form.Item>*/}
 
                         <Form.Item
                             label="账号状态"
@@ -136,10 +136,10 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                     {/* 第二列 */}
                     <div>
                         <Form.Item
-                            label="姓名"
+                            label="昵称"
                             name="name"
                         >
-                            <Input placeholder="请输入姓名" />
+                            <Input placeholder="请输入昵称" />
                         </Form.Item>
 
                         <Form.Item

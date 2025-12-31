@@ -1,7 +1,7 @@
 import { request } from '@umijs/max';
 import { getApiBase, logEnvInfo } from '@/utils/env';
 
-// 记录环境信息
+// 记录环境信息  案件编号 01531465
 logEnvInfo();
 
 // 动态获取 API 基础路径
