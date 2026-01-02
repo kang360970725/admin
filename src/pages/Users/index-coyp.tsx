@@ -249,7 +249,14 @@ export default function UsersPage() {
                 columns={columns}
                 request={async (params) => {
                     try {
-                        const response = await getUsers(params);
+
+                        const { current, pageSize, ...rest } = params;
+                        const query = {
+                            page: current ?? 1,
+                            limit: pageSize ?? 10,
+                            ...rest, // search 表单字段会在这里（例如 search/userType/status）
+                        };
+                        const response = await getUsers(query);
                         return {
                             data: response.data,
                             success: true,
@@ -280,7 +287,7 @@ export default function UsersPage() {
                 pagination={{
                     showSizeChanger: true,
                     showQuickJumper: true,
-                    pageSize: 10,
+                    pageSize: 20,
                 }}
                 actionRef={actionRef}
             />

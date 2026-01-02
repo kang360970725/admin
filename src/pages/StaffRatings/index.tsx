@@ -140,7 +140,13 @@ export default function StaffRatingsPage() {
                 columns={columns}
                 request={async (params) => {
                     try {
-                        const response = await getStaffRatings(params);
+                        const { current, pageSize, ...rest } = params;
+                        const query = {
+                            page: current ?? 1,
+                            limit: pageSize ?? 10,
+                            ...rest, // search 表单字段会在这里（例如 search/userType/status）
+                        };
+                        const response = await getStaffRatings(query);
                         return {
                             data: response.data,
                             success: true,
