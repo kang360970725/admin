@@ -55,7 +55,12 @@ export default defineConfig({
   // 路由配置（保持你现有不动）
   routes: [
     { path: '/login', component: '@/pages/Login', layout: false },
-    { path: '/', redirect: '/users' },
+
+    // ✅ 新增欢迎页：登录后的默认入口
+    { path: '/welcome', name: '欢迎页', component: '@/pages/Welcome', icon: 'smile' },
+
+    // ✅ 根路径跳欢迎页（原来是 /users）
+    { path: '/', redirect: '/welcome' },
     {
       path: '/system',
       name: '系统管理',

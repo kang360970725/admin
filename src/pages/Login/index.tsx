@@ -47,7 +47,7 @@ export default function LoginPage() {
                 return;
             }
 
-            navigate('/');
+            navigate('/welcome');
         } catch (error: any) {
             console.error('登录错误:', error);
             message.error(error?.response?.data?.message || '登录失败，请检查手机号和密码');
