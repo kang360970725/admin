@@ -1,0 +1,73 @@
+/* 防止 header 右侧用户区在侧栏折叠/窄屏时穿模 */
+.bm-user-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+
+  /* ✅ 核心：不允许撑爆 header */
+  max-width: 260px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.bm-user-name {
+  /* ✅ 核心：允许名字被压缩并省略 */
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tag 不要挤压名字 */
+.bm-user-tag {
+  flex: 0 0 auto;
+}
+
+/* ✅ 窄屏时自动隐藏 Tag（避免穿模/挤压） */
+@media (max-width: 1200px) {
+  .bm-user-center {
+    max-width: 200px;
+  }
+  .bm-user-name {
+    max-width: 110px;
+  }
+  .bm-user-tag {
+    display: none;
+  }
+}
+
+@media (max-width: 992px) {
+  .bm-user-center {
+    max-width: 160px;
+  }
+  .bm-user-name {
+    max-width: 90px;
+  }
+}
+
+:global(.ant-pro-global-header-right) {
+  overflow: hidden;
+}
+:global(.ant-pro-sider-collapsed) .bm-user-name,
+:global(.ant-pro-sider-collapsed) .bm-user-tag {
+  display: none !important;
+}
+
+:global(.ant-pro-sider-collapsed) .bm-user-center {
+  /* 收起后只保留头像居中 */
+  justify-content: center;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* 保险：侧栏区域不允许溢出到外面 */
+:global(.ant-pro-sider) {
+  overflow: hidden;
+}
+
+:global(.ant-pro-sider-collapsed .ant-pro-sider-footer) {
+  display: none !important;
+}
