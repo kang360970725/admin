@@ -88,6 +88,33 @@ export default defineConfig({
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },
+    {
+      path: '/wallet',
+      name: '钱包',
+      icon: 'WalletOutlined',
+      routes: [
+        {
+          path: '/wallet',
+          redirect: '/wallet/overview',
+        },
+        {
+          path: '/wallet/overview',
+          name: '账户概览',
+          component: '@/pages/Wallet/Overview',
+          // access: 'canViewWallet', // 先不加，避免 access 未定义导致看不到
+        },
+        {
+          path: '/wallet/transactions',
+          name: '流水明细',
+          component: '@/pages/Wallet/Transactions',
+        },
+        {
+          path: '/wallet/holds',
+          name: '冻结单',
+          component: '@/pages/Wallet/Holds',
+        },
+      ],
+    },
     { name: '用户管理', path: '/users', component: '@/pages/Users', icon: 'user', access: 'canViewUsers' },
     { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
     { name: '评级管理', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },

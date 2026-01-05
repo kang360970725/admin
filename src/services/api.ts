@@ -449,3 +449,76 @@ export async function updateMyPassword(body: { newPassword: string }) {
         data: body,
     });
 }
+
+
+// ---------------------- Wallet API ----------------------
+
+export interface WalletAccount {
+    id: number;
+    userId: number;
+    availableBalance: number;
+    frozenBalance: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface WalletTransaction {
+    id: number;
+    userId: number;
+    direction: 'IN' | 'OUT';
+    bizType: string;
+    amount: number;
+    status: string;
+    sourceType?: string | null;
+    sourceId?: number | null;
+    orderId?: number | null;
+    dispatchId?: number | null;
+    settlementId?: number | null;
+    reversalOfTxId?: number | null;
+    createdAt: string;
+}
+
+export interface WalletHold {
+    id: number;
+    userId: number;
+    earningTxId: number;
+    amount: number;
+    status: string; // FROZEN/RELEASED/CANCELLED...
+    unlockAt: string;
+    createdAt: string;
+    releasedAt?: string | null;
+}
+
+export async function getWalletAccount() {
+    return request<WalletAccount>(`${API_BASE}/wallet/account`, {
+        method: 'GET',
+    });
+}
+
+export async function getWalletTransactions(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    bizType?: string;
+    direction?: 'IN' | 'OUT';
+    orderId?: number;
+    dispatchId?: number;
+    startAt?: string; // ISO
+    endAt?: string;   // ISO
+}) {
+    return request<{ data: WalletTransaction[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/wallet/transactions`,
+        { method: 'GET', params },
+    );
+}
+
+export async function getWalletHolds(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+}) {
+    return request<{ data: WalletHold[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/wallet/holds`,
+        { method: 'GET', params },
+    );
+}
