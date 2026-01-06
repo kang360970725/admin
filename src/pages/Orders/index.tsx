@@ -149,6 +149,8 @@ const OrdersPage: React.FC = () => {
                         inviter: payload?.inviter,
                         customClubRate: payload?.customClubRate,
                         remark: payload?.remark,
+                        // ✅ 新增：赠送单标识
+                        isGifted: Boolean(payload?.isGifted),
                     });
 
                     const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);

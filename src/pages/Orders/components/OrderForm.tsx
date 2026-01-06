@@ -20,6 +20,7 @@ import {
     Row,
     Select,
     Button,
+    Checkbox,
 } from 'antd';
 import dayjs from 'dayjs';
 import { getGameProjectOptions, getPlayerOptions } from '@/services/api';
@@ -70,6 +71,9 @@ export type OrderUpsertValues = {
     billingMode?: string;
     unitPrice?: number;
     playerNames?: string[];
+
+    /** 是否赠送单：不计入营业额统计，但仍正常结算 */
+    isGifted?: boolean;
 };
 
 export default function OrderUpsertModal(props: {
@@ -243,9 +247,6 @@ export default function OrderUpsertModal(props: {
         form?.resetFields?.();
 
         form?.setFieldsValue?.({
-            orderTime: now,
-            paymentTime: now,
-            orderQuantity: 1, // ✅ 默认 1
             ...initialValues,
             orderTime: initialValues?.orderTime ? dayjs(initialValues.orderTime) : now,
             paymentTime: initialValues?.paymentTime ? dayjs(initialValues.paymentTime) : now,
@@ -253,6 +254,7 @@ export default function OrderUpsertModal(props: {
                 initialValues?.orderQuantity != null && initialValues?.orderQuantity !== ''
                     ? Number(initialValues.orderQuantity)
                     : 1,
+            isGifted: Boolean(initialValues?.isGifted ?? false),
         } as any);
 
         void fetchProjects('');
@@ -339,6 +341,8 @@ export default function OrderUpsertModal(props: {
                         ? v.playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                         : []
                     : undefined,
+
+                isGifted: Boolean(v?.isGifted),
 
                 // 小票展示字段
                 projectName: v?.projectName,
@@ -437,6 +441,12 @@ export default function OrderUpsertModal(props: {
                                 style={{ width: '100%' }}
                                 placeholder={showQtyForHourly ? '随小时自动计算' : '随项目自动同步'}
                             />
+                        </Form.Item>
+                    </Col>
+
+                    <Col {...colProps}>
+                        <Form.Item name="isGifted" valuePropName="checked" label="是否是赠送单">
+                            <Checkbox>赠送单勾选即可，无需修改实收金额</Checkbox>
                         </Form.Item>
                     </Col>
 

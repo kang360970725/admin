@@ -59,6 +59,20 @@ export default defineConfig({
     // ✅ 新增欢迎页：登录后的默认入口
     { path: '/welcome', name: '欢迎页', component: '@/pages/Welcome', icon: 'smile' },
 
+    {
+      path: '/dashboard',
+      name: '数据看板',
+      icon: 'DashboardOutlined',
+      routes: [
+        { path: '/dashboard', redirect: '/dashboard/revenue' },
+        {
+          path: '/dashboard/revenue',
+          name: '营业额看板',
+          component: '@/pages/Dashboard/RevenueOverview',
+        },
+      ],
+    },
+
     // ✅ 根路径跳欢迎页（原来是 /users）
     { path: '/', redirect: '/welcome' },
     {

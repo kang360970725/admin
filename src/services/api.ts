@@ -522,3 +522,27 @@ export async function getWalletHolds(params: {
         { method: 'GET', params },
     );
 }
+
+// ---------------------- Dashboard API ----------------------
+
+export interface RevenueOverviewRes {
+    range: { startAt: string; endAt: string };
+
+    totalOrders: number;
+    totalRevenue: number;
+
+    refundedOrders: number;
+    refundedAmount: number;
+
+    costEstimated: number;
+    profitEstimated: number;
+    profitRate: number; // 百分比数值，例如 12.34
+    giftedCost: number;
+}
+
+export async function getRevenueOverview(params?: { startAt?: string; endAt?: string }) {
+    return request<RevenueOverviewRes>(`${API_BASE}/dashboard/revenue/overview`, {
+        method: 'GET',
+        params,
+    });
+}
