@@ -127,6 +127,24 @@ export default defineConfig({
           name: '冻结单',
           component: '@/pages/Wallet/Holds',
         },
+        {
+          path: '/wallet/withdrawals',
+          name: '提现审批',
+          component: '@/pages/Wallet/Withdrawals',
+          access: 'canViewWithdrawals', // ✅ 新增权限点（下一步在 access.ts 里加）
+        },
+        {
+          path: '/wallet/withdrawals/records',
+          name: '提现记录',
+          component: '@/pages/Wallet/Withdrawals/Records',
+          access: 'canViewWithdrawals',
+        },
+        {
+          path: '/wallet/withdrawals/mine',
+          name: '提现申请',
+          component: '@/pages/Wallet/Withdrawals/Mine',
+          access: 'canViewWithdrawals', // 你也可以改成单独权限，例如 canApplyWithdrawal
+        },
       ],
     },
     { name: '用户管理', path: '/users', component: '@/pages/Users', icon: 'user', access: 'canViewUsers' },

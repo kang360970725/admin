@@ -546,3 +546,122 @@ export async function getRevenueOverview(params?: { startAt?: string; endAt?: st
         params,
     });
 }
+
+// ---------------------- Withdrawal (提现) API ----------------------
+
+/**
+ * 提现申请单（管理端/审批端都会用到）
+ * - 注意：这里的字段与后端 WalletWithdrawalRequest 对齐
+ * - 你后续接微信自动打款，会增加 outTradeNo/channelTradeNo 等字段（这里先预留可选）
+ */
+export interface WalletWithdrawalRequest {
+    id: number;
+    userId: number;
+    amount: number;
+    status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'PAYING' | 'PAID' | 'FAILED' | 'CANCELED';
+    channel: 'WECHAT' | 'MANUAL';
+    idempotencyKey: string;
+    requestNo: string;
+    remark?: string | null;
+
+    reviewedBy?: number | null;
+    reviewedAt?: string | null;
+    reviewRemark?: string | null;
+
+    reserveTxId: number;
+    payoutTxId?: number | null;
+
+    outTradeNo?: string | null;
+    channelTradeNo?: string | null;
+    callbackRaw?: string | null;
+    failReason?: string | null;
+
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * ✅ 管理端：待审核列表
+ * GET /wallet/withdrawals/pending
+ */
+export async function getPendingWithdrawals() {
+    return request<WalletWithdrawalRequest[]>(`${API_BASE}/wallet/withdrawals/pending`, {
+        method: 'GET',
+    });
+}
+
+/**
+ * ✅ 管理端：审批
+ * POST /wallet/withdrawals/review
+ *
+ * reviewerId：审批人（从 currentUser.id 取）
+ * approve：true=通过；false=驳回
+ * reviewRemark：审批备注（可选）
+ */
+export async function reviewWithdrawal(data: {
+    requestId: number;
+    reviewerId: number;
+    approve: boolean;
+    reviewRemark?: string;
+}) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/review`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---------------------- Withdrawal (提现) API - 扩展：list/mine/apply ----------------------
+
+/**
+ * ✅ 管理端：全量记录（分页+筛选）
+ * POST /wallet/withdrawals/list
+ */
+export async function postWithdrawalsList(data: {
+    page: number;
+    pageSize: number;
+    status?: string;
+    channel?: string;
+    userId?: number;
+    requestNo?: string;
+    createdAtFrom?: string;
+    createdAtTo?: string;
+}) {
+    return request<{ total: number; list: WalletWithdrawalRequest[]; page: number; pageSize: number }>(
+        `${API_BASE}/wallet/withdrawals/list`,
+        { method: 'POST', data },
+    );
+}
+
+/**
+ * ✅ 我的提现记录
+ * GET /wallet/withdrawals/mine
+ *
+ * ⚠️ 你后端目前用 GET + Body（不标准），这里为了兼容，仍用 GET 但带 data
+ * 如果你后端后续改为 query 参数，这里再同步
+ */
+export async function getMyWithdrawals(userId: number) {
+    return request<WalletWithdrawalRequest[]>(`${API_BASE}/wallet/withdrawals/mine`, {
+        method: 'GET',
+        data: { userId },
+    });
+}
+
+/**
+ * ✅ 申请提现
+ * POST /wallet/withdrawals/apply
+ *
+ * idempotencyKey：前端生成 uuid，防止重复提交
+ */
+export async function applyWithdrawal(data: {
+    userId: number;
+    amount: number;
+    idempotencyKey: string;
+    remark?: string;
+    channel?: 'MANUAL' | 'WECHAT';
+}) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/apply`, {
+        method: 'POST',
+        data,
+    });
+}
+

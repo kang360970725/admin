@@ -24,6 +24,9 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewOrderDetail: has('orders:detail:page'),
     canViewSettlementExperience: has('settlements:experience:page'),
     canViewSettlementMonthly: has('settlements:monthly:page'),
+
+    // ✅ 钱包-提现审批
+    canViewWithdrawals: has('wallet:withdrawals:page'),
   };
 }
 
