@@ -27,6 +27,9 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
 
     // ✅ 钱包-提现审批
     canViewWithdrawals: has('wallet:withdrawals:page'),
+
+    // ✅ 营业数据看板
+    canViewDashboard: has('dashboard:revenue:page'),
   };
 }
 

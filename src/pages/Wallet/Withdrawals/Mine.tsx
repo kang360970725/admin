@@ -38,7 +38,7 @@ const WithdrawalMine: React.FC = () => {
         });
     };
 
-    const columns: ProColumns<WalletWithdrawalRequest>[] = [
+    const columns: any = [
         { title: '申请单号', dataIndex: 'requestNo', width: 160, copyable: true },
         { title: '金额', dataIndex: 'amount', width: 120, render: (_, row) => <span>{Number(row.amount || 0).toFixed(2)}</span> },
         {

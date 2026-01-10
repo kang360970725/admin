@@ -63,6 +63,7 @@ export default defineConfig({
       path: '/dashboard',
       name: '数据看板',
       icon: 'DashboardOutlined',
+      access: 'canViewDashboard',
       routes: [
         { path: '/dashboard', redirect: '/dashboard/revenue' },
         {
@@ -143,7 +144,7 @@ export default defineConfig({
           path: '/wallet/withdrawals/mine',
           name: '提现申请',
           component: '@/pages/Wallet/Withdrawals/Mine',
-          access: 'canViewWithdrawals', // 你也可以改成单独权限，例如 canApplyWithdrawal
+          // access: 'canViewWithdrawals', // 你也可以改成单独权限，例如 canApplyWithdrawal
         },
       ],
     },
