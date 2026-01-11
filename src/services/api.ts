@@ -41,8 +41,6 @@ export interface PaginationResponse {
 
 // 认证相关
 export async function login(data: { phone: string; password: string }) {
-    console.log("==========API_BASE");
-    console.log(API_BASE);
     return request<{ access_token: string; user: User }>(`${API_BASE}/auth/login`, {
         method: 'POST',
         data,

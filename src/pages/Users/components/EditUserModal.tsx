@@ -22,8 +22,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
     const [userType, setUserType] = useState('REGISTERED_USER');
-    console.log("==========user");
-    console.log(user);
     // 监听用户类型变化
     const handleUserTypeChange = (value: string) => {
         setUserType(value);

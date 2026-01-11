@@ -27,8 +27,8 @@ export const getAppName = (): string => {
 // 日志环境信息
 export const logEnvInfo = (): void => {
     if (isDev()) {
-        console.log(`🚀 当前环境: ${getEnv()}`);
-        console.log(`🔗 API地址: ${getApiBase()}`);
+        // console.log(`🚀 当前环境: ${getEnv()}`);
+        // console.log(`🔗 API地址: ${getApiBase()}`);
         console.log(`📱 应用名称: ${getAppName()}`);
     }
 };
