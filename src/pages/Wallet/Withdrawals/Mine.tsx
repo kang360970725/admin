@@ -65,7 +65,7 @@ const WithdrawalMine: React.FC = () => {
     return (
         <>
             <ProTable<WalletWithdrawalRequest>
-                headerTitle="我的提现（申请 + 记录）"
+                headerTitle="提现记录"
                 rowKey="id"
                 actionRef={actionRef}
                 search={false}

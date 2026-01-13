@@ -8,9 +8,9 @@ import { getWalletHolds, WalletHold } from '@/services/api';
 export default function WalletHolds() {
     const actionRef = useRef<ActionType>();
 
-    const columns: ProColumns<WalletHold>[] = [
-        { title: 'ID', dataIndex: 'id', width: 80, search: false },
-        { title: '用户ID', dataIndex: 'userId', width: 90, search: false },
+    const columns: any = [
+        // { title: 'ID', dataIndex: 'id', width: 80, search: false },
+        // { title: '用户ID', dataIndex: 'userId', width: 90, search: false },
         { title: '收益流水ID', dataIndex: 'earningTxId', width: 110, search: false },
         { title: '金额', dataIndex: 'amount', width: 120, search: false },
         {
