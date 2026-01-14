@@ -3,6 +3,7 @@ import React from 'react';
 import { Avatar, Dropdown, message, Typography } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { getCurrentUser } from './services/api';
+import { useIsMobile } from '@/utils/useIsMobile';
 import './global.less';
 
 const { Text } = Typography;
@@ -84,23 +85,27 @@ export async function getInitialState(): Promise<{
 export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const pathname = location?.pathname || window.location.pathname;
     const isMobileShell = pathname.startsWith('/m');
+    const isMobile = useIsMobile(768);
 
     return {
         logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
         title: '蓝猫陪玩管理系统',
         collapsible: false,
-        collapsedButtonRender: false,
 
-        // ✅ /m/*：隐藏菜单/头部/页脚，尽量“纯内容”
-        menuRender: isMobileShell ? false : undefined,
-        menuHeaderRender: isMobileShell ? false : undefined,
-        headerRender: isMobileShell ? false : undefined,
-        footerRender: isMobileShell ? false : undefined,
-        siderWidth: isMobileShell ? 0 : undefined,
-        // pure 模式会减少一些布局容器干扰（不同版本 prolayout 支持情况略有差异，保留不会出错）
-        pure: isMobileShell ? true : undefined,
-        contentStyle: isMobileShell ? { padding: 0, margin: 0 } : undefined,
-        pageTitleRender: isMobileShell ? false : undefined,
+        // ✅ 关键：移动端隐藏 ProLayout 外壳
+        menuRender: isMobile ? false : undefined,
+        menuHeaderRender: isMobile ? false : undefined,
+        headerRender: isMobile ? false : undefined,
+        footerRender: isMobile ? false : undefined,
+        collapsedButtonRender: isMobile ? false : undefined,
+        siderWidth: isMobile ? 0 : undefined,
+        pageTitleRender: isMobile ? false : undefined,
+
+        // ✅ 关键：移动端去掉内容区域 padding，让页面成为“纯内容”
+        contentStyle: isMobile ? { padding: 0, margin: 0 } : undefined,
+
+        // ✅ pure 模式（可选，支持则更干净）
+        pure: isMobile ? true : undefined,
 
         // ✅ 右上角个人信息区域（保留你原逻辑）
         avatarProps: {

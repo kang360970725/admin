@@ -16,8 +16,10 @@ import {
     Tabs,
     Tag,
     Typography,
+    FloatButton
 } from 'antd';
 import {
+    AppstoreOutlined, WalletOutlined, ProfileOutlined,
     ReloadOutlined,
     SearchOutlined,
     ThunderboltOutlined,
@@ -34,6 +36,7 @@ import {
     getOrders,
     getPlayerOptions,
 } from '@/services/api';
+import { useIsMobile } from '@/utils/useIsMobile';
 
 const { Text } = Typography;
 
@@ -79,6 +82,7 @@ const trunc1 = (x: any) => {
 };
 
 export default function CSWorkbenchPage() {
+    const isMobile = useIsMobile(768);
     // TAB：create / archived / wait_assign / wait_accept
     const [tab, setTab] = useState<'create' | 'ARCHIVED' | 'WAIT_ASSIGN' | 'WAIT_ACCEPT'>('create');
 
@@ -444,9 +448,9 @@ export default function CSWorkbenchPage() {
                 <Space direction="vertical" size={6} style={{ width: '100%' }}>
                     <Space align="center">
                         <Tag color="blue" style={{ borderRadius: 999, padding: '2px 10px' }}>
-                            手机端快捷创建
+                            快捷创建
                         </Tag>
-                        <Text type="secondary">必填项尽量少，减少误填；高级项可展开。</Text>
+                        <Text type="secondary">高级项可展开。</Text>
                     </Space>
 
                     <Form
@@ -906,6 +910,40 @@ export default function CSWorkbenchPage() {
                     ]}
                 />
             </div>
+            {isMobile ? (
+                <FloatButton.Group
+                    trigger="click"
+                    type="primary"
+                    style={{ right: 16, bottom: 16 }}
+                    icon={<AppstoreOutlined />}
+                >
+                    <FloatButton
+                        icon={<ReloadOutlined />}
+                        tooltip="刷新"
+                        onClick={() => {
+                            // 你工作台里如果有 fetchOrders(1) / fetchPlayers() 等，直接调用
+                            // 这里示例：刷新当前 TAB 的数据
+                            // @ts-ignore
+                            typeof fetchOrders === 'function' ? fetchOrders(1) : window.location.reload();
+                        }}
+                    />
+                    <FloatButton
+                        icon={<ProfileOutlined />}
+                        tooltip="订单"
+                        onClick={() => history.push('/orders')}
+                    />
+                    <FloatButton
+                        icon={<WalletOutlined />}
+                        tooltip="钱包"
+                        onClick={() => history.push('/wallet/overview')}
+                    />
+                    <FloatButton
+                        icon={<ThunderboltOutlined />}
+                        tooltip="工作台"
+                        onClick={() => history.push('/workbench')}
+                    />
+                </FloatButton.Group>
+            ) : null}
         </PageContainer>
     );
 }
