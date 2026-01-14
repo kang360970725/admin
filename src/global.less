@@ -102,3 +102,34 @@ body.bc-mobile-fullscreen .ant-pro-layout-content {
 :global(.ant-pro-sider-collapsed .ant-pro-sider-footer) {
   display: none !important;
 }
+/* ✅ 修复 ProComponents Login 容器在移动端产生的横向溢出 */
+@media (max-width: 767px) {
+  .bc-login,
+  .bc-login * {
+    box-sizing: border-box;
+  }
+
+  /* 关键：把 100vw 改成 100%，并兜底隐藏横向溢出 */
+  .bc-login .ant-pro-form-login-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  /* 有些版本 main 也会撑开 */
+  .bc-login .ant-pro-form-login-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  /* 再兜底：防止某些内部容器 min-width 撑开 */
+  .bc-login .ant-pro-form-login-container,
+  .bc-login .ant-pro-form-login-main,
+  .bc-login .ant-pro-form-login-container * {
+    min-width: 0 !important;
+    //height: auto !important;
+  }
+
+}
+

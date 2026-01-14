@@ -44,6 +44,7 @@ export async function login(data: { phone: string; password: string }) {
     return request<{ access_token: string; user: User }>(`${API_BASE}/auth/login`, {
         method: 'POST',
         data,
+        skipErrorHandler: true,
     });
 }
 
