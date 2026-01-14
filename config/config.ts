@@ -8,12 +8,10 @@ const envConfig = {
     APP_NAME: '蓝猫陪玩管理系统-开发',
   },
   test: {
-    // 如需可改为你的测试后端
     API_BASE: 'http://test-api.example.com',
     APP_NAME: '蓝猫陪玩管理系统-测试',
   },
   pre: {
-    // 如需可改为你的预发后端
     API_BASE: 'http://pre-api.example.com',
     APP_NAME: '蓝猫陪玩管理系统-预发',
   },
@@ -34,8 +32,9 @@ const currentEnv = getEnv();
 const config = envConfig[currentEnv];
 
 export default defineConfig({
-  title: config.APP_NAME,   // ✅ 浏览器 Tab 标题
+  title: config.APP_NAME, // ✅ 浏览器 Tab 标题
   links: [{ rel: 'icon', href: '/favicon.ico' }],
+
   // 运行时定义环境变量
   define: {
     'process.env.UMI_ENV': currentEnv,
@@ -48,14 +47,49 @@ export default defineConfig({
   model: {},
   initialState: {},
   request: {},
+
   layout: {
     title: config.APP_NAME,
   },
 
-  // 路由配置（保持你现有不动）
   routes: [
+    // ===========
+    // Auth / Public
+    // ===========
     { path: '/login', component: '@/pages/Login', layout: false },
+    { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
+    { path: '/403', component: '@/pages/403', layout: false },
 
+    // ===========
+    // ✅ Mobile routes (pure content)
+    // 说明：
+    // - 你已在 app.tsx 中根据 pathname.startsWith('/m') 隐藏 ProLayout
+    // - 这里仍建议显式 layout:false（更稳）
+    // ===========
+    {
+      path: '/m',
+      layout: false,
+      routes: [
+        // 移动端默认入口：工作台
+        { path: '/m', redirect: '/m/workbench' },
+
+        // ✅ 移动端客服工作台（创建订单 + 存单/待派/待接）
+        { path: '/m/workbench', component: '@/pages/CSWorkbench', access: 'canViewCSWorkbench' },
+
+        // ✅ 移动端快速查单：先复用订单列表（你后续可以做轻量页再替换组件）
+        { path: '/m/orders', component: './Orders', access: 'canViewOrdersList' },
+
+        // ✅ 移动端钱包：先复用概览页（后续可以做轻量钱包页再替换组件）
+        { path: '/m/wallet', component: '@/pages/Wallet/Overview' },
+
+        // ✅ 兜底 404（移动端）
+        { path: '*', component: '@/pages/404', layout: false },
+      ],
+    },
+
+    // ===========
+    // Desktop routes (ProLayout)
+    // ===========
     // ✅ 新增欢迎页：登录后的默认入口
     { path: '/welcome', name: '欢迎页', component: '@/pages/Welcome', icon: 'smile' },
 
@@ -66,16 +100,13 @@ export default defineConfig({
       access: 'canViewDashboard',
       routes: [
         { path: '/dashboard', redirect: '/dashboard/revenue' },
-        {
-          path: '/dashboard/revenue',
-          name: '营业额看板',
-          component: '@/pages/Dashboard/RevenueOverview',
-        },
+        { path: '/dashboard/revenue', name: '营业额看板', component: '@/pages/Dashboard/RevenueOverview' },
       ],
     },
 
-    // ✅ 根路径跳欢迎页（原来是 /users）
+    // ✅ 根路径跳欢迎页
     { path: '/', redirect: '/welcome' },
+
     {
       path: '/system',
       name: '系统管理',
@@ -86,6 +117,7 @@ export default defineConfig({
         { path: '/system/game-project-management', name: '菜单项目管理', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
       ],
     },
+
     {
       path: '/staff',
       name: '陪玩中心',
@@ -94,6 +126,8 @@ export default defineConfig({
         { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
       ],
     },
+
+    // ✅ PC端客服工作台入口保留（后台菜单中可见）
     { path: '/workbench', name: '客服工作台', icon: 'ThunderboltOutlined', component: '@/pages/CSWorkbench', access: 'canViewCSWorkbench' },
 
     {
@@ -105,55 +139,25 @@ export default defineConfig({
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },
+
     {
       path: '/wallet',
       name: '钱包',
       icon: 'WalletOutlined',
       routes: [
-        {
-          path: '/wallet',
-          redirect: '/wallet/overview',
-        },
-        {
-          path: '/wallet/overview',
-          name: '账户概览',
-          component: '@/pages/Wallet/Overview',
-          // access: 'canViewWallet', // 先不加，避免 access 未定义导致看不到
-        },
-        {
-          path: '/wallet/transactions',
-          name: '流水明细',
-          component: '@/pages/Wallet/Transactions',
-        },
-        // {
-        //   path: '/wallet/holds',
-        //   name: '冻结单',
-        //   component: '@/pages/Wallet/Holds',
-        // },
-        {
-          path: '/wallet/withdrawals',
-          name: '提现审批',
-          component: '@/pages/Wallet/Withdrawals',
-          access: 'canViewWithdrawals', // ✅ 新增权限点（下一步在 access.ts 里加）
-        },
-        {
-          path: '/wallet/withdrawals/records',
-          name: '提现记录',
-          component: '@/pages/Wallet/Withdrawals/Records',
-          access: 'canViewWithdrawals',
-        },
-        // {
-        //   path: '/wallet/withdrawals/mine',
-        //   name: '提现申请',
-        //   component: '@/pages/Wallet/Withdrawals/Mine',
-        //   // access: 'canViewWithdrawals', // 你也可以改成单独权限，例如 canApplyWithdrawal
-        // },
+        { path: '/wallet', redirect: '/wallet/overview' },
+        { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview' },
+        { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions' },
+        { path: '/wallet/withdrawals', name: '提现审批', component: '@/pages/Wallet/Withdrawals', access: 'canViewWithdrawals' },
+        { path: '/wallet/withdrawals/records', name: '提现记录', component: '@/pages/Wallet/Withdrawals/Records', access: 'canViewWithdrawals' },
       ],
     },
+
     { name: '用户管理', path: '/users', component: '@/pages/Users', icon: 'user', access: 'canViewUsers' },
-    { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
     { name: '评级管理', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },
-    { path: '/403', component: '@/pages/403', layout: false },
+
+    // ✅ 全局兜底 404
+    { path: '*', component: '@/pages/404', layout: false },
   ],
 
   npmClient: 'yarn',
