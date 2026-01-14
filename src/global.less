@@ -63,6 +63,37 @@
   padding: 0;
 }
 
+
+/* src/global.less */
+
+/* ✅ 只在移动端“全屏页面”生效 */
+body.bc-mobile-fullscreen {
+  /* 有些主题会在 body 或者 layout 容器上加 padding，先兜底清掉 */
+}
+
+/* 关键：覆盖 ProLayout 内容容器的左右 padding */
+body.bc-mobile-fullscreen .ant-pro-layout-content {
+  padding-inline: 0 !important;
+  padding: 0 !important;
+}
+
+/* 有些版本把 padding 加在 page-container 上，也一并干掉 */
+body.bc-mobile-fullscreen .ant-pro-page-container,
+body.bc-mobile-fullscreen .ant-pro-page-container-children-container,
+body.bc-mobile-fullscreen .ant-pro-page-container-content {
+  padding-inline: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+}
+
+/* 防止还有外层居中容器限制宽度 */
+body.bc-mobile-fullscreen .ant-pro-layout,
+body.bc-mobile-fullscreen .ant-pro-layout-container,
+body.bc-mobile-fullscreen .ant-pro-layout-content {
+  max-width: 100% !important;
+}
+
 /* 保险：侧栏区域不允许溢出到外面 */
 :global(.ant-pro-sider) {
   overflow: hidden;

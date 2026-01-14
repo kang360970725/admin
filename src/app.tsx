@@ -150,13 +150,27 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             },
         },
 
-        onPageChange: () => {
+        onPageChange: ({ location }: any) => {
             const token = localStorage.getItem('token');
             const path = window.location.pathname;
             const allowAnonymous = path === '/login' || path === '/reset-password';
 
             if (!token && !allowAnonymous) {
                 window.location.href = '/login';
+            }
+
+            const pathname = location?.pathname || window.location.pathname;
+
+            const isMobileRoute =
+                pathname.startsWith('/workbench') ||
+                pathname.startsWith('/orders/') || // 订单详情
+                pathname.startsWith('/m/'); // 如果你后面有 m 端路由
+
+            const cls = 'bc-mobile-fullscreen';
+            if (isMobileRoute) {
+                document.body.classList.add(cls);
+            } else {
+                document.body.classList.remove(cls);
             }
         },
     };
