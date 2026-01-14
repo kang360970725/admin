@@ -25,6 +25,9 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewSettlementExperience: has('settlements:experience:page'),
     canViewSettlementMonthly: has('settlements:monthly:page'),
 
+    // ✅ 客服工作台：复用订单列表权限（最小改动、零后端改造）
+    canViewCSWorkbench: has('orders:list:page'),
+
     // ✅ 钱包-提现审批
     canViewWithdrawals: has('wallet:withdrawals:page'),
 

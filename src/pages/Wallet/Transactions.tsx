@@ -1,9 +1,9 @@
-import React, {useRef} from 'react';
-import type {ActionType} from '@ant-design/pro-components';
-import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {message, Tag} from 'antd';
+import React, { useRef } from 'react';
+import type { ActionType } from '@ant-design/pro-components';
+import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { message, Tag } from 'antd';
 import dayjs from 'dayjs';
-import {getWalletTransactions} from '@/services/api';
+import { getWalletTransactions } from '@/services/api';
 
 // ⚠️ 这里不强依赖你 services 里 WalletTransaction 的类型（因为你后端刚加了 orderSerial）
 // 如果你 services/api.ts 里已经有 WalletTransaction 类型，可以把下面这段删掉，
@@ -27,6 +27,11 @@ type WalletTransactionRow = {
     settlementId?: number | null;
 
     reversalOfTxId?: number | null;
+
+    // ✅ 余额快照：本笔落账后的余额（后端 Wallet v0.3 新增）
+    availableAfter?: number | null;
+    frozenAfter?: number | null;
+
     createdAt?: string;
 };
 
@@ -34,48 +39,51 @@ export default function WalletTransactions() {
     const actionRef = useRef<ActionType>();
 
     // ✅ 前端展示字典（先写死，后续从 /meta/enums 补齐后再统一改成取字典）
-    const directionMetaMap: Record<string,
-        { color: string; text: string; icon: React.ReactNode }> = {
+    const directionMetaMap: Record<
+        string,
+        { color: string; text: string; icon: React.ReactNode }
+        > = {
         IN: {
             color: 'green',
             text: '收入',
-            icon: <span style={{fontWeight: 700}}>↑</span>,
+            icon: <span style={{ fontWeight: 700 }}>↑</span>,
         },
         OUT: {
             color: 'red',
             text: '支出',
-            icon: <span style={{fontWeight: 700}}>↓</span>,
+            icon: <span style={{ fontWeight: 700 }}>↓</span>,
         },
     };
+
     const bizTypeEnum: Record<string, { text: string }> = {
         // 兼容历史
-        SETTLEMENT_EARNING: {text: '结算收益'},
+        SETTLEMENT_EARNING: { text: '结算收益' },
 
         // ✅ 新的业务类型
-        SETTLEMENT_EARNING_BASE: {text: '结算收益'},
-        SETTLEMENT_EARNING_CARRY: {text: '补单收益'},
-        SETTLEMENT_BOMB_LOSS: {text: '炸单损耗'},
-        SETTLEMENT_EARNING_CS: {text: '客服分红'},
+        SETTLEMENT_EARNING_BASE: { text: '结算收益' },
+        SETTLEMENT_EARNING_CARRY: { text: '补单收益' },
+        SETTLEMENT_BOMB_LOSS: { text: '炸单损耗' },
+        SETTLEMENT_EARNING_CS: { text: '客服分红' },
 
-        RELEASE_FROZEN: {text: '解冻入账'},
-        REFUND_REVERSAL: {text: '退款冲正'},
+        RELEASE_FROZEN: { text: '解冻入账' },
+        REFUND_REVERSAL: { text: '退款冲正' },
 
-        WITHDRAW_RESERVE: {text: '提现预扣'},
-        WITHDRAW_RELEASE: {text: '提现退回'},
-        WITHDRAW_PAYOUT: {text: '提现出款'},
+        WITHDRAW_RESERVE: { text: '提现预扣' },
+        WITHDRAW_RELEASE: { text: '提现退回' },
+        WITHDRAW_PAYOUT: { text: '提现出款' },
     };
 
     const bizTypeColorMap: Record<string, string> = {
         // === 结算相关 ===
-        SETTLEMENT_EARNING: 'green',            // 兼容历史
-        SETTLEMENT_EARNING_BASE: 'green',       // 基础结算收益
-        SETTLEMENT_EARNING_CARRY: 'geekblue',   // 补单收益（从炸单池补）
-        SETTLEMENT_BOMB_LOSS: 'red',             // 炸单损耗（负收益）
-        SETTLEMENT_EARNING_CS: 'orange',         // 客服分红
+        SETTLEMENT_EARNING: 'green', // 兼容历史
+        SETTLEMENT_EARNING_BASE: 'green', // 基础结算收益
+        SETTLEMENT_EARNING_CARRY: 'geekblue', // 补单收益（从炸单池补）
+        SETTLEMENT_BOMB_LOSS: 'red', // 炸单损耗（负收益）
+        SETTLEMENT_EARNING_CS: 'orange', // 客服分红
 
         // === 钱包流转 ===
-        RELEASE_FROZEN: 'blue',                  // 解冻入账
-        REFUND_REVERSAL: 'volcano',              // 退款冲正
+        RELEASE_FROZEN: 'blue', // 解冻入账
+        REFUND_REVERSAL: 'volcano', // 退款冲正
 
         // === 提现 ===
         WITHDRAW_RESERVE: 'purple',
@@ -84,25 +92,21 @@ export default function WalletTransactions() {
     };
 
     const txStatusEnum: Record<string, { text: string }> = {
-        FROZEN: {text: '冻结'},
-        AVAILABLE: {text: '可用'},
-        REVERSED: {text: '已冲正'},
+        FROZEN: { text: '冻结' },
+        AVAILABLE: { text: '可用' },
+        REVERSED: { text: '已冲正' },
     };
 
     const columns: any = [
-        // { title: 'ID', dataIndex: 'id', width: 80, search: false },
-
-        // { title: '用户ID', dataIndex: 'userId', width: 90, search: false },
-
         {
             title: '流向',
             dataIndex: 'direction',
             width: 90,
             valueEnum: {
-                IN: {text: '收入'},
-                OUT: {text: '支出'},
+                IN: { text: '收入' },
+                OUT: { text: '支出' },
             },
-            render: (_, r) => {
+            render: (_: any, r: WalletTransactionRow) => {
                 const meta = directionMetaMap[r.direction];
                 if (!meta) return '-';
 
@@ -119,10 +123,9 @@ export default function WalletTransactions() {
             dataIndex: 'bizType',
             width: 160,
             valueEnum: bizTypeEnum,
-            render: (_, r) => {
+            render: (_: any, r: WalletTransactionRow) => {
                 const label = bizTypeEnum[r.bizType]?.text ?? r.bizType ?? '--';
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
-                // 想要更醒目一点就用 Tag
                 return <Tag color={color}>{label}</Tag>;
             },
         },
@@ -132,13 +135,13 @@ export default function WalletTransactions() {
             dataIndex: 'amount',
             width: 160,
             align: 'right',
-            render: (v, r) => {
+            render: (v: any, r: WalletTransactionRow) => {
                 const isIn = r.direction === 'IN';
                 return (
-                    <span style={{color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500}}>
-        {isIn ? '+' : '-'}
+                    <span style={{ color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500 }}>
+            {isIn ? '+' : '-'}
                         {Number(v).toFixed(1)}
-      </span>
+          </span>
                 );
             },
         },
@@ -148,72 +151,66 @@ export default function WalletTransactions() {
             dataIndex: 'status',
             width: 120,
             valueEnum: txStatusEnum,
-            render: (_, r) => {
+            render: (_: any, r: WalletTransactionRow) => {
                 const label = txStatusEnum[r.status]?.text ?? r.status ?? '--';
-                // ✅ 这里不指定颜色（你没要求），只做文本
                 return <Tag>{label}</Tag>;
+            },
+        },
+        {
+            title: '钱包余额',
+            dataIndex: 'totalAfter',
+            width: 160,
+            search: false,
+            align: 'right',
+            render: (_: any, row: WalletTransactionRow) => {
+                const a = (row as any).availableAfter;
+                const f = (row as any).frozenAfter;
+                if (a === null || a === undefined || f === null || f === undefined) return '-';
+                return <span>{(Number(a) + Number(f)).toFixed(2)}</span>;
             },
         },
 
         // ✅ 订单编号：展示 + 支持搜索
         {
-            title: '订单编号',
+            title: '关联订单',
             dataIndex: 'orderSerial',
             width: 160,
-            // 搜索框默认是 input，不需要 valueType
-            render: (_, r) => r.orderSerial || '--',
-        },
-        {
-            title: '可用余额',
-            dataIndex: 'availableBalance',
-            width: 120,
-            search: false,
-            render: (_, row) => {
-                const v = (row as any).availableBalance;
-                if (v === null || v === undefined) return '-';
-                return <span>{Number(v).toFixed(2)}</span>;
-            },
-        },
-        {
-            title: '冻结余额',
-            dataIndex: 'frozenBalance',
-            width: 120,
-            search: false,
-            render: (_, row) => {
-                const v = (row as any).frozenBalance;
-                if (v === null || v === undefined) return '-';
-                return <span>{Number(v).toFixed(2)}</span>;
-            },
+            render: (_: any, r: WalletTransactionRow) => r.orderSerial || '--',
         },
 
-        // ✅ 订单ID：不展示（你要求订单ID改为展示订单编号）
-        // 如果你仍希望保留“可搜索 orderId”但不展示，可用 hideInTable
+        // ✅ 微信钱包风格：本笔后余额（来自后端 availableAfter/frozenAfter）
         // {
-        //   title: '订单ID',
-        //   dataIndex: 'orderId',
-        //   hideInTable: true,
-        // },
-
-        // ✅ 屏蔽派单批次/结算ID（两列直接删掉）
-
-        // {
-        //     title: '来源',
-        //     dataIndex: 'sourceType',
-        //     width: 200,
+        //     title: '本笔后可用',
+        //     dataIndex: 'availableAfter',
+        //     width: 120,
         //     search: false,
-        //     render: (_, r) => {
-        //         const st = r.sourceType ?? '--';
-        //         const sid = r.sourceId ?? '--';
-        //         return `${st}:${sid}`;
+        //     align: 'right',
+        //     render: (_: any, row: WalletTransactionRow) => {
+        //         const v = (row as any).availableAfter;
+        //         if (v === null || v === undefined) return '-';
+        //         return <span>{Number(v).toFixed(2)}</span>;
+        //     },
+        // },
+        // {
+        //     title: '本笔后冻结',
+        //     dataIndex: 'frozenAfter',
+        //     width: 120,
+        //     search: false,
+        //     align: 'right',
+        //     render: (_: any, row: WalletTransactionRow) => {
+        //         const v = (row as any).frozenAfter;
+        //         if (v === null || v === undefined) return '-';
+        //         return <span>{Number(v).toFixed(2)}</span>;
         //     },
         // },
 
         {
             title: '时间',
             dataIndex: 'createdAt',
-            width: 160,
+            width: 220,
             search: false,
-            render: (_, r) => (r.createdAt ? dayjs(r.createdAt).format('YYYY-MM-DD HH:mm') : '--'),
+            render: (_: any, r: WalletTransactionRow) =>
+                r.createdAt ? dayjs(r.createdAt).format('YYYY-MM-DD HH:mm') : '--',
         },
     ];
 
@@ -223,17 +220,12 @@ export default function WalletTransactions() {
                 actionRef={actionRef}
                 rowKey="id"
                 columns={columns}
-                search={{labelWidth: 'auto'}}
-                pagination={{pageSize: 20}}
+                search={{ labelWidth: 'auto' }}
+                pagination={{ pageSize: 20 }}
                 request={async (params) => {
                     try {
-                        const {current, pageSize, ...rest} = params as any;
+                        const { current, pageSize, ...rest } = params as any;
 
-                        // ✅ 这里的 rest 会包含：
-                        // - direction / bizType / status
-                        // - orderSerial（我们新增的搜索字段）
-                        //
-                        // ⚠️ 要求后端 getWalletTransactions 支持 orderSerial 过滤（你已经在改后端了）
                         const res = await getWalletTransactions({
                             page: current ?? 1,
                             limit: pageSize ?? 20,
@@ -247,7 +239,7 @@ export default function WalletTransactions() {
                         };
                     } catch (e) {
                         message.error('获取钱包流水失败');
-                        return {data: [], total: 0, success: false};
+                        return { data: [], total: 0, success: false };
                     }
                 }}
                 summary={(pageData) => {
@@ -266,11 +258,11 @@ export default function WalletTransactions() {
                     return (
                         <ProTable.Summary>
                             <ProTable.Summary.Row>
-                                <ProTable.Summary.Cell index={1} colSpan={2}>
+                                <ProTable.Summary.Cell index={1} colSpan={6}>
                                     <strong>本页合计(仅作参考，解冻流水会重复计算)</strong>
                                 </ProTable.Summary.Cell>
 
-                                <ProTable.Summary.Cell index={2} colSpan={3} align="right">
+                                <ProTable.Summary.Cell index={2} colSpan={6} align="right">
                                     <div>
                                         <span style={{ color: '#52c41a',marginRight:20 }}>收入:+{inSum.toFixed(1)}</span>
                                         <span style={{ color: '#ff4d4f',marginRight:20 }}>支出:-{outSum.toFixed(1)}</span>
@@ -281,7 +273,6 @@ export default function WalletTransactions() {
                         </ProTable.Summary>
                     );
                 }}
-
             />
         </PageContainer>
     );

@@ -94,6 +94,8 @@ export default defineConfig({
         { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
       ],
     },
+    { path: '/workbench', name: '客服工作台', icon: 'ThunderboltOutlined', component: '@/pages/CSWorkbench', access: 'canViewCSWorkbench' },
+
     {
       path: '/orders',
       name: '订单管理',
