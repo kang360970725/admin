@@ -163,6 +163,28 @@ export default function WalletTransactions() {
             // 搜索框默认是 input，不需要 valueType
             render: (_, r) => r.orderSerial || '--',
         },
+        {
+            title: '可用余额',
+            dataIndex: 'availableBalance',
+            width: 120,
+            search: false,
+            render: (_, row) => {
+                const v = (row as any).availableBalance;
+                if (v === null || v === undefined) return '-';
+                return <span>{Number(v).toFixed(2)}</span>;
+            },
+        },
+        {
+            title: '冻结余额',
+            dataIndex: 'frozenBalance',
+            width: 120,
+            search: false,
+            render: (_, row) => {
+                const v = (row as any).frozenBalance;
+                if (v === null || v === undefined) return '-';
+                return <span>{Number(v).toFixed(2)}</span>;
+            },
+        },
 
         // ✅ 订单ID：不展示（你要求订单ID改为展示订单编号）
         // 如果你仍希望保留“可搜索 orderId”但不展示，可用 hideInTable

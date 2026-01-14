@@ -655,7 +655,7 @@ export async function applyWithdrawal(data: {
     amount: number;
     idempotencyKey: string;
     remark?: string;
-    channel?: 'MANUAL' | 'WECHAT';
+    channel?: string | 'MANUAL' | 'WECHAT';
 }) {
     return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/apply`, {
         method: 'POST',

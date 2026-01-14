@@ -63,9 +63,10 @@ export default function WalletOverview() {
 
             <Divider />
 
-            <WithdrawalMine />
-            {/*<ProCard title="提现（申请 + 我的记录）" bordered>*/}
-            {/*</ProCard>*/}
+            <WithdrawalMine
+                availableBalance={available}
+                onApplied={() => load()}
+            />
         </PageContainer>
     );
 }
