@@ -123,6 +123,7 @@ export default defineConfig({
       name: '陪玩中心',
       icon: 'TeamOutlined',
       routes: [
+        { path: '/staff/my-orders', name: '我的接单记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
         { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
       ],
     },

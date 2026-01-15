@@ -132,4 +132,27 @@ body.bc-mobile-fullscreen .ant-pro-layout-content {
   }
 
 }
+/* ✅ 修复：ProLayout 内容区默认 padding-inline: 40px，移动端边距过宽 */
+@media (max-width: 767px) {
+  /* ProLayout 内容区（最关键） */
+  .ant-pro-layout .ant-pro-layout-content {
+    padding-inline: 12px !important;
+    padding-block: 12px !important;
+  }
+
+  /* PageContainer 外层也可能带 padding */
+  .ant-pro-page-container {
+    padding-inline: 0 !important;
+  }
+  .ant-pro-page-container-children-container {
+    padding-inline: 0 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .bc-workbench-wrap {
+    overflow-x: hidden;
+  }
+}
+
 

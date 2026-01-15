@@ -172,10 +172,10 @@ export default function WalletTransactions() {
 
         // ✅ 订单编号：展示 + 支持搜索
         {
-            title: '关联订单',
-            dataIndex: 'orderSerial',
+            title: '订单编号',
+            dataIndex: 'orderAutoSerial',
             width: 160,
-            render: (_: any, r: WalletTransactionRow) => r.orderSerial || '--',
+            render: (_: any, r: WalletTransactionRow) => r.orderAutoSerial || '--',
         },
 
         // ✅ 微信钱包风格：本笔后余额（来自后端 availableAfter/frozenAfter）

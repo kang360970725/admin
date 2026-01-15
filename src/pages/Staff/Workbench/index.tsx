@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
     Button,
     Card,
@@ -16,8 +16,8 @@ import {
     Tag,
     Watermark,
 } from 'antd';
-import { PageContainer } from '@ant-design/pro-components';
-import { useModel } from '@umijs/max';
+import {PageContainer} from '@ant-design/pro-components';
+import {useModel} from '@umijs/max';
 import dayjs from 'dayjs';
 import {
     acceptDispatch,
@@ -26,15 +26,21 @@ import {
     dispatchRejectOrder,
     getEnumDicts,
     getMyDispatches,
-    getOrderDetail, ordersMyStats, usersWorkStatus,
+    getOrderDetail,
+    ordersMyStats,
+    usersWorkStatus,
 } from '@/services/api';
-import { pickStatusColor, pickStatusText } from '@/constants/status';
 
 type DictMap = Record<string, Record<string, string>>;
 
 const WorkbenchPage: React.FC = () => {
-    const { initialState, setInitialState, refresh } = useModel('@@initialState');
+    const {initialState, setInitialState} = useModel('@@initialState');
     const currentUser = initialState?.currentUser;
+
+    const isMobile = useMemo(() => {
+        if (typeof window === 'undefined') return false;
+        return window.matchMedia?.('(max-width: 767px)')?.matches;
+    }, []);
 
     const [myWorkStatus, setLocalWorkStatus] = useState<string>(
         String(initialState?.currentUser?.workStatus || 'IDLE'),
@@ -70,7 +76,6 @@ const WorkbenchPage: React.FC = () => {
     const [finishForm] = Form.useForm();
     const watchedTotalProgressWan = Form.useWatch('totalProgressWan', finishForm);
     const [guaranteedCompleteRemainingWan, setGuaranteedCompleteRemainingWan] = useState<number | null>(null);
-
 
     // 小时单预览 tick
     const [tick, setTick] = useState(Date.now());
@@ -127,9 +132,7 @@ const WorkbenchPage: React.FC = () => {
         const unitPrice = Number(snap?.price ?? order?.project?.price);
         const paid = Number(order?.paidAmount ?? order?.receivableAmount ?? 0);
 
-        const orderTime = order?.orderTime
-            ? dayjs(order.orderTime)
-            : dayjs(order?.createdAt || new Date());
+        const orderTime = order?.orderTime ? dayjs(order.orderTime) : dayjs(order?.createdAt || new Date());
 
         const isHourly = billingMode === 'HOURLY';
         const isGuaranteed = billingMode === 'GUARANTEED';
@@ -149,18 +152,7 @@ const WorkbenchPage: React.FC = () => {
             remainingWan = Math.max(0, base - done);
         }
 
-        return { billingMode, isHourly, isGuaranteed, estHours, estEnd, remainingWan };
-    };
-
-
-    // 估算：从 dispatch.settlements 里取本人的 finalEarnings（若不存在就返回 0）
-    const calcMyIncomeFromDispatch = (d: any) => {
-        const uid = Number(currentUser?.id);
-        const ss = Array.isArray(d?.settlements) ? d.settlements : [];
-        if (!uid || ss.length === 0) return 0;
-        return ss
-            .filter((s: any) => Number(s?.userId) === uid)
-            .reduce((sum: number, s: any) => sum + Number(s?.finalEarnings ?? 0), 0);
+        return {billingMode, isHourly, isGuaranteed, estHours, estEnd, remainingWan};
     };
 
     const refreshStats = async () => {
@@ -185,7 +177,7 @@ const WorkbenchPage: React.FC = () => {
         if (!orderId) return row;
         try {
             const detail = await getOrderDetail(orderId);
-            return { ...row, order: detail };
+            return {...row, order: detail};
         } catch (e) {
             return row;
         }
@@ -203,7 +195,7 @@ const WorkbenchPage: React.FC = () => {
             }
 
             const fetchFirst = async (status: 'WAIT_ACCEPT' | 'ACCEPTED') => {
-                const res: any = await getMyDispatches({ page: 1, limit: 10, status });
+                const res: any = await getMyDispatches({page: 1, limit: 10, status});
                 const list = Array.isArray(res?.data) ? res.data : [];
                 return list?.[0] || null;
             };
@@ -224,7 +216,7 @@ const WorkbenchPage: React.FC = () => {
                     setLocalWorkStatus('IDLE');
                     setInitialState?.((s: any) => ({
                         ...s,
-                        currentUser: { ...(s?.currentUser || {}), workStatus: 'IDLE' },
+                        currentUser: {...(s?.currentUser || {}), workStatus: 'IDLE'},
                     }));
                     setPoolMode('WAITING');
                     setPoolDispatch(await hydrateDispatchWithOrder(first));
@@ -235,7 +227,7 @@ const WorkbenchPage: React.FC = () => {
                 return;
             }
 
-            // ✅ 默认 IDLE：优先待接，否则兜底进行中并纠正状态（解决你说的“已接单但待接为空”）
+            // ✅ 默认 IDLE：优先待接，否则兜底进行中并纠正状态
             setPoolMode('WAITING');
 
             let first = await fetchFirst('WAIT_ACCEPT');
@@ -250,7 +242,7 @@ const WorkbenchPage: React.FC = () => {
                 setLocalWorkStatus('WORKING');
                 setInitialState?.((s: any) => ({
                     ...s,
-                    currentUser: { ...(s?.currentUser || {}), workStatus: 'WORKING' },
+                    currentUser: {...(s?.currentUser || {}), workStatus: 'WORKING'},
                 }));
                 setPoolMode('WORKING');
                 setPoolDispatch(await hydrateDispatchWithOrder(first));
@@ -264,7 +256,6 @@ const WorkbenchPage: React.FC = () => {
             setPoolLoading(false);
         }
     };
-
 
     useEffect(() => {
         void loadDictsOnce();
@@ -281,7 +272,7 @@ const WorkbenchPage: React.FC = () => {
 
     const updateMyWorkStatus = async (next: 'IDLE' | 'RESTING') => {
         try {
-            await usersWorkStatus({ workStatus: next });
+            await usersWorkStatus({workStatus: next});
 
             // ✅ 1) 立即更新本地状态（状态模块秒更新）
             setLocalWorkStatus(next);
@@ -296,15 +287,8 @@ const WorkbenchPage: React.FC = () => {
             }));
 
             message.success(next === 'IDLE' ? '已开始接单（等待中）' : '已进入休息中');
-
-            // ❌ 不再 refreshPool/refreshStats，不刷新整个页面
-            // （如果你后续想“只刷新订单池”，我再单独给你一个按钮触发 refreshPool）
         } catch (e: any) {
             message.error(e?.response?.data?.message || '更新状态失败');
-
-            // 可选：失败时从服务端拉一次最新用户状态兜底（只刷新状态模块）
-            // await refresh?.();
-            // updateMyWorkStatus(String(initialState?.currentUser?.workStatus || 'IDLE'));
         }
     };
 
@@ -319,7 +303,7 @@ const WorkbenchPage: React.FC = () => {
             if (!poolDispatch?.id) return;
 
             setRejectSubmitting(true);
-            await dispatchRejectOrder({ dispatchId: Number(poolDispatch.id), reason: String(v.reason || '').trim() });
+            await dispatchRejectOrder({dispatchId: Number(poolDispatch.id), reason: String(v.reason || '').trim()});
 
             message.success('已拒单，已进入休息中');
             setRejectOpen(false);
@@ -343,18 +327,16 @@ const WorkbenchPage: React.FC = () => {
             setLocalWorkStatus('WORKING');
             setInitialState?.((s: any) => ({
                 ...s,
-                currentUser: { ...(s?.currentUser || {}), workStatus: 'WORKING' },
+                currentUser: {...(s?.currentUser || {}), workStatus: 'WORKING'},
             }));
 
-            // ✅ 删掉这里的 refreshPool（避免读旧状态）
             void refreshStats();
         } catch (e: any) {
             message.error(e?.response?.data?.message || '接单失败');
         }
     };
 
-
-    // --- 存单/结单（沿用你现有逻辑，只是从“订单池”入口打开） ---
+    // --- 存单/结单 ---
     const openFinish = async (row: any, mode: 'ARCHIVE' | 'COMPLETE') => {
         await loadDictsOnce();
         setFinishMode(mode);
@@ -364,7 +346,7 @@ const WorkbenchPage: React.FC = () => {
             remark: '',
             deductMinutesOption: undefined,
             totalProgressWan: 0,
-            progresses: ps.map((p: any) => ({ userId: Number(p.userId), progressBaseWan: 0 })),
+            progresses: ps.map((p: any) => ({userId: Number(p.userId), progressBaseWan: 0})),
         });
 
         // 保底单结单：回显剩余保底（不允许输入）
@@ -383,7 +365,7 @@ const WorkbenchPage: React.FC = () => {
                     }
                     const remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
                     setGuaranteedCompleteRemainingWan(remaining);
-                    finishForm.setFieldsValue({ totalProgressWan: remaining });
+                    finishForm.setFieldsValue({totalProgressWan: remaining});
                 }
             } catch (e) {
                 console.error(e);
@@ -394,6 +376,15 @@ const WorkbenchPage: React.FC = () => {
 
         setTick(Date.now());
         setFinishOpen(true);
+    };
+
+    // ✅ 成功后：立即同步工作状态（修复“结单后状态卡不更新”）
+    const syncWorkStatusAfterFinish = (next: 'IDLE' | 'RESTING' | 'WORKING') => {
+        setLocalWorkStatus(next);
+        setInitialState?.((s: any) => ({
+            ...s,
+            currentUser: {...(s?.currentUser || {}), workStatus: next},
+        }));
     };
 
     const submitFinish = async () => {
@@ -415,7 +406,7 @@ const WorkbenchPage: React.FC = () => {
                     return;
                 }
                 const each = total / count;
-                progresses = ps.map((p: any) => ({ userId: Number(p.userId), progressBaseWan: each }));
+                progresses = ps.map((p: any) => ({userId: Number(p.userId), progressBaseWan: each}));
             }
 
             // 保底单结单：不传 progresses（后端兜底补齐）
@@ -438,6 +429,15 @@ const WorkbenchPage: React.FC = () => {
             }
 
             setFinishOpen(false);
+
+            // ✅ 关键：结单/存单后，立刻回到等待接单（状态卡立即变更，无需刷新页面）
+            // 如果你希望“存单后仍然 WORKING”，我可以把这句改成仅 COMPLETE 执行
+            syncWorkStatusAfterFinish('IDLE');
+
+            // ✅ 清一下当前单，避免 UI 还显示“进行中”
+            setPoolDispatch(null);
+            setPoolMode('WAITING');
+
             void refreshPool();
             void refreshStats();
         } catch (e: any) {
@@ -452,8 +452,81 @@ const WorkbenchPage: React.FC = () => {
         const key = workStatus;
         const text = t('PlayerWorkStatus', key, key);
         const color = key === 'IDLE' ? 'blue' : key === 'WORKING' ? 'green' : 'default';
-        return { text, color };
+        return {text, color};
     }, [dicts, workStatus]);
+
+    const renderStatusCard = () => {
+        const isWorking = workStatus === 'WORKING';
+        const isIdle = workStatus === 'IDLE';
+        const isResting = workStatus === 'RESTING';
+
+        const bg =
+            isWorking
+                ? 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))'
+                : isIdle
+                ? 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))'
+                : 'linear-gradient(135deg, rgba(148,163,184,0.18), rgba(100,116,139,0.10))';
+
+        const border =
+            isWorking ? 'rgba(34,197,94,0.35)'
+                : isIdle ? 'rgba(59,130,246,0.35)'
+                : 'rgba(148,163,184,0.35)';
+
+        return (
+            <Card
+                title="当前接单状态"
+                style={{
+                    background: bg,
+                    border: `1px solid ${border}`,
+                }}
+                bodyStyle={{padding: isMobile ? 14 : 16}}
+            >
+                <Space direction="vertical" style={{width: '100%'}} size={10}>
+                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12}}>
+                        <div style={{fontSize: isMobile ? 13 : 14, color: 'rgba(0,0,0,0.65)'}}>状态</div>
+                        <Tag
+                            color={statusMeta.color as any}
+                            style={{
+                                fontSize: isMobile ? 14 : 16,
+                                padding: isMobile ? '6px 12px' : '8px 14px',
+                                borderRadius: 999,
+                                fontWeight: 700,
+                                letterSpacing: 0.5,
+                            }}
+                        >
+                            {statusMeta.text}
+                        </Tag>
+                    </div>
+
+                    <Space wrap>
+                        <Button
+                            type="primary"
+                            disabled={isWorking || isIdle}
+                            onClick={() => updateMyWorkStatus('IDLE')}
+                        >
+                            开始接单
+                        </Button>
+
+                        <Button
+                            disabled={isWorking || isResting}
+                            onClick={() => updateMyWorkStatus('RESTING')}
+                        >
+                            休息一下
+                        </Button>
+
+                        <Button onClick={() => refreshPool()} loading={poolLoading}>
+                            刷新订单池
+                        </Button>
+                    </Space>
+
+                    <div style={{color: 'rgba(0,0,0,.55)', fontSize: 12, lineHeight: 1.6}}>
+                        等待中会接收派单；接单中不会被再次派单；休息中不会接收新派单。
+                    </div>
+                </Space>
+            </Card>
+        );
+    };
+
     const renderPoolCard = () => {
         const extraBtns = (
             <Button onClick={() => refreshPool()} loading={poolLoading}>
@@ -464,11 +537,9 @@ const WorkbenchPage: React.FC = () => {
         // 休息中
         if (workStatus === 'RESTING') {
             return (
-                <Card title="订单池" extra={extraBtns}>
-                    <div style={{ color: 'rgba(0,0,0,.45)' }}>
-                        当前为休息中，不会接收新派单。
-                    </div>
-                    <div style={{ marginTop: 12 }}>
+                <Card title="订单池" extra={extraBtns} bodyStyle={{padding: isMobile ? 14 : 16}}>
+                    <div style={{color: 'rgba(0,0,0,.55)'}}>当前为休息中，不会接收新派单。</div>
+                    <div style={{marginTop: 12}}>
                         <Button type="primary" onClick={() => updateMyWorkStatus('IDLE')}>
                             开始接单
                         </Button>
@@ -480,16 +551,14 @@ const WorkbenchPage: React.FC = () => {
         // 空态
         if (!poolDispatch) {
             return (
-                <Card title={workStatus === 'WORKING' ? '订单池（进行中）' : '订单池（待接单）'} extra={extraBtns}>
-                    <div style={{ color: 'rgba(0,0,0,.45)' }}>
-                        暂未派单。
-                    </div>
-                    <div style={{ marginTop: 12 }}>
-                        {workStatus === 'WORKING' ? (
-                            <Button onClick={() => updateMyWorkStatus('RESTING')}>休息一下</Button>
-                        ) : (
-                            <Button onClick={() => updateMyWorkStatus('RESTING')}>休息一下</Button>
-                        )}
+                <Card
+                    title={workStatus === 'WORKING' ? '订单池（进行中）' : '订单池（待接单）'}
+                    extra={extraBtns}
+                    bodyStyle={{padding: isMobile ? 14 : 16}}
+                >
+                    <div style={{color: 'rgba(0,0,0,.55)'}}>暂未派单。</div>
+                    <div style={{marginTop: 12}}>
+                        <Button onClick={() => updateMyWorkStatus('RESTING')}>休息一下</Button>
                     </div>
                 </Card>
             );
@@ -511,42 +580,48 @@ const WorkbenchPage: React.FC = () => {
                     .filter(Boolean)
                     .join('、')
                 : '-';
-        //是否已经接单
-        const isAccept = ps.length > 0
-            && ps.some((p: any) =>  currentUser?.id === p?.userId && !!p?.acceptedAt)
 
-        // 待接单（等待中）
+        // 是否已经接单（自己）
+        const isAccept =
+            ps.length > 0 && ps.some((p: any) => currentUser?.id === p?.userId && !!p?.acceptedAt);
+
+        // 待接单
         if (workStatus === 'IDLE') {
             return (
-                <Card title="订单池（待接单）" extra={extraBtns}>
-                    <Descriptions size="small" column={2} bordered>
+                <Card title="订单池（待接单）" extra={extraBtns} bodyStyle={{padding: isMobile ? 14 : 16}}>
+                    <Descriptions size="small" column={isMobile ? 1 : 2} bordered>
                         <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
                         <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
                         <Descriptions.Item label="派单时间">{assignedAt}</Descriptions.Item>
                         <Descriptions.Item label="派单客服">{dispatcherText}</Descriptions.Item>
-                        <Descriptions.Item label="参与者（本轮）" span={2}>
+                        <Descriptions.Item label="参与者（本轮）" span={isMobile ? 1 : 2}>
                             {playerNames}
                         </Descriptions.Item>
                     </Descriptions>
 
-                    <Divider style={{ margin: '12px 0' }} />
+                    <Divider style={{margin: '12px 0'}}/>
 
-                    {isAccept ? <Space>
-                        <div>您已接单，请等待所有打手均确认接单。</div>
-                        <Button onClick={() => refreshPool()} loading={poolLoading}>
-                            立即刷新
-                        </Button>
-                    </Space> : <Space>
-                        <Button type="primary" onClick={submitAccept} loading={poolLoading}>
-                            接单
-                        </Button>
-                        <Button danger onClick={openReject}>
-                            拒单
-                        </Button>
-                    </Space>}
+                    {isAccept ? (
+                        <Space direction={isMobile ? 'vertical' : 'horizontal'}
+                               style={{width: isMobile ? '100%' : 'auto'}}>
+                            <div>您已接单，请等待所有打手均确认接单。</div>
+                            <Button onClick={() => refreshPool()} loading={poolLoading}>
+                                立即刷新
+                            </Button>
+                        </Space>
+                    ) : (
+                        <Space wrap>
+                            <Button type="primary" onClick={submitAccept} loading={poolLoading}>
+                                接单
+                            </Button>
+                            <Button danger onClick={openReject}>
+                                拒单
+                            </Button>
+                        </Space>
+                    )}
 
-                    <Divider style={{ margin: '12px 0' }} />
-                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, lineHeight: 1.7 }}>
+                    <Divider style={{margin: '12px 0'}}/>
+                    <div style={{color: 'rgba(0,0,0,.55)', fontSize: 12, lineHeight: 1.7}}>
                         <div>接单前不展示敏感信息。</div>
                         <div>拒单需填写原因，拒单后将自动进入休息中。</div>
                     </div>
@@ -554,29 +629,33 @@ const WorkbenchPage: React.FC = () => {
             );
         }
 
-        // 进行中（接单中）：把旧接单弹窗内容整合到此处，并展示存单/结单
+        // 进行中
         const customerId = order?.customerGameId || '-';
-        const wmText = `${currentUser?.name ?? ''} ${currentUser?.username || currentUser?.phone || ''}`.trim() || 'BlueCat';
+        const wmText =
+            `${currentUser?.name ?? ''} ${currentUser?.username || currentUser?.phone || ''}`.trim() || 'BlueCat';
         const extra = buildAcceptedExtraInfo(poolDispatch);
 
         return (
-            <Card title="订单池（进行中）" extra={extraBtns}>
+            <Card title="订单池（进行中）" extra={extraBtns} bodyStyle={{padding: isMobile ? 14 : 16}}>
                 <Watermark
                     content={wmText}
                     gap={[110, 88]}
-                    font={{ fontSize: 14, color: 'rgba(0,0,0,0.10)' }}
+                    font={{fontSize: 14, color: 'rgba(0,0,0,0.10)'}}
                     zIndex={9}
                 >
-                    <Descriptions size="small" column={2} bordered>
+                    <Descriptions size="small" column={isMobile ? 1 : 2} bordered>
                         <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
                         <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
                         <Descriptions.Item label="派单时间">{assignedAt}</Descriptions.Item>
                         <Descriptions.Item label="派单客服">{dispatcherText}</Descriptions.Item>
 
-                        <Descriptions.Item label="客户ID（可复制）" span={2}>
-                            <Space>
+                        <Descriptions.Item label="客户ID（可复制）" span={isMobile ? 1 : 2}>
+                            <Space wrap>
                                 <Tag color="red">{String(customerId)}</Tag>
-                                <Button size="small" onClick={() => navigator?.clipboard?.writeText?.(String(customerId))}>
+                                <Button
+                                    size="small"
+                                    onClick={() => navigator?.clipboard?.writeText?.(String(customerId))}
+                                >
                                     复制
                                 </Button>
                             </Space>
@@ -586,7 +665,8 @@ const WorkbenchPage: React.FC = () => {
                             <>
                                 <Descriptions.Item label="订单类型">保底单</Descriptions.Item>
                                 <Descriptions.Item label="剩余保底">
-                                    <Tag color="gold">{extra.remainingWan == null ? '-' : `${extra.remainingWan.toFixed(2)} 万`}</Tag>
+                                    <Tag
+                                        color="gold">{extra.remainingWan == null ? '-' : `${extra.remainingWan.toFixed(2)} 万`}</Tag>
                                 </Descriptions.Item>
                             </>
                         ) : null}
@@ -595,31 +675,36 @@ const WorkbenchPage: React.FC = () => {
                             <>
                                 <Descriptions.Item label="订单类型">小时单</Descriptions.Item>
                                 <Descriptions.Item label="预计小时">
-                                    <Tag color="blue">{extra.estHours == null ? '-' : `${extra.estHours.toFixed(2)} 小时`}</Tag>
+                                    <Tag
+                                        color="blue">{extra.estHours == null ? '-' : `${extra.estHours.toFixed(2)} 小时`}</Tag>
                                 </Descriptions.Item>
-                                <Descriptions.Item label="预计结单时间" span={2}>
+                                <Descriptions.Item label="预计结单时间" span={isMobile ? 1 : 2}>
                                     <Tag color="geekblue">{extra.estEnd ?? '-'}</Tag>
-                                    <span style={{ marginLeft: 8, color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
-                  （按实付/单价估算 + 20 分钟缓冲）
-                </span>
+                                    {!isMobile ? (
+                                        <span style={{marginLeft: 8, color: 'rgba(0,0,0,.45)', fontSize: 12}}>
+                      （按实付/单价估算 + 20 分钟缓冲）
+                    </span>
+                                    ) : null}
                                 </Descriptions.Item>
                             </>
                         ) : null}
 
-                        <Descriptions.Item label="参与者（本轮）" span={2}>
+                        <Descriptions.Item label="参与者（本轮）" span={isMobile ? 1 : 2}>
                             {playerNames}
                         </Descriptions.Item>
                     </Descriptions>
 
-                    <Divider style={{ margin: '12px 0' }} />
+                    <Divider style={{margin: '12px 0'}}/>
 
-                    <Space>
+                    <Space wrap style={{width: '100%'}}>
                         <Button onClick={() => openFinish(poolDispatch, 'ARCHIVE')}>存单</Button>
-                        <Button type="primary" onClick={() => openFinish(poolDispatch, 'COMPLETE')}>结单</Button>
+                        <Button type="primary" onClick={() => openFinish(poolDispatch, 'COMPLETE')}>
+                            结单
+                        </Button>
                     </Space>
 
-                    <Divider style={{ margin: '12px 0' }} />
-                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, lineHeight: 1.7 }}>
+                    <Divider style={{margin: '12px 0'}}/>
+                    <div style={{color: 'rgba(0,0,0,.55)', fontSize: 12, lineHeight: 1.7}}>
                         <div>敏感信息仅接单后可见，禁止截图外传。</div>
                         <div>存单：记录本轮保底进度；结单：触发结算。</div>
                     </div>
@@ -628,164 +713,140 @@ const WorkbenchPage: React.FC = () => {
         );
     };
 
-
     return (
         <PageContainer title="打手工作台" loading={false}>
-            {/* 顶部看板 */}
-            <Row gutter={[12, 12]}>
-                <Col xs={24} md={12} lg={6}>
-                    <Card loading={statsLoading}>
-                        <Statistic title="今日接单" value={todayCount} />
-                    </Card>
-                </Col>
-                <Col xs={24} md={12} lg={6}>
-                    <Card loading={statsLoading}>
-                        <Statistic title="今日收入" value={todayIncome} precision={2} prefix="¥" />
-                    </Card>
-                </Col>
-                <Col xs={24} md={12} lg={6}>
-                    <Card loading={statsLoading}>
-                        <Statistic title="本月累计接单" value={monthCount} />
-                    </Card>
-                </Col>
-                <Col xs={24} md={12} lg={6}>
-                    <Card loading={statsLoading}>
-                        <Statistic title="本月累计收入" value={monthIncome} precision={2} prefix="¥" />
-                    </Card>
-                </Col>
-            </Row>
+            {/* ✅ 移动端：收窄边距，避免两侧过宽 */}
+            <div className="bc-workbench-wrap">
+                <div
+                    style={{
+                        width: '100%',
+                        maxWidth: isMobile ? '100%' : 1200,
+                        margin: '0 auto',
+                        padding: isMobile ? '0' : 0,
+                    }}
+                >
+                    {/* 顶部看板 */}
+                    <Row gutter={[12, 12]}>
+                        <Col xs={12} md={12} lg={6}>
+                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
+                                <Statistic title="今日接单" value={todayCount}/>
+                            </Card>
+                        </Col>
+                        <Col xs={12} md={12} lg={6}>
+                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
+                                <Statistic title="今日收入" value={todayIncome} precision={2} prefix="¥"/>
+                            </Card>
+                        </Col>
+                        <Col xs={12} md={12} lg={6}>
+                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
+                                <Statistic title="本月接单" value={monthCount}/>
+                            </Card>
+                        </Col>
+                        <Col xs={12} md={12} lg={6}>
+                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
+                                <Statistic title="本月收入" value={monthIncome} precision={2} prefix="¥"/>
+                            </Card>
+                        </Col>
+                    </Row>
 
-            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
-                <Col xs={24} lg={8}>
-                    <Card
-                        title="当前接单状态"
-                        extra={
-                            <Space>
-                                {/*<Button onClick={() => refreshStats()} loading={statsLoading}>刷新数据</Button>*/}
-                            </Space>
-                        }
+                    <Row gutter={[12, 12]} style={{marginTop: 12}}>
+                        <Col xs={24} lg={8}>
+                            {renderStatusCard()}
+                        </Col>
+
+                        <Col xs={24} lg={16}>
+                            {renderPoolCard()}
+                        </Col>
+                    </Row>
+
+                    {/* 拒单 */}
+                    <Modal
+                        open={rejectOpen}
+                        title="拒单"
+                        onCancel={() => setRejectOpen(false)}
+                        onOk={submitReject}
+                        confirmLoading={rejectSubmitting}
+                        destroyOnClose
                     >
-                        <Space direction="vertical" style={{ width: '100%' }}>
-                            <div>
-                                <Tag color={statusMeta.color} style={{ fontSize: 14, padding: '3px 10px' }}>
-                                    {statusMeta.text}
-                                </Tag>
-                            </div>
-
-                            <Space>
-                                <Button
-                                    type="primary"
-                                    disabled={workStatus === 'WORKING' || workStatus === 'IDLE'}
-                                    onClick={() => updateMyWorkStatus('IDLE')}
-                                >
-                                    开始接单
-                                </Button>
-
-                                <Button
-                                    disabled={workStatus === 'WORKING' || workStatus === 'RESTING'}
-                                    onClick={() => updateMyWorkStatus('RESTING')}
-                                >
-                                    休息一下
-                                </Button>
-                            </Space>
-
-                            <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
-                                等待中会接收派单；接单中不会被再次派单；休息中不会接收新派单。
-                            </div>
-                        </Space>
-                    </Card>
-                </Col>
-
-                <Col xs={24} lg={16}>
-                    {renderPoolCard()}
-                </Col>
-            </Row>
-
-            {/* 拒单 */}
-            <Modal
-                open={rejectOpen}
-                title="拒单"
-                onCancel={() => setRejectOpen(false)}
-                onOk={submitReject}
-                confirmLoading={rejectSubmitting}
-                destroyOnClose
-            >
-                <Form form={rejectForm} layout="vertical">
-                    <Form.Item
-                        name="reason"
-                        label="拒单原因"
-                        rules={[
-                            { required: true, message: '请填写拒单原因' },
-                            { max: 200, message: '最多 200 字' },
-                        ]}
-                    >
-                        <Input.TextArea rows={4} placeholder="例如：临时有事 / 设备异常 / 正在打单" />
-                    </Form.Item>
-                </Form>
-                <div style={{ marginTop: 8, color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
-                    拒单后将自动切换为“休息中”。
-                </div>
-            </Modal>
-
-            {/* 存单/结单 */}
-            <Modal
-                open={finishOpen}
-                title={finishMode === 'ARCHIVE' ? '存单' : '结单'}
-                onCancel={() => setFinishOpen(false)}
-                onOk={submitFinish}
-                confirmLoading={finishSubmitting}
-                destroyOnClose
-                width={720}
-            >
-                <Form form={finishForm} layout="vertical">
-                    {poolDispatch && isHourly(poolDispatch) ? (
-                        <>
-                            <Divider style={{ marginTop: 0 }}>小时单</Divider>
-                            <div style={{ marginBottom: 8, color: 'rgba(0,0,0,.45)' }}>
-                                当前时间：{dayjs(tick).format('YYYY-MM-DD HH:mm')}
-                            </div>
-                            <Form.Item name="deductMinutesOption" label="扣时选项（可选）">
-                                <Input placeholder="例如：M10/M20/M30（由后端枚举兜底）" />
+                        <Form form={rejectForm} layout="vertical">
+                            <Form.Item
+                                name="reason"
+                                label="拒单原因"
+                                rules={[
+                                    {required: true, message: '请填写拒单原因'},
+                                    {max: 200, message: '最多 200 字'},
+                                ]}
+                            >
+                                <Input.TextArea rows={4} placeholder="例如：临时有事 / 设备异常 / 正在打单"/>
                             </Form.Item>
-                        </>
-                    ) : null}
+                        </Form>
+                        <div style={{marginTop: 8, color: 'rgba(0,0,0,.45)', fontSize: 12}}>
+                            拒单后将自动切换为“休息中”。
+                        </div>
+                    </Modal>
 
-                    {poolDispatch && isGuaranteed(poolDispatch) ? (
-                        <>
-                            <Divider style={{ marginTop: 0 }}>保底单</Divider>
-
-                            {finishMode === 'COMPLETE' ? (
-                                <Card size="small" style={{ marginBottom: 12 }}>
-                                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
-                                        本轮结单将按剩余保底兜底补齐（后端口径）。当前剩余：
+                    {/* 存单/结单 */}
+                    <Modal
+                        open={finishOpen}
+                        title={finishMode === 'ARCHIVE' ? '存单' : '结单'}
+                        onCancel={() => setFinishOpen(false)}
+                        onOk={submitFinish}
+                        confirmLoading={finishSubmitting}
+                        destroyOnClose
+                        width={isMobile ? '96vw' : 720}
+                    >
+                        <Form form={finishForm} layout="vertical">
+                            {poolDispatch && isHourly(poolDispatch) ? (
+                                <>
+                                    <Divider style={{marginTop: 0}}>小时单</Divider>
+                                    <div style={{marginBottom: 8, color: 'rgba(0,0,0,.45)'}}>
+                                        当前时间：{dayjs(tick).format('YYYY-MM-DD HH:mm')}
                                     </div>
-                                    <div style={{ fontSize: 18, fontWeight: 600 }}>
-                                        {guaranteedCompleteRemainingWan == null ? '-' : guaranteedCompleteRemainingWan} 万
-                                    </div>
-                                </Card>
-                            ) : (
-                                <Form.Item
-                                    name="totalProgressWan"
-                                    label="本轮总保底进度(万)"
-                                    rules={[{ required: true, message: '请填写本轮总保底进度' }]}
-                                >
-                                    <InputNumber style={{ width: '100%' }} />
-                                </Form.Item>
-                            )}
-
-                            {finishMode === 'ARCHIVE' ? (
-                                <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, marginTop: -6 }}>
-                                    系统会按参与者人数均分：当前每人约 {(Number(watchedTotalProgressWan || 0) / (participantsActive(poolDispatch).length || 1)).toFixed(2)} 万
-                                </div>
+                                    <Form.Item name="deductMinutesOption" label="扣时选项（可选）">
+                                        <Input placeholder="例如：M10/M20/M30（由后端枚举兜底）"/>
+                                    </Form.Item>
+                                </>
                             ) : null}
-                        </>
-                    ) : null}
 
-                    <Form.Item name="remark" label="备注（可选）">
-                        <Input.TextArea rows={3} placeholder="异常说明/备注" />
-                    </Form.Item>
-                </Form>
-            </Modal>
+                            {poolDispatch && isGuaranteed(poolDispatch) ? (
+                                <>
+                                    <Divider style={{marginTop: 0}}>保底单</Divider>
+
+                                    {finishMode === 'COMPLETE' ? (
+                                        <Card size="small" style={{marginBottom: 12}}>
+                                            <div style={{color: 'rgba(0,0,0,.45)', fontSize: 12}}>
+                                                本轮结单将按剩余保底兜底补齐（后端口径）。当前剩余：
+                                            </div>
+                                            <div style={{fontSize: 18, fontWeight: 600}}>
+                                                {guaranteedCompleteRemainingWan == null ? '-' : guaranteedCompleteRemainingWan} 万
+                                            </div>
+                                        </Card>
+                                    ) : (
+                                        <Form.Item
+                                            name="totalProgressWan"
+                                            label="本轮总保底进度(万)"
+                                            rules={[{required: true, message: '请填写本轮总保底进度'}]}
+                                        >
+                                            <InputNumber style={{width: '100%'}}/>
+                                        </Form.Item>
+                                    )}
+
+                                    {finishMode === 'ARCHIVE' ? (
+                                        <div style={{color: 'rgba(0,0,0,.45)', fontSize: 12, marginTop: -6}}>
+                                            系统会按参与者人数均分：当前每人约{' '}
+                                            {(Number(watchedTotalProgressWan || 0) / (participantsActive(poolDispatch).length || 1)).toFixed(2)} 万
+                                        </div>
+                                    ) : null}
+                                </>
+                            ) : null}
+
+                            <Form.Item name="remark" label="备注（可选）">
+                                <Input.TextArea rows={3} placeholder="异常说明/备注"/>
+                            </Form.Item>
+                        </Form>
+                    </Modal>
+                </div>
+            </div>
         </PageContainer>
     );
 };

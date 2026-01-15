@@ -44,7 +44,6 @@ const MyOrdersPage: React.FC = () => {
             {
                 title: '订单号',
                 dataIndex: ['order', 'autoSerial'],
-                width: 160,
                 ellipsis: true,
             },
             {
@@ -55,64 +54,62 @@ const MyOrdersPage: React.FC = () => {
                     row?.order?.project?.name || row?.order?.projectSnapshot?.name || '-',
             },
             {
-                title: '计费',
+                title: '订单类型',
                 dataIndex: ['order', 'projectSnapshot', 'billingMode'],
-                width: 110,
                 render: (_, row) => {
                     const billingMode =
                         row?.order?.projectSnapshot?.billingMode || row?.order?.project?.billingMode;
                     return <Tag>{t('BillingMode', billingMode, billingMode)}</Tag>;
                 },
             },
-            {
-                title: '订单状态',
-                dataIndex: ['order', 'status'],
-                width: 120,
-                valueType: 'select',
-                render: (_, row) => {
-                    const v = row?.order?.status;
-                    return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
-                        {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
-                    </Tag>;
-                },
-            },
-            {
-                title: '本轮派单状态',
-                dataIndex: 'status',
-                width: 140,
-                valueType: 'select',
-                render: (_, row) => {
-                    const v = row?.status;
-                    return (
-                        <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
-                            {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
-                        </Tag>
-                    );
-                },
-            },
-            {
-                title: '本轮参与者',
-                dataIndex: 'participants',
-                render: (_, row) => {
-                    const ps = Array.isArray(row?.participants) ? row.participants : [];
-                    const actives = ps.filter((p: any) => p?.isActive !== false);
-                    if (actives.length <= 0) return '-';
-                    return (
-                        <Space wrap size={[6, 6]}>
-                            {actives.map((p: any) => {
-                                const u = p?.user;
-                                const name = u?.name || '未命名';
-                                const phone = u?.phone || '-';
-                                return <Tag key={p?.id}>{`${name}（${phone}）`}</Tag>;
-                            })}
-                        </Space>
-                    );
-                },
-            },
+            // {
+            //     title: '订单状态',
+            //     dataIndex: ['order', 'status'],
+            //     width: 120,
+            //     valueType: 'select',
+            //     render: (_, row) => {
+            //         const v = row?.order?.status;
+            //         return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
+            //             {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
+            //         </Tag>;
+            //     },
+            // },
+            // {
+            //     title: '本轮派单状态',
+            //     dataIndex: 'status',
+            //     width: 140,
+            //     valueType: 'select',
+            //     render: (_, row) => {
+            //         const v = row?.status;
+            //         return (
+            //             <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
+            //                 {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
+            //             </Tag>
+            //         );
+            //     },
+            // },
+            // {
+            //     title: '本轮参与者',
+            //     dataIndex: 'participants',
+            //     render: (_, row) => {
+            //         const ps = Array.isArray(row?.participants) ? row.participants : [];
+            //         const actives = ps.filter((p: any) => p?.isActive !== false);
+            //         if (actives.length <= 0) return '-';
+            //         return (
+            //             <Space wrap size={[6, 6]}>
+            //                 {actives.map((p: any) => {
+            //                     const u = p?.user;
+            //                     const name = u?.name || '未命名';
+            //                     const phone = u?.phone || '-';
+            //                     return <Tag key={p?.id}>{`${name}（${phone}）`}</Tag>;
+            //                 })}
+            //             </Space>
+            //         );
+            //     },
+            // },
             {
                 title: '接单时间',
                 dataIndex: 'updatedAt',
-                width: 170,
                 render: (_, row) => {
                     // participant.acceptedAt 如果你想更精准可改成“当前用户的 acceptedAt”
                     const ps = Array.isArray(row?.participants) ? row.participants : [];
@@ -121,31 +118,31 @@ const MyOrdersPage: React.FC = () => {
                     return v ? new Date(v).toLocaleString() : '-';
                 },
             },
-            {
-                title: '实付金额',
-                dataIndex: ['order', 'paidAmount'],
-                width: 110,
-                render: (_, row) => {
-                    const v = row?.order?.paidAmount;
-                    return v == null ? '-' : `¥${v}`;
-                },
-            },
-            {
-                title: '操作',
-                valueType: 'option',
-                width: 140,
-                render: (_, row) => {
-                    return [
-                        <Button
-                            key="detail"
-                            type="link"
-                            onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}
-                        >
-                            查看订单
-                        </Button>,
-                    ];
-                },
-            },
+            // {
+            //     title: '实付金额',
+            //     dataIndex: ['order', 'paidAmount'],
+            //     width: 110,
+            //     render: (_, row) => {
+            //         const v = row?.order?.paidAmount;
+            //         return v == null ? '-' : `¥${v}`;
+            //     },
+            // },
+            // {
+            //     title: '操作',
+            //     valueType: 'option',
+            //     width: 140,
+            //     render: (_, row) => {
+            //         return [
+            //             <Button
+            //                 key="detail"
+            //                 type="link"
+            //                 onClick={() => navigate(`/orders/${row?.orderId || row?.order?.id}`)}
+            //             >
+            //                 查看订单
+            //             </Button>,
+            //         ];
+            //     },
+            // },
         ];
     }, [dicts, navigate]);
 
