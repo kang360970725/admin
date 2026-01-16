@@ -135,6 +135,7 @@ export default defineConfig({
       path: '/orders',
       name: '订单管理',
       icon: 'ProfileOutlined',
+      access: 'canViewOrdersList',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
