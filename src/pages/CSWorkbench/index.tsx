@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PageContainer } from '@ant-design/pro-components';
+import {ActionType, PageContainer} from '@ant-design/pro-components';
 import {
     Badge,
     Button,
@@ -31,7 +31,7 @@ import {
     CopyOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { history } from '@umijs/max';
+import {history, useNavigate} from '@umijs/max';
 import {
     assignDispatch,
     createOrder,
@@ -40,6 +40,7 @@ import {
     getPlayerOptions,
 } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
+import OrderUpsertModal from "@/pages/Orders/components/OrderForm";
 
 const { Text } = Typography;
 
@@ -104,7 +105,12 @@ const useDebouncedFn = (fn: (kw?: string) => void, delay = 250) => {
 };
 
 export default function CSWorkbenchPage() {
+    const actionRef = useRef<ActionType>();
+    const navigate = useNavigate();
     const isMobile = useIsMobile(768);
+
+    const [createOpen, setCreateOpen] = useState(false);
+
 
     // ======================
     // ✅ PC 端：只显示“发单按钮”
@@ -114,19 +120,49 @@ export default function CSWorkbenchPage() {
             <PageContainer title="客服工作台">
                 <Card style={{ borderRadius: 16, maxWidth: 720, margin: '0 auto' }}>
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                        <Text type="secondary">
-                            PC 端客服派单建议仍在订单列表完成，这里仅保留“发单入口”以减少维护成本。
-                        </Text>
-
-                        {/* TODO(PC_WORKBENCH_UPSERT):
-                这里仅展示一个“发单”按钮，点击后弹出你现成的“创建订单/派单组件”（你说已有现成代码）
-                你将订单列表页的弹窗组件搬过来即可。
-            */}
-                        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }}>
-                            发单（TODO：弹出创建订单组件）
+                        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }} onClick={() => setCreateOpen(true)}>
+                            快捷发单
                         </Button>
                     </Space>
                 </Card>
+
+
+                <OrderUpsertModal
+                    open={createOpen}
+                    title="创建订单"
+                    showPlayers
+                    onCancel={() => setCreateOpen(false)}
+                    onSubmit={async (payload) => {
+                        const created = await createOrder({
+                            projectId: payload?.projectId,
+                            receivableAmount: payload?.receivableAmount,
+                            paidAmount: payload?.paidAmount,
+                            baseAmountWan: payload?.baseAmountWan ?? undefined,
+                            customerGameId: payload?.customerGameId,
+                            orderTime: payload?.orderTime,
+                            paymentTime: payload?.paymentTime,
+                            csRate: payload?.csRate,
+                            inviteRate: payload?.inviteRate,
+                            inviter: payload?.inviter,
+                            customClubRate: payload?.customClubRate,
+                            remark: payload?.remark,
+                            // ✅ 新增：赠送单标识
+                            isGifted: Boolean(payload?.isGifted),
+                        });
+
+                        const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
+                        if (!orderId) throw new Error('创建订单失败：未返回订单ID');
+
+                        if (payload?.playerIds?.length) {
+                            await assignDispatch(orderId, { playerIds: payload?.playerIds, remark: '新建订单时派单' });
+                        }
+
+                        message.success('创建成功');
+                        setCreateOpen(false);
+                        actionRef.current?.reload?.();
+                        navigate(`/orders/${orderId}`);
+                    }}
+                />
             </PageContainer>
         );
     }
