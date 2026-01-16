@@ -195,7 +195,7 @@ const WorkbenchPage: React.FC = () => {
             }
 
             const fetchFirst = async (status: 'WAIT_ACCEPT' | 'ACCEPTED') => {
-                const res: any = await getMyDispatches({page: 1, limit: 10, status});
+                const res: any = await getMyDispatches({page: 1, limit: 10, status, mode:'workbench'});
                 const list = Array.isArray(res?.data) ? res.data : [];
                 return list?.[0] || null;
             };
@@ -614,9 +614,9 @@ const WorkbenchPage: React.FC = () => {
                             <Button type="primary" onClick={submitAccept} loading={poolLoading}>
                                 接单
                             </Button>
-                            <Button danger onClick={openReject}>
-                                拒单
-                            </Button>
+                            {/*<Button danger onClick={openReject}>*/}
+                            {/*    拒单*/}
+                            {/*</Button>*/}
                         </Space>
                     )}
 

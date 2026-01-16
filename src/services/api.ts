@@ -380,7 +380,7 @@ export async function markSettlementsPaid(data: { settlementIds: number[]; remar
     });
 }
 // 我的接单记录（陪玩端）
-export async function getMyDispatches(data: { page?: number; limit?: number; status?: string }) {
+export async function getMyDispatches(data: { page?: number; limit?: number; status?: string,mode?: string }) {
     return request(`${API_BASE}/orders/my-dispatches`, {
         method: 'POST',
         data,
