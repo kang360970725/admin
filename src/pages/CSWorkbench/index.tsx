@@ -16,16 +16,19 @@ import {
     Tabs,
     Tag,
     Typography,
-    FloatButton
+    FloatButton,
+    Checkbox,
 } from 'antd';
 import {
-    AppstoreOutlined, WalletOutlined, ProfileOutlined,
+    AppstoreOutlined,
+    WalletOutlined,
+    ProfileOutlined,
     ReloadOutlined,
     SearchOutlined,
     ThunderboltOutlined,
     PlusOutlined,
     CheckCircleOutlined,
-    CopyOutlined
+    CopyOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { history } from '@umijs/max';
@@ -74,15 +77,60 @@ type OrderRow = {
 
 const safeArray = <T,>(v: any): T[] => (Array.isArray(v) ? v : []);
 
-/** 截断 1 位小数（不四舍五入）- 你之前的口径，这里用于金额输入展示/入参兜底 */
+/** 截断 1 位小数（不四舍五入） */
 const trunc1 = (x: any) => {
     const n = Number(x);
     if (!Number.isFinite(n)) return 0;
     return Math.trunc(n * 10) / 10;
 };
 
+// ✅ 兼容不同接口返回结构
+const normalizeList = (res: any): any[] => {
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.data?.data)) return res.data.data;
+    if (Array.isArray(res?.list)) return res.list;
+    if (Array.isArray(res?.rows)) return res.rows;
+    return [];
+};
+
+// 简易防抖：减少移动端搜索抖动请求
+const useDebouncedFn = (fn: (kw?: string) => void, delay = 250) => {
+    const timer = useRef<number | null>(null);
+    return (kw?: string) => {
+        if (timer.current) window.clearTimeout(timer.current);
+        timer.current = window.setTimeout(() => fn(kw), delay);
+    };
+};
+
 export default function CSWorkbenchPage() {
     const isMobile = useIsMobile(768);
+
+    // ======================
+    // ✅ PC 端：只显示“发单按钮”
+    // ======================
+    if (!isMobile) {
+        return (
+            <PageContainer title="客服工作台">
+                <Card style={{ borderRadius: 16, maxWidth: 720, margin: '0 auto' }}>
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <Text type="secondary">
+                            PC 端客服派单建议仍在订单列表完成，这里仅保留“发单入口”以减少维护成本。
+                        </Text>
+
+                        {/* TODO(PC_WORKBENCH_UPSERT):
+                这里仅展示一个“发单”按钮，点击后弹出你现成的“创建订单/派单组件”（你说已有现成代码）
+                你将订单列表页的弹窗组件搬过来即可。
+            */}
+                        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }}>
+                            发单（TODO：弹出创建订单组件）
+                        </Button>
+                    </Space>
+                </Card>
+            </PageContainer>
+        );
+    }
+
     // TAB：create / archived / wait_assign / wait_accept
     const [tab, setTab] = useState<'create' | 'ARCHIVED' | 'WAIT_ASSIGN' | 'WAIT_ACCEPT'>('create');
 
@@ -109,10 +157,13 @@ export default function CSWorkbenchPage() {
     // 项目 options
     const [projectLoading, setProjectLoading] = useState(false);
     const [projectOptions, setProjectOptions] = useState<ProjectOptionItem[]>([]);
+    const [projectKeyword, setProjectKeyword] = useState(''); // ✅ 下拉内搜索关键字（移动端不唤起键盘遮挡）
 
     // 打手 options（复用：创建订单立即派单 + 列表派单）
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
+    const [playerKeywordCreate, setPlayerKeywordCreate] = useState('');
+    const [playerKeywordDispatch, setPlayerKeywordDispatch] = useState('');
 
     const lastFetchRef = useRef<string>('');
     const now = useMemo(() => dayjs(), []);
@@ -126,7 +177,7 @@ export default function CSWorkbenchPage() {
         setProjectLoading(true);
         try {
             const res = await getGameProjectOptions({ keyword: kw || '' });
-            const arr = Array.isArray(res) ? res : (res as any)?.data ?? [];
+            const arr = normalizeList(res);
             const options: ProjectOptionItem[] = safeArray(arr).map((p: any) => ({
                 value: Number(p.id),
                 label: `${p.name}${p.price != null ? `（¥${p.price}）` : ''}`,
@@ -136,6 +187,7 @@ export default function CSWorkbenchPage() {
             setProjectOptions(options);
         } catch (e) {
             console.error(e);
+            setProjectOptions([]);
         } finally {
             setProjectLoading(false);
         }
@@ -145,7 +197,7 @@ export default function CSWorkbenchPage() {
         setPlayerLoading(true);
         try {
             const res = await getPlayerOptions({ keyword: kw || '', onlyIdle: true });
-            const arr = Array.isArray(res) ? res : (res as any)?.data ?? [];
+            const arr = normalizeList(res);
             const options: OptionItem[] = safeArray(arr).map((u: any) => ({
                 value: Number(u.id),
                 label: `${u.name || '未命名'}（${u.phone || '-'}）`,
@@ -153,13 +205,17 @@ export default function CSWorkbenchPage() {
             setPlayerOptions(options);
         } catch (e) {
             console.error(e);
+            setPlayerOptions([]);
         } finally {
             setPlayerLoading(false);
         }
     };
 
+    const debouncedFetchProjects = useDebouncedFn(fetchProjects, 250);
+    const debouncedFetchPlayers = useDebouncedFn(fetchPlayers, 250);
+
     const fetchOrders = async (nextPage?: number) => {
-        if (tab === 'create') return; // 创建 TAB 不拉列表
+        if (tab === 'create') return;
         const p = Math.max(1, Number(nextPage ?? page ?? 1));
 
         const signature = JSON.stringify({
@@ -195,9 +251,9 @@ export default function CSWorkbenchPage() {
     };
 
     useEffect(() => {
-        // 初始加载 options（创建/派单都要用）
         void fetchProjects('');
         void fetchPlayers('');
+
         // 创建表单默认值（减少手机端输入）
         createForm.setFieldsValue({
             orderTime: now,
@@ -206,12 +262,12 @@ export default function CSWorkbenchPage() {
             paidAmount: 0,
             playerIds: [],
             remark: '客服工作台创建',
+            isGifted: false, // ✅ 赠送单：补上字段（移动端之前“丢了”）
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
-        // 切换到列表 TAB 自动拉取
         if (tab !== 'create') void fetchOrders(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
@@ -220,6 +276,7 @@ export default function CSWorkbenchPage() {
     const openDispatch = (order: OrderRow) => {
         setActiveOrder(order);
         setDispatchOpen(true);
+        setPlayerKeywordDispatch('');
         dispatchForm.resetFields();
         dispatchForm.setFieldsValue({
             remark: '客服工作台派单',
@@ -262,8 +319,12 @@ export default function CSWorkbenchPage() {
 
     const pasteCustomerGameIdFromClipboard = async () => {
         try {
-            // 只有 https / localhost 才能稳定用 Clipboard API（微信内 H5 也通常 ok）
-            const text = await navigator.clipboard.readText();
+            const readText = navigator?.clipboard?.readText;
+            if (!readText) {
+                message.warning('当前环境不支持一键读取剪切板，请手动长按粘贴');
+                return;
+            }
+            const text = await readText();
             const trimmed = (text ?? '').trim();
 
             if (!trimmed) {
@@ -279,11 +340,11 @@ export default function CSWorkbenchPage() {
         }
     };
 
-
     // ============ 创建订单（手机端） ============
     const submitCreateOrder = async () => {
         try {
             const values = await createForm.validateFields();
+
             const customerId = (values.customerGameId ?? '').trim();
             createForm.setFieldsValue({ customerGameId: customerId });
 
@@ -296,7 +357,6 @@ export default function CSWorkbenchPage() {
                 return;
             }
 
-            // ✅ 手机端最易错点：金额/空值
             const projectId = Number(values.projectId);
             const receivableAmount = trunc1(values.receivableAmount);
             const paidAmount = trunc1(values.paidAmount);
@@ -312,8 +372,13 @@ export default function CSWorkbenchPage() {
                 projectId,
                 receivableAmount,
                 paidAmount,
-                baseAmountWan: values.baseAmountWan != null && values.baseAmountWan !== '' ? Number(values.baseAmountWan) : undefined,
+                baseAmountWan:
+                    values.baseAmountWan != null && values.baseAmountWan !== '' ? Number(values.baseAmountWan) : undefined,
                 customerGameId: customerId || undefined,
+
+                // ✅ 赠送单：补上（不改业务逻辑，只是让后端字段能接到）
+                isGifted: Boolean(values.isGifted),
+
                 orderTime: values.orderTime ? dayjs(values.orderTime).toISOString() : now.toISOString(),
                 paymentTime: values.paymentTime ? dayjs(values.paymentTime).toISOString() : now.toISOString(),
                 inviter: values.inviter?.trim() || undefined,
@@ -358,6 +423,85 @@ export default function CSWorkbenchPage() {
         const meta = statusText[s] || { text: s };
         return <Tag color={meta.color}>{meta.text}</Tag>;
     };
+
+    // ✅ Select 通用：下拉挂到 body + 限高，减少被容器裁剪
+    const commonSelectProps = {
+        getPopupContainer: () => document.body,
+        dropdownStyle: { maxHeight: '60vh', overflow: 'auto' as const },
+        virtual: false,
+    };
+
+    // ✅ 移动端：项目下拉内部搜索（避免 showSearch 唤起键盘挡住下拉）
+    const projectDropdown = (menu: React.ReactNode) => (
+        <>
+            <div style={{ padding: 8, borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+                <Input
+                    allowClear
+                    value={projectKeyword}
+                    placeholder="搜索项目名称"
+                    onChange={(e) => {
+                        const kw = e.target.value;
+                        setProjectKeyword(kw);
+                        debouncedFetchProjects(kw);
+                    }}
+                />
+            </div>
+            {menu}
+            <div style={{ padding: 8, borderTop: '1px solid rgba(0,0,0,.06)' }}>
+                <Button block loading={projectLoading} onClick={() => fetchProjects(projectKeyword)}>
+                    刷新项目
+                </Button>
+            </div>
+        </>
+    );
+
+    // ✅ 移动端：打手下拉内部搜索（创建）
+    const playerDropdownCreate = (menu: React.ReactNode) => (
+        <>
+            <div style={{ padding: 8, borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+                <Input
+                    allowClear
+                    value={playerKeywordCreate}
+                    placeholder="搜索打手姓名/手机号"
+                    onChange={(e) => {
+                        const kw = e.target.value;
+                        setPlayerKeywordCreate(kw);
+                        debouncedFetchPlayers(kw);
+                    }}
+                />
+            </div>
+            {menu}
+            <div style={{ padding: 8, borderTop: '1px solid rgba(0,0,0,.06)' }}>
+                <Button block loading={playerLoading} onClick={() => fetchPlayers(playerKeywordCreate)}>
+                    刷新列表
+                </Button>
+            </div>
+        </>
+    );
+
+    // ✅ 移动端：打手下拉内部搜索（派单抽屉）
+    const playerDropdownDispatch = (menu: React.ReactNode) => (
+        <>
+            <div style={{ padding: 8, borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+                <Input
+                    allowClear
+                    value={playerKeywordDispatch}
+                    placeholder="搜索打手姓名/手机号"
+                    onChange={(e) => {
+                        const kw = e.target.value;
+                        setPlayerKeywordDispatch(kw);
+                        debouncedFetchPlayers(kw);
+                    }}
+                />
+            </div>
+            {menu}
+            <div style={{ padding: 8, borderTop: '1px solid rgba(0,0,0,.06)' }}>
+                <Button block loading={playerLoading} onClick={() => fetchPlayers(playerKeywordDispatch)}>
+                    刷新列表
+                </Button>
+            </div>
+        </>
+    );
 
     const ListHeader = (
         <div style={{ maxWidth: 920 }}>
@@ -453,39 +597,29 @@ export default function CSWorkbenchPage() {
                         <Text type="secondary">高级项可展开。</Text>
                     </Space>
 
-                    <Form
-                        form={createForm}
-                        layout="vertical"
-                        requiredMark={false}
-                        style={{ marginTop: 6 }}
-                    >
-                        {/* 1) 项目（必选） */}
-                        <Form.Item
-                            name="projectId"
-                            label="项目"
-                            rules={[{ required: true, message: '请选择项目' }]}
-                        >
+                    <Form form={createForm} layout="vertical" requiredMark={false} style={{ marginTop: 6 }}>
+                        <Form.Item name="projectId" label="项目" rules={[{ required: true, message: '请选择项目' }]}>
                             <Select
-                                showSearch
                                 allowClear
-                                placeholder="搜索/选择项目"
+                                placeholder="选择项目（移动端下拉内搜索）"
                                 options={projectOptions as any}
                                 loading={projectLoading}
-                                onSearch={(v) => fetchProjects(v)}
+                                // ✅ 移动端禁用 Select 内置搜索（避免键盘遮挡）
+                                showSearch={false}
+                                dropdownRender={projectDropdown}
+                                onDropdownVisibleChange={(open) => {
+                                    if (open) (document.activeElement as any)?.blur?.();
+                                }}
                                 onChange={(_, option: any) => {
-                                    // ✅ 选择项目后：同步保底（万）+ 默认应收/实付（如果有 price）
                                     const base = option?.baseAmount;
                                     const price = option?.price;
 
-                                    // 保底（万）
                                     if (base !== undefined) {
                                         createForm.setFieldsValue({ baseAmountWan: base != null ? Number(base) : null });
                                     }
 
-                                    // 金额：如果你希望默认应收=项目价格，可打开下面两行
                                     if (price != null && Number.isFinite(Number(price))) {
                                         const p = trunc1(price);
-                                        // 如果用户还没填过金额（或金额=0），才自动填，避免“覆盖用户手输”
                                         const currentReceivable = Number(createForm.getFieldValue('receivableAmount') ?? 0);
                                         const currentPaid = Number(createForm.getFieldValue('paidAmount') ?? 0);
                                         if (!currentReceivable) createForm.setFieldsValue({ receivableAmount: p });
@@ -493,10 +627,10 @@ export default function CSWorkbenchPage() {
                                     }
                                 }}
                                 style={{ width: '100%' }}
+                                {...commonSelectProps}
                             />
                         </Form.Item>
 
-                        {/* 2) 金额（手机端最易错：强约束 + 轻提示） */}
                         <Row gutter={10}>
                             <Col span={12}>
                                 <Form.Item
@@ -514,11 +648,7 @@ export default function CSWorkbenchPage() {
                                 </Form.Item>
                             </Col>
                             <Col span={12}>
-                                <Form.Item
-                                    name="paidAmount"
-                                    label="实付"
-                                    rules={[{ required: true, message: '请填写实付金额' }]}
-                                >
+                                <Form.Item name="paidAmount" label="实付" rules={[{ required: true, message: '请填写实付金额' }]}>
                                     <InputNumber
                                         min={0}
                                         precision={1}
@@ -530,18 +660,20 @@ export default function CSWorkbenchPage() {
                             </Col>
                         </Row>
 
-                        {/* 3) 客户游戏ID（可选，但经常要填） */}
+                        {/* ✅ 赠送单选项：补回 */}
+                        <Form.Item name="isGifted" valuePropName="checked" label="赠送单">
+                            <Checkbox>勾选后不计入营业额统计，但仍正常结算</Checkbox>
+                        </Form.Item>
+
                         <Form.Item name="customerGameId" label="客户游戏ID">
                             <Input
                                 allowClear
                                 placeholder="游戏内ID或昵称"
                                 style={{ borderRadius: 12 }}
-                                // ✅ 失焦自动 trim（首尾去空格）
                                 onBlur={(e) => {
                                     const v = (e?.target?.value ?? '').trim();
                                     createForm.setFieldsValue({ customerGameId: v });
                                 }}
-                                // ✅ 一键读取剪切板（右侧按钮）
                                 addonAfter={
                                     <Button
                                         type="link"
@@ -555,17 +687,20 @@ export default function CSWorkbenchPage() {
                             />
                         </Form.Item>
 
-                        {/* 4) 立即派单（可选） */}
                         <Form.Item name="playerIds" label={`立即派单（可选，最多 ${MAX_PLAYERS} 名）`}>
                             <Select
                                 mode="multiple"
                                 allowClear
-                                showSearch
-                                placeholder="搜索/选择空闲打手（可不选，先创建订单）"
+                                placeholder="选择空闲打手（下拉内搜索，不弹键盘遮挡）"
                                 options={playerOptions}
                                 loading={playerLoading}
                                 maxTagCount={2}
-                                onSearch={(v) => fetchPlayers(v)}
+                                // ✅ 移动端同理：禁用 showSearch，改用 dropdownRender
+                                showSearch={false}
+                                dropdownRender={playerDropdownCreate}
+                                onDropdownVisibleChange={(open) => {
+                                    if (open) (document.activeElement as any)?.blur?.();
+                                }}
                                 onChange={(vals) => {
                                     const arr = safeArray<any>(vals);
                                     if (arr.length > MAX_PLAYERS) {
@@ -574,10 +709,10 @@ export default function CSWorkbenchPage() {
                                     }
                                 }}
                                 style={{ width: '100%' }}
+                                {...commonSelectProps}
                             />
                         </Form.Item>
 
-                        {/* 5) 高级项：收起（手机端减少误填） */}
                         <details style={{ marginTop: 2 }}>
                             <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
                                 <Text type="secondary">展开高级项（比例/邀请人/自定义保底/备注/时间）</Text>
@@ -588,12 +723,7 @@ export default function CSWorkbenchPage() {
                             <Row gutter={10}>
                                 <Col span={12}>
                                     <Form.Item name="baseAmountWan" label="订单保底（万）">
-                                        <InputNumber
-                                            min={0}
-                                            precision={2}
-                                            style={{ width: '100%', borderRadius: 12 }}
-                                            placeholder="可不填"
-                                        />
+                                        <InputNumber min={0} precision={2} style={{ width: '100%', borderRadius: 12 }} placeholder="可不填" />
                                     </Form.Item>
                                 </Col>
                                 <Col span={12}>
@@ -621,27 +751,6 @@ export default function CSWorkbenchPage() {
                                 </Col>
                             </Row>
 
-                            <Row gutter={10}>
-                                <Col span={12}>
-                                    <Form.Item name="orderTime" label="下单时间">
-                                        {/* 你现有 New.tsx 用了 DatePicker，这里用 DatePicker 也可以；
-                        为了兼容你项目里是否已全局引入 DatePicker 依赖，这里不强塞组件，
-                        仍用字符串输入也能跑；但你 New.tsx 已使用 DatePicker，说明可用。
-                        如果你想我也换成 DatePicker，我下一步给你微调。 */}
-                                        <Input
-                                            placeholder="默认当前时间（可不填）"
-                                            style={{ borderRadius: 12 }}
-                                            disabled
-                                        />
-                                    </Form.Item>
-                                </Col>
-                                <Col span={12}>
-                                    <Form.Item name="paymentTime" label="支付时间">
-                                        <Input placeholder="默认当前时间（可不填）" style={{ borderRadius: 12 }} disabled />
-                                    </Form.Item>
-                                </Col>
-                            </Row>
-
                             <Form.Item name="remark" label="备注（可选）">
                                 <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="例如：客户要求/注意事项..." />
                             </Form.Item>
@@ -658,7 +767,10 @@ export default function CSWorkbenchPage() {
                                         paidAmount: 0,
                                         playerIds: [],
                                         remark: '客服工作台创建',
+                                        isGifted: false,
                                     });
+                                    setProjectKeyword('');
+                                    setPlayerKeywordCreate('');
                                 }}
                                 style={{ borderRadius: 12 }}
                             >
@@ -675,19 +787,6 @@ export default function CSWorkbenchPage() {
                                 创建订单
                             </Button>
                         </Space>
-
-                        <div style={{ height: 10 }} />
-                        <Card
-                            style={{ borderRadius: 16, border: '1px dashed rgba(0,0,0,0.12)' }}
-                            bodyStyle={{ padding: 12 }}
-                        >
-                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                                <Text type="secondary">操作建议（防出错）</Text>
-                                <Text type="secondary">1）先选项目，再填金额（金额默认可跟随项目价）。</Text>
-                                <Text type="secondary">2）“立即派单”可选：不选也能先创建，后续在列表里派单。</Text>
-                                <Text type="secondary">3）高级项默认收起，避免手机端误触比例字段。</Text>
-                            </Space>
-                        </Card>
                     </Form>
                 </Space>
             </Card>
@@ -721,17 +820,13 @@ export default function CSWorkbenchPage() {
                                                     {row.autoSerial || `订单#${row.id}`}
                                                 </Text>
                                                 {renderStatus(row.status)}
-                                                {row.paidAmount != null ? (
-                                                    <Tag color="geekblue">实付 ¥{row.paidAmount}</Tag>
-                                                ) : null}
+                                                {row.paidAmount != null ? <Tag color="geekblue">实付 ¥{row.paidAmount}</Tag> : null}
                                             </Space>
 
                                             <Space size={10} wrap>
                                                 <Text type="secondary">项目：{row.project?.name || '-'}</Text>
                                                 <Text type="secondary">创建：{createdAt}</Text>
-                                                {row.dispatcher?.name ? (
-                                                    <Text type="secondary">派单客服：{row.dispatcher?.name}</Text>
-                                                ) : null}
+                                                {row.dispatcher?.name ? <Text type="secondary">派单客服：{row.dispatcher?.name}</Text> : null}
                                             </Space>
 
                                             <div>
@@ -785,7 +880,6 @@ export default function CSWorkbenchPage() {
                 </Space>
             </div>
 
-            {/* 派单抽屉（移动端 bottom sheet 风格） */}
             <Drawer
                 title="派单"
                 placement="bottom"
@@ -830,12 +924,15 @@ export default function CSWorkbenchPage() {
                             <Select
                                 mode="multiple"
                                 allowClear
-                                showSearch
-                                placeholder="搜索/选择空闲打手"
+                                placeholder="选择空闲打手（下拉内搜索，不弹键盘遮挡）"
                                 options={playerOptions}
                                 loading={playerLoading}
                                 maxTagCount={2}
-                                onSearch={(v) => fetchPlayers(v)}
+                                showSearch={false}
+                                dropdownRender={playerDropdownDispatch}
+                                onDropdownVisibleChange={(open) => {
+                                    if (open) (document.activeElement as any)?.blur?.();
+                                }}
                                 onChange={(vals) => {
                                     const arr = safeArray<any>(vals);
                                     if (arr.length > MAX_PLAYERS) {
@@ -844,14 +941,12 @@ export default function CSWorkbenchPage() {
                                     }
                                 }}
                                 style={{ width: '100%' }}
+                                {...commonSelectProps}
                             />
                         </Form.Item>
 
                         <Form.Item name="remark" label="派单备注（可选）">
-                            <Input.TextArea
-                                autoSize={{ minRows: 2, maxRows: 4 }}
-                                placeholder="例如：优先接单 / 注意事项..."
-                            />
+                            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="例如：优先接单 / 注意事项..." />
                         </Form.Item>
 
                         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -881,23 +976,7 @@ export default function CSWorkbenchPage() {
     );
 
     return (
-        <PageContainer
-            title="客服工作台"
-            subTitle="手机端创建订单 / 快速派单"
-            extra={[
-                tab !== 'create' ? (
-                    <Button
-                        key="toCreate"
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() => setTab('create')}
-                        style={{ borderRadius: 12 }}
-                    >
-                        创建订单
-                    </Button>
-                ) : null,
-            ]}
-        >
+        <PageContainer title="客服工作台" subTitle="手机端创建订单 / 快速派单">
             <div style={{ maxWidth: 980, margin: '0 auto' }}>
                 <Tabs
                     activeKey={tab}
@@ -910,40 +989,30 @@ export default function CSWorkbenchPage() {
                     ]}
                 />
             </div>
-            {isMobile ? (
-                <FloatButton.Group
-                    trigger="click"
-                    type="primary"
-                    style={{ right: 16, bottom: 16 }}
-                    icon={<AppstoreOutlined />}
-                >
-                    <FloatButton
-                        icon={<ReloadOutlined />}
-                        tooltip="刷新"
-                        onClick={() => {
-                            // 你工作台里如果有 fetchOrders(1) / fetchPlayers() 等，直接调用
-                            // 这里示例：刷新当前 TAB 的数据
-                            // @ts-ignore
-                            typeof fetchOrders === 'function' ? fetchOrders(1) : window.location.reload();
-                        }}
-                    />
-                    <FloatButton
-                        icon={<ProfileOutlined />}
-                        tooltip="订单"
-                        onClick={() => history.push('/orders')}
-                    />
-                    <FloatButton
-                        icon={<WalletOutlined />}
-                        tooltip="钱包"
-                        onClick={() => history.push('/wallet/overview')}
-                    />
-                    <FloatButton
-                        icon={<ThunderboltOutlined />}
-                        tooltip="工作台"
-                        onClick={() => history.push('/workbench')}
-                    />
-                </FloatButton.Group>
-            ) : null}
+
+            <FloatButton.Group
+                trigger="click"
+                type="primary"
+                style={{ right: 16, bottom: 16 }}
+                icon={<AppstoreOutlined />}
+            >
+                <FloatButton
+                    icon={<ReloadOutlined />}
+                    tooltip="刷新"
+                    onClick={() => {
+                        if (tab === 'create') {
+                            void fetchProjects(projectKeyword || '');
+                            void fetchPlayers(playerKeywordCreate || '');
+                            message.success('已刷新选项');
+                            return;
+                        }
+                        void fetchOrders(1);
+                    }}
+                />
+                <FloatButton icon={<ProfileOutlined />} tooltip="订单" onClick={() => history.push('/orders')} />
+                <FloatButton icon={<WalletOutlined />} tooltip="钱包" onClick={() => history.push('/wallet/overview')} />
+                <FloatButton icon={<ThunderboltOutlined />} tooltip="工作台" onClick={() => history.push('/workbench')} />
+            </FloatButton.Group>
         </PageContainer>
     );
 }

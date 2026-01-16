@@ -104,7 +104,7 @@ export default function WelcomePage() {
                         </div>
                     ) : (
                         <Paragraph style={{ marginBottom: 0, color: 'rgba(0,0,0,0.6)' }}>
-                            请使用左侧菜单进入功能模块；移动端将根据身份自动进入对应工作台。
+                            请使用左侧菜单进入功能模块。
                         </Paragraph>
                     )}
                 </Space>
