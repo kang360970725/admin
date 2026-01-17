@@ -470,20 +470,17 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    {/*<Col {...colProps}>*/}
-                    {/*    <Form.Item name="paymentTime" label="付款时间">*/}
-                    {/*        <DatePicker showTime style={{ width: '100%' }} />*/}
-                    {/*    </Form.Item>*/}
-                    {/*</Col>*/}
-                    <Form.Item name="paymentTime" label="付款时间">
-                        <DatePicker
-                            showTime
-                            style={{ width: '100%' }}
-                            disabled={!watchedIsPaid}
-                            placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
-                        />
-                    </Form.Item>
-                    <Col {...colProps}>
+                    <Col xs={24} md={24} lg={6}>
+                        <Form.Item name="paymentTime" label="付款时间">
+                            <DatePicker
+                                showTime
+                                style={{ width: '100%' }}
+                                disabled={!watchedIsPaid}
+                                placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} md={24} lg={6}>
                         <Form.Item
                             name="isPaid"
                             valuePropName="checked"
