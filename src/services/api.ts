@@ -343,7 +343,7 @@ export async function getEnumDicts() {
 }
 
 // ---- orders ----
-export async function updateOrderPaidAmount(data: { id: number; paidAmount: number; remark?: string }) {
+export async function updateOrderPaidAmount(data: { id: number; paidAmount: number; remark?: string ; confirmPaid?: Boolean }) {
     return request(`${API_BASE}/orders/update-paid-amount`, {
         method: 'POST',
         data,
@@ -356,6 +356,13 @@ export async function updateDispatchParticipants(data: {
     remark?: string;
 }) {
     return request(`${API_BASE}/orders/dispatch/update-participants`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function markOrderPaid(data: { id: number; paidAmount?: number; remark?: string; confirmPaid?: boolean }) {
+    return request(`${API_BASE}/orders/mark-paid`, {
         method: 'POST',
         data,
     });

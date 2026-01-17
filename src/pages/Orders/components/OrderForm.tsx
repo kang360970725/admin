@@ -74,6 +74,13 @@ export type OrderUpsertValues = {
 
     /** 是否赠送单：不计入营业额统计，但仍正常结算 */
     isGifted?: boolean;
+
+    /**
+     * 是否已收款（人工确认）
+     * - 不能用 paymentTime 推断（因为前端会默认带当前时间）
+     * - 赠送单 isGifted=true 时，这里仍允许传，但后端会按赠送单规则处理
+     */
+    isPaid?: boolean;
 };
 
 export default function OrderUpsertModal(props: {
@@ -344,6 +351,11 @@ export default function OrderUpsertModal(props: {
 
                 isGifted: Boolean(v?.isGifted),
 
+                /**
+                 * isPaid 由前端勾选决定；不再从 paymentTime 推断
+                 * - 赠送单：这里仍允许用户勾选，但通常赠送单不需要收款
+                 */
+                isPaid: Boolean(v?.isPaid),
                 // 小票展示字段
                 projectName: v?.projectName,
                 billingMode: v?.billingMode,
@@ -364,6 +376,8 @@ export default function OrderUpsertModal(props: {
     const watchedProjectId = Form.useWatch('projectId', form);
     const curProjectId = Number(watchedProjectId ?? 0);
     const showQtyForHourly = isHourlyProject(curProjectId);
+    const watchedIsPaid = Form.useWatch('isPaid', form);
+
 
 
 
@@ -456,9 +470,28 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
+                    {/*<Col {...colProps}>*/}
+                    {/*    <Form.Item name="paymentTime" label="付款时间">*/}
+                    {/*        <DatePicker showTime style={{ width: '100%' }} />*/}
+                    {/*    </Form.Item>*/}
+                    {/*</Col>*/}
+                    <Form.Item name="paymentTime" label="付款时间">
+                        <DatePicker
+                            showTime
+                            style={{ width: '100%' }}
+                            disabled={!watchedIsPaid}
+                            placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
+                        />
+                    </Form.Item>
                     <Col {...colProps}>
-                        <Form.Item name="paymentTime" label="付款时间">
-                            <DatePicker showTime style={{ width: '100%' }} />
+                        <Form.Item
+                            name="isPaid"
+                            valuePropName="checked"
+                            label="收款状态"
+                            initialValue={true}
+                            tooltip="先打后付：把这里取消勾选，订单会被标记为未收款"
+                        >
+                            <Checkbox>已付款</Checkbox>
                         </Form.Item>
                     </Col>
 

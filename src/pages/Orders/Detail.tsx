@@ -21,7 +21,7 @@ import {
     Collapse,
     Drawer,
     FloatButton,
-    List,
+    List, Checkbox,
 } from 'antd';
 import {
     ReloadOutlined,
@@ -47,9 +47,11 @@ import {
     adjustSettlementFinalEarnings,
     refundOrder,
     updateOrder,
+    markOrderPaid
 } from '@/services/api';
 import dayjs from 'dayjs';
 import { useIsMobile } from '@/utils/useIsMobile';
+import { generateReceiptImage } from '@/utils/receiptImage';
 
 type DictMap = Record<string, Record<string, string>>;
 
@@ -95,6 +97,47 @@ const OrderDetailPage: React.FC = () => {
     const openEditModal = () => setEditOpen(true);
     const forbidEdit = ['COMPLETED', 'REFUNDED'].includes(order?.status);
 
+    // ✅ confirm payment modal
+    const [markPaidOpen, setMarkPaidOpen] = useState(false);
+    const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false);
+    const [markPaidForm] = Form.useForm();
+
+    const openMarkPaidModal = () => {
+        if (!order) return;
+
+        markPaidForm.setFieldsValue({
+            paidAmount: order?.paidAmount,
+            remark: '',
+            confirmPaid: true,
+        });
+
+        setMarkPaidOpen(true);
+    };
+
+    const submitMarkPaid = async () => {
+        try {
+            const v = await markPaidForm.validateFields();
+            setMarkPaidSubmitting(true);
+
+            await markOrderPaid({
+                id: Number(order?.id),
+                paidAmount: Number(v.paidAmount),
+                remark: v.remark || undefined,
+                confirmPaid: v.confirmPaid !== false,
+            });
+
+            message.success('已确认收款');
+            setMarkPaidOpen(false);
+            await loadDetail();
+        } catch (e: any) {
+            if (e?.errorFields) return;
+            message.error(e?.response?.data?.message || '确认收款失败');
+        } finally {
+            setMarkPaidSubmitting(false);
+        }
+    };
+
+
     const submitRefund = async () => {
         try {
             setRefundLoading(true);
@@ -127,197 +170,6 @@ const OrderDetailPage: React.FC = () => {
         }
     };
 
-    const generateReceiptImage = (title: string, text: string) => {
-        const lines = String(text ?? '').split('\n');
-
-        // ✅ 竖版尺寸（手机更友好）
-        const W = 720;
-        const P = 36;
-        const CARD_R = 22;
-
-        const headerH = 88;
-        const lineH = 34;
-
-        const canvasTmp = document?.createElement?.('canvas');
-        if (!canvasTmp) return null;
-        canvasTmp.width = W;
-        canvasTmp.height = 10;
-        const tctx = canvasTmp.getContext('2d');
-        if (!tctx) return null;
-
-        const maxTextW = W - P * 2 - 16;
-
-        const wrapLines = (ctx: CanvasRenderingContext2D, s: string, maxW: number, font: string) => {
-            ctx.font = font;
-            const out: string[] = [];
-            let cur = '';
-            for (const ch of s) {
-                const next = cur + ch;
-                if (ctx.measureText(next).width > maxW) {
-                    if (cur) out.push(cur);
-                    cur = ch;
-                } else {
-                    cur = next;
-                }
-            }
-            if (cur) out.push(cur);
-            return out.length ? out : [''];
-        };
-
-        // ✅ 分段：温馨提醒之后使用更小字体
-        let inTips = false;
-        const prepared: Array<{ text: string; kind: 'normal' | 'tips' | 'blank' }> = [];
-
-        for (const raw of lines) {
-            const ln = String(raw ?? '');
-            if (!ln) {
-                prepared.push({ text: '', kind: 'blank' });
-                continue;
-            }
-            if (ln.includes('温馨提醒')) inTips = true;
-            prepared.push({ text: ln, kind: inTips ? 'tips' : 'normal' });
-        }
-
-        // 先估算实际渲染行数（考虑换行）
-        const expanded: Array<{ text: string; kind: 'normal' | 'tips' | 'blank' }> = [];
-        for (const it of prepared) {
-            if (it.kind === 'blank') {
-                expanded.push({ text: '', kind: 'blank' });
-                continue;
-            }
-            const font = it.kind === 'tips' ? '18px sans-serif' : '22px sans-serif';
-            const ws = wrapLines(tctx, it.text, maxTextW, font);
-            ws.forEach((w) => expanded.push({ text: w, kind: it.kind }));
-        }
-
-        const bodyH = expanded.length * lineH + 92;
-        const H = P * 2 + headerH + bodyH;
-
-        const canvas = document?.createElement?.('canvas');
-        if (!canvas) return null;
-        canvas.width = W;
-        canvas.height = H;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-
-        // 背景
-        ctx.fillStyle = '#f5f6f8';
-        ctx.fillRect(0, 0, W, H);
-
-        // 卡片区域
-        const x = P;
-        const y = P;
-        const cw = W - P * 2;
-        const ch = H - P * 2;
-
-        const roundRect = (rx: number, ry: number, rw: number, rh: number, r: number) => {
-            ctx.beginPath();
-            ctx.moveTo(rx + r, ry);
-            ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
-            ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
-            ctx.arcTo(rx, ry + rh, rx, ry, r);
-            ctx.arcTo(rx, ry, rx + rw, ry, r);
-            ctx.closePath();
-        };
-
-        // 阴影 + 白底
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.10)';
-        ctx.shadowBlur = 18;
-        ctx.shadowOffsetY = 8;
-        roundRect(x, y, cw, ch, CARD_R);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.restore();
-
-        // ✅ 上下锯齿（在卡片边缘挖半圆）
-        const punch = (cy: number) => {
-            ctx.save();
-            ctx.globalCompositeOperation = 'destination-out';
-            const r = 8;
-            const gap = 20;
-            for (let px = x + 22; px < x + cw - 22; px += gap) {
-                ctx.beginPath();
-                ctx.arc(px, cy, r, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            ctx.restore();
-        };
-        punch(y + headerH);
-        punch(y + ch - 72);
-
-        // 标题条
-        roundRect(x, y, cw, headerH, CARD_R);
-        ctx.save();
-        ctx.clip();
-        ctx.fillStyle = '#111827';
-        ctx.fillRect(x, y, cw, headerH);
-        ctx.restore();
-
-        // 标题文字
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 30px sans-serif';
-        ctx.fillText(title, x + 24, y + 56);
-
-        // 内容
-        let yy = y + headerH + 38;
-        for (const it of expanded) {
-            if (it.kind === 'blank') {
-                yy += lineH * 0.55;
-                continue;
-            }
-
-            if (it.kind === 'tips') {
-                ctx.font = '18px sans-serif';
-                ctx.fillStyle = '#6b7280';
-            } else {
-                ctx.font = '22px sans-serif';
-                ctx.fillStyle = '#111827';
-            }
-
-            const shouldHighlight =
-                it.kind === 'normal' &&
-                (it.text.startsWith('下单项目：') ||
-                    it.text.startsWith('订单保底/小时：') ||
-                    it.text.startsWith('预计结单时间：'));
-
-            if (shouldHighlight) {
-                const idx = it.text.indexOf('：');
-                const left = idx >= 0 ? it.text.slice(0, idx + 1) : it.text;
-                const right = idx >= 0 ? it.text.slice(idx + 1) : '';
-
-                ctx.fillStyle = '#374151';
-                ctx.fillText(left, x + 24, yy);
-
-                const leftW = ctx.measureText(left).width;
-
-                ctx.font = 'bold 22px sans-serif';
-                ctx.fillStyle = '#111827';
-                ctx.fillText(right, x + 24 + leftW, yy);
-            } else {
-                ctx.fillText(it.text, x + 24, yy);
-            }
-
-            yy += lineH;
-        }
-
-        // 底部分割线
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x + 24, y + ch - 66);
-        ctx.lineTo(x + cw - 24, y + ch - 66);
-        ctx.stroke();
-
-        // 底部提示
-        ctx.fillStyle = '#9ca3af';
-        ctx.font = '16px sans-serif';
-        const rightText = dayjs().format('YYYY-MM-DD HH:mm');
-        ctx.fillText(`BlueCat · 订单专用小票 · ${rightText}`, x + 24, y + ch - 30);
-
-        return canvas.toDataURL('image/png');
-    };
 
     // 从详情数据生成两段文案
     const buildReceiptTextsFromDetail = () => {
@@ -375,7 +227,7 @@ const OrderDetailPage: React.FC = () => {
             ``,
             `温馨提醒：`,
             `消费过程中如遇任何问题，请随时联系本单客服处理～`,
-            `订单完结 24 小时内支持售后，售后唯一渠道为客服处理；`,
+            `订单完结24小时内支持售后，客服为售后唯一渠道；`,
             `请勿相信其他任何人，谨防上当受骗。`,
         ]
             .filter(Boolean)
@@ -397,7 +249,13 @@ const OrderDetailPage: React.FC = () => {
         const { customerText, staffText } = buildReceiptTextsFromDetail();
         setReceiptTextCustomer(customerText);
         setReceiptTextStaff(staffText);
-        setReceiptImgCustomer(generateReceiptImage('蓝猫爽打-订单小票', customerText));
+        // setReceiptImgCustomer(generateReceiptImage('蓝猫爽打-订单小票', customerText));
+        setReceiptImgCustomer(
+            generateReceiptImage('蓝猫爽打-订单小票', customerText, {
+                width: 560,
+                theme: { accent: '#22d3ee', accent2: '#a78bfa' },
+            }),
+        );
         setReceiptType(type);
         setReceiptOpen(true);
     };
@@ -559,6 +417,8 @@ const OrderDetailPage: React.FC = () => {
         paidForm.setFieldsValue({
             paidAmount: order?.paidAmount,
             remark: '',
+            // ✅ 小时单补收：订单当前是未收款时，默认勾选“补收完成后一并确认收款”
+            confirmPaid: !order?.isGifted && order?.isPaid === false,
         });
         setPaidModalOpen(true);
     };
@@ -572,6 +432,8 @@ const OrderDetailPage: React.FC = () => {
                 id: Number(order?.id),
                 paidAmount: Number(values.paidAmount),
                 remark: values.remark || undefined,
+                // ✅ 新增：补收后是否一并确认收款
+                confirmPaid: values.confirmPaid !== false,
             });
 
             message.success('已更新实付金额');
@@ -776,6 +638,11 @@ const OrderDetailPage: React.FC = () => {
                             剩余保底 {remainingBaseWan}
                         </Tag>
                     )}
+                    {order?.isGifted ? <Tag style={{ borderRadius: 999 }}>赠送</Tag> : order?.isPaid === false ? (
+                        <Tag color="red" style={{ borderRadius: 999 }}>未收款</Tag>
+                    ) : (
+                        <Tag color="green" style={{ borderRadius: 999 }}>已收款</Tag>
+                    )}
                 </Space>
 
                 <Space direction="vertical" size={4} style={{ width: '100%' }}>
@@ -815,7 +682,18 @@ const OrderDetailPage: React.FC = () => {
                             订单小票
                         </Button>
                     </Col>
-
+                    {!order?.isGifted && order?.isPaid === false ? (
+                        <Col span={12}>
+                            <Button
+                                type="primary"
+                                block
+                                style={{ height: 44, borderRadius: 14 }}
+                                onClick={openMarkPaidModal}
+                            >
+                                确认收款
+                            </Button>
+                        </Col>
+                    ) : null}
                     <Col span={12}>
                         <Button
                             icon={<CopyOutlined />}
@@ -1020,6 +898,13 @@ const OrderDetailPage: React.FC = () => {
                 extra={
                     <Space>
                         <Button onClick={() => openReceipt('staff')}>订单小票</Button>
+                        {!order?.isGifted && order?.isPaid === false ? (
+                            <Button
+                                type="primary"
+                                onClick={openMarkPaidModal}>
+                                确认收款
+                            </Button>
+                        ) : null}
                         {order?.status !== 'REFUNDED' && <Button danger onClick={() => setRefundOpen(true)}>退款</Button>}
                         <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button>
 
@@ -1064,6 +949,9 @@ const OrderDetailPage: React.FC = () => {
 
                     <Descriptions.Item label="下单时间">{order?.orderTime ? new Date(order?.orderTime).toLocaleString() : '-'}</Descriptions.Item>
                     <Descriptions.Item label="付款时间">{order?.paymentTime ? new Date(order?.paymentTime).toLocaleString() : '-'}</Descriptions.Item>
+                    <Descriptions.Item label="收款状态">
+                        {order?.isGifted ? <Tag>赠送</Tag> : order?.isPaid === false ? <Tag color="red">未收款</Tag> : <Tag color="green">已收款</Tag>}
+                    </Descriptions.Item>
                 </Descriptions>
             </Card>
 
@@ -1369,6 +1257,13 @@ const OrderDetailPage: React.FC = () => {
                     <Form.Item name="remark" label="补收说明（建议填写）">
                         <Input placeholder="例如：超时 30 分钟补收 ¥20" allowClear />
                     </Form.Item>
+                    <Form.Item
+                        name="confirmPaid"
+                        valuePropName="checked"
+                        extra="勾选后会将订单标记为已收款，并写入付款时间"
+                    >
+                        <Checkbox>勾选后即视为订单已收款入账</Checkbox>
+                    </Form.Item>
 
                     <Tag color="blue" style={{ borderRadius: 999 }}>该操作会写入操作日志（UPDATE_PAID_AMOUNT）。</Tag>
                 </Form>
@@ -1527,6 +1422,33 @@ const OrderDetailPage: React.FC = () => {
                     <FloatButton icon={<FileImageOutlined />} tooltip="订单小票" onClick={() => openReceipt('customer')} />
                 </FloatButton.Group>
             ) : null}
+
+            <Modal
+                open={markPaidOpen}
+                title={`确认收款：${order?.autoSerial || ''}`}
+                onCancel={() => setMarkPaidOpen(false)}
+                onOk={submitMarkPaid}
+                confirmLoading={markPaidSubmitting}
+                okText="确认"
+            >
+                <Form form={markPaidForm} layout="vertical">
+                    <Form.Item
+                        label="实收金额（实付）"
+                        name="paidAmount"
+                        rules={[{ required: true, message: '请输入实收金额' }]}
+                    >
+                        <InputNumber style={{ width: '100%' }} min={0} step={1} />
+                    </Form.Item>
+
+                    <Form.Item label="备注" name="remark">
+                        <Input.TextArea rows={3} placeholder="可填写收款备注（可不填）" />
+                    </Form.Item>
+
+                    <Form.Item name="confirmPaid" valuePropName="checked" initialValue={true}>
+                        <Checkbox>确认订单已经收款入账</Checkbox>
+                    </Form.Item>
+                </Form>
+            </Modal>
         </PageContainer>
     );
 };
