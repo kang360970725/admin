@@ -117,6 +117,21 @@ export default defineConfig({
         { path: '/system/game-project-management', name: '菜单项目管理', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
       ],
     },
+    {
+      path: '/user-logs',
+      name: '操作日志',
+      component: './UserLogs',
+    },
+    {
+      path: '/finance',
+      name: '财务核账',
+      icon: 'AuditOutlined',
+      access: 'canViewFinanceReconcile',
+      routes: [
+        { path: '/finance', redirect: '/finance/reconcile' },
+        { path: '/finance/reconcile', name: '核账报表', component: '@/pages/Finance/Reconcile', access: 'canViewFinanceReconcile' },
+      ],
+    },
 
     {
       path: '/staff',

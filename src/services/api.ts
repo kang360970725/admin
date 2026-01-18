@@ -671,3 +671,58 @@ export async function applyWithdrawal(data: {
     });
 }
 
+
+
+export async function listUserLogs(data: any) {
+    return request(`${API_BASE}/user-logs/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getUserLogDetail(data: { id: number }) {
+    return request(`${API_BASE}/user-logs/detail`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---------------------- Finance Reconcile API (POST style) ----------------------
+
+/** 财务核账-总览：POST /finance/reconcile/summary */
+export async function financeReconcileSummary(data: {
+    startAt: string;
+    endAt: string;
+    includeGifted?: boolean;
+}) {
+    return request(`${API_BASE}/finance/reconcile/summary`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/** 财务核账-订单明细（每单一列）：POST /finance/reconcile/orders */
+export async function financeReconcileOrders(data: {
+    startAt: string;
+    endAt: string;
+    page?: number;
+    pageSize?: number;
+    autoSerial?: string;
+    playerId?: number;
+    includeGifted?: boolean;
+    onlyAbnormal?: boolean;
+}) {
+    return request(`${API_BASE}/finance/reconcile/orders`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/** 财务核账-订单抽查详情：POST /finance/reconcile/order-detail */
+export async function financeReconcileOrderDetail(data: { orderId?: number; autoSerial?: string }) {
+    return request(`${API_BASE}/finance/reconcile/order-detail`, {
+        method: 'POST',
+        data,
+    });
+}
+
