@@ -1,13 +1,34 @@
 import * as React from 'react';
 import { PageContainer, ProTable, ProColumns } from '@ant-design/pro-components';
-import { Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Row, Space, Statistic, Switch, Tag, Typography, message } from 'antd';
+import {
+    Button,
+    Card,
+    Col,
+    DatePicker,
+    Descriptions,
+    Drawer,
+    Form,
+    Input,
+    InputNumber,
+    Row,
+    Space,
+    Statistic,
+    Switch,
+    Tag,
+    Typography,
+    message,
+} from 'antd';
 import dayjs from 'dayjs';
 import type { FormInstance } from 'antd';
-import { financeReconcileOrderDetail, financeReconcileOrders, financeReconcileSummary, getEnumDicts } from '@/services/api';
+import {
+    financeReconcileOrderDetail,
+    financeReconcileOrders,
+    financeReconcileSummary,
+    getEnumDicts,
+} from '@/services/api';
 
 const { Text } = Typography;
 
-type SummaryResp = any;
 type OrdersResp = {
     page: number;
     pageSize: number;
@@ -23,26 +44,18 @@ const money = (v: any) => {
     return Number(v) || 0;
 };
 
-const formatRate = (rate: any) => {
-    const r = money(rate);
-    // 0.3 -> 30%
-    return `${Math.round(r * 10000) / 100}%`;
-};
+const formatRate = (rate: any) => `${Math.round(money(rate) * 10000) / 100}%`;
 
 const FinanceReconcilePage: React.FC = () => {
     const formRef = React.useRef<FormInstance>();
-
     const [loadingSummary, setLoadingSummary] = React.useState(false);
-    const [summary, setSummary] = React.useState<SummaryResp | null>(null);
+    const [summary, setSummary] = React.useState<any>(null);
 
     const [enums, setEnums] = React.useState<any>({});
-    const orderStatusDict = enums?.OrderStatus ?? {};
-
     const [detailOpen, setDetailOpen] = React.useState(false);
     const [detailLoading, setDetailLoading] = React.useState(false);
     const [detail, setDetail] = React.useState<any>(null);
 
-    // 默认：最近 7 天（收款时间口径）
     const defaultRange = React.useMemo(() => {
         const start = dayjs().subtract(7, 'day').startOf('day');
         const end = dayjs().endOf('day');
@@ -50,17 +63,40 @@ const FinanceReconcilePage: React.FC = () => {
     }, []);
 
     React.useEffect(() => {
-        // ✅ 加载枚举字典（用于状态/动作明文）
         (async () => {
             try {
                 const dicts = await getEnumDicts();
                 setEnums(dicts || {});
             } catch (e: any) {
-                // 不阻断页面，只提示
                 message.warning(e?.message || '加载字典失败');
             }
         })();
     }, []);
+
+    const getEnumText = (groupKey: string, code?: string) => {
+        if (!code) return '--';
+        const dict = enums?.[groupKey] || {};
+        return dict?.[code] || code;
+    };
+
+    // 钱包页同款风格：方向符号+颜色
+    const directionMetaMap: Record<string, { color: string; icon: React.ReactNode }> = {
+        IN: { color: 'green', icon: <span style={{ fontWeight: 700 }}>↑</span> },
+        OUT: { color: 'red', icon: <span style={{ fontWeight: 700 }}>↓</span> },
+    };
+
+    const bizTypeColorMap: Record<string, string> = {
+        SETTLEMENT_EARNING: 'green',
+        SETTLEMENT_EARNING_BASE: 'green',
+        SETTLEMENT_EARNING_CARRY: 'geekblue',
+        SETTLEMENT_BOMB_LOSS: 'red',
+        SETTLEMENT_EARNING_CS: 'orange',
+        RELEASE_FROZEN: 'blue',
+        REFUND_REVERSAL: 'volcano',
+        WITHDRAW_RESERVE: 'purple',
+        WITHDRAW_RELEASE: 'cyan',
+        WITHDRAW_PAYOUT: 'magenta',
+    };
 
     const fetchSummary = async (values: any) => {
         const range = values?.paymentRange;
@@ -103,7 +139,7 @@ const FinanceReconcilePage: React.FC = () => {
         }
     };
 
-    const columns: any = [
+    const columns: ProColumns<any>[] = [
         {
             title: '订单',
             dataIndex: 'autoSerial',
@@ -119,18 +155,9 @@ const FinanceReconcilePage: React.FC = () => {
             title: '状态',
             dataIndex: 'status',
             width: 110,
-            render: (_, row) => {
-                const s = row?.status;
-                const label = orderStatusDict?.[s] || s || '-';
-                return <Tag>{label}</Tag>;
-            },
+            render: (_, row) => <Tag>{getEnumText('OrderStatus', row?.status)}</Tag>,
         },
-        {
-            title: '收款时间',
-            dataIndex: 'paymentTime',
-            width: 170,
-            valueType: 'dateTime',
-        },
+        { title: '收款时间', dataIndex: 'paymentTime', width: 170, valueType: 'dateTime' },
         {
             title: '收入(实收)',
             dataIndex: ['income', 'paidAmount'],
@@ -155,18 +182,8 @@ const FinanceReconcilePage: React.FC = () => {
                 );
             },
         },
-        {
-            title: '客服抽成',
-            dataIndex: 'csExpense',
-            width: 110,
-            render: (_, row) => <Text>{money(row?.csExpense)}</Text>,
-        },
-        {
-            title: '累计支出',
-            dataIndex: 'totalExpense',
-            width: 110,
-            render: (_, row) => <Text>{money(row?.totalExpense)}</Text>,
-        },
+        { title: '客服抽成', dataIndex: 'csExpense', width: 110, render: (_, row) => <Text>{money(row?.csExpense)}</Text> },
+        { title: '累计支出', dataIndex: 'totalExpense', width: 110, render: (_, row) => <Text>{money(row?.totalExpense)}</Text> },
         {
             title: '余(毛利)',
             dataIndex: 'profit',
@@ -197,16 +214,12 @@ const FinanceReconcilePage: React.FC = () => {
             title: '操作',
             valueType: 'option',
             width: 110,
-            render: (_, row) => [
-                <a key="detail" onClick={() => openOrderDetail(row)}>
-                    抽查
-                </a>,
-            ],
+            render: (_, row) => [<a key="detail" onClick={() => openOrderDetail(row)}>抽查</a>],
         },
     ];
 
     return (
-        <PageContainer title="财务核账" subTitle="按收款时间(paymentTime)统计：实收 = isPaid=true 的 paidAmount；退款完成必须存在冲正流水">
+        <PageContainer title="财务核账" subTitle="按收款时间(paymentTime)统计：实收=isPaid=true 的 paidAmount；退款完成必须存在冲正流水">
             <Card style={{ marginBottom: 12 }}>
                 <Form
                     ref={formRef as any}
@@ -220,13 +233,7 @@ const FinanceReconcilePage: React.FC = () => {
                         await fetchSummary(values);
                     }}
                 >
-                    <Form.Item
-                        name="paymentRange"
-                        label="收款时间"
-                        rules={[{ required: true, message: '请选择收款时间范围' }]}
-                    >
-                        {/* 用 antd 原生 RangePicker，避免 ProForm 依赖差异 */}
-                        {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
+                    <Form.Item name="paymentRange" label="收款时间" rules={[{ required: true, message: '请选择收款时间范围' }]}>
                         <DatePicker.RangePicker showTime allowClear={false} />
                     </Form.Item>
 
@@ -248,11 +255,7 @@ const FinanceReconcilePage: React.FC = () => {
 
                     <Form.Item>
                         <Space>
-                            <Button
-                                type="primary"
-                                onClick={() => formRef.current?.submit?.()}
-                                loading={loadingSummary}
-                            >
+                            <Button type="primary" onClick={() => formRef.current?.submit?.()} loading={loadingSummary}>
                                 查询
                             </Button>
                         </Space>
@@ -278,10 +281,7 @@ const FinanceReconcilePage: React.FC = () => {
                 </Col>
                 <Col span={6}>
                     <Card loading={loadingSummary}>
-                        <Statistic
-                            title="退款未完成(未冲正)"
-                            value={money(summary?.refund?.refundPendingCount)}
-                        />
+                        <Statistic title="退款未完成(未冲正)" value={money(summary?.refund?.refundPendingCount)} />
                     </Card>
                 </Col>
             </Row>
@@ -294,9 +294,7 @@ const FinanceReconcilePage: React.FC = () => {
                 request={async (params) => {
                     const values = formRef.current?.getFieldsValue?.() || {};
                     const range = values?.paymentRange;
-                    if (!range || range.length !== 2) {
-                        return { data: [], success: true, total: 0 };
-                    }
+                    if (!range || range.length !== 2) return { data: [], success: true, total: 0 };
 
                     const startAt = dayjs(range[0]).toISOString();
                     const endAt = dayjs(range[1]).toISOString();
@@ -313,37 +311,15 @@ const FinanceReconcilePage: React.FC = () => {
                             onlyAbnormal: Boolean(values?.onlyAbnormal),
                         });
 
-                        return {
-                            data: res?.rows || [],
-                            success: true,
-                            total: res?.total || 0,
-                        };
+                        return { data: res?.rows || [], success: true, total: res?.total || 0 };
                     } catch (e: any) {
                         message.error(e?.message || '加载订单核账明细失败');
                         return { data: [], success: false, total: 0 };
                     }
                 }}
-                toolBarRender={() => [
-                    <Button
-                        key="refresh"
-                        onClick={() => {
-                            // 触发 ProTable 重新请求
-                            // eslint-disable-next-line no-restricted-globals
-                            location.reload();
-                        }}
-                    >
-                        刷新页面
-                    </Button>,
-                ]}
             />
 
-            <Drawer
-                open={detailOpen}
-                title="订单抽查详情"
-                width={980}
-                onClose={() => setDetailOpen(false)}
-                destroyOnClose
-            >
+            <Drawer open={detailOpen} title="订单抽查详情" width={980} onClose={() => setDetailOpen(false)} destroyOnClose>
                 {detailLoading ? (
                     <Card loading />
                 ) : !detail ? (
@@ -354,7 +330,7 @@ const FinanceReconcilePage: React.FC = () => {
                             <Descriptions.Item label="订单号">{detail?.order?.autoSerial}</Descriptions.Item>
                             <Descriptions.Item label="订单ID">{detail?.order?.id}</Descriptions.Item>
                             <Descriptions.Item label="状态">
-                                <Tag>{orderStatusDict?.[detail?.order?.status] || detail?.order?.status}</Tag>
+                                <Tag>{getEnumText('OrderStatus', detail?.order?.status)}</Tag>
                             </Descriptions.Item>
                             <Descriptions.Item label="收款时间">
                                 {detail?.order?.paymentTime ? dayjs(detail.order.paymentTime).format('YYYY-MM-DD HH:mm:ss') : '-'}
@@ -379,13 +355,21 @@ const FinanceReconcilePage: React.FC = () => {
                                 pagination={false}
                                 dataSource={detail?.settlements || []}
                                 columns={[
-                                    { title: '参与者', dataIndex: ['user', 'name'], render: (_, r) => `${r?.user?.name || '-'}（${formatRate(r?.user?.rate)}）` },
+                                    {
+                                        title: '参与者',
+                                        dataIndex: ['user', 'name'],
+                                        render: (_, r) => `${r?.user?.name || '-'}（${formatRate(r?.user?.rate)}）`,
+                                    },
                                     { title: '结算类型', dataIndex: 'settlementType' },
                                     { title: '批次', dataIndex: 'settlementBatchId' },
                                     { title: '打手收益', dataIndex: 'finalEarnings', render: (_, r) => money(r?.finalEarnings) },
                                     { title: '客服分红', dataIndex: 'csEarnings', render: (_, r) => money(r?.csEarnings) },
                                     { title: '结算时间', dataIndex: 'settledAt', valueType: 'dateTime' },
-                                    { title: '状态', dataIndex: 'paymentStatus' },
+                                    {
+                                        title: '状态',
+                                        dataIndex: 'paymentStatus',
+                                        render: (_, r) => <Tag>{getEnumText('PaymentStatus', r?.paymentStatus)}</Tag>,
+                                    },
                                 ]}
                             />
                         </Card>
@@ -400,14 +384,57 @@ const FinanceReconcilePage: React.FC = () => {
                                 columns={[
                                     { title: 'TxID', dataIndex: 'id', width: 80 },
                                     { title: '用户ID', dataIndex: 'userId', width: 90 },
-                                    { title: '方向', dataIndex: 'direction', width: 80 },
-                                    { title: '业务类型', dataIndex: 'bizType', width: 140 },
-                                    { title: '金额', dataIndex: 'amount', render: (_, r) => money(r?.amount), width: 100 },
-                                    { title: '状态', dataIndex: 'status', width: 90 },
+                                    {
+                                        title: '流向',
+                                        dataIndex: 'direction',
+                                        width: 90,
+                                        render: (_, r) => {
+                                            const meta = directionMetaMap[r?.direction];
+                                            const label = getEnumText('WalletDirection', r?.direction);
+                                            if (!meta) return <Tag>{label}</Tag>;
+                                            return (
+                                                <Tag color={meta.color}>
+                                                    {meta.icon} {label}
+                                                </Tag>
+                                            );
+                                        },
+                                    },
+                                    {
+                                        title: '类型',
+                                        dataIndex: 'bizType',
+                                        width: 160,
+                                        render: (_, r) => {
+                                            const label = getEnumText('WalletBizType', r?.bizType);
+                                            const color = bizTypeColorMap[r?.bizType] ?? 'default';
+                                            return <Tag color={color}>{label}</Tag>;
+                                        },
+                                    },
+                                    {
+                                        title: '金额',
+                                        dataIndex: 'amount',
+                                        width: 120,
+                                        align: 'right',
+                                        render: (v, r) => {
+                                            const isIn = r?.direction === 'IN';
+                                            const n = Number(v ?? 0);
+                                            return (
+                                                <span style={{ color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500 }}>
+                          {isIn ? '+' : '-'}
+                                                    {Number.isFinite(n) ? n.toFixed(1) : '0.0'}
+                        </span>
+                                            );
+                                        },
+                                    },
+                                    {
+                                        title: '状态',
+                                        dataIndex: 'status',
+                                        width: 110,
+                                        render: (_, r) => <Tag>{getEnumText('WalletTxStatus', r?.status)}</Tag>,
+                                    },
                                     {
                                         title: '冲正链路',
                                         dataIndex: 'reversalOfTxId',
-                                        width: 120,
+                                        width: 140,
                                         render: (_, r) => (r?.reversalOfTxId ? <Tag color="green">reversalOf:{r.reversalOfTxId}</Tag> : '-'),
                                     },
                                     { title: '发生时间', dataIndex: 'createdAt', valueType: 'dateTime', width: 160 },
