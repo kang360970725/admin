@@ -426,9 +426,36 @@ export async function adjustSettlementFinalEarnings(data: { settlementId: number
 }
 
 // 订单退款
-export async function refundOrder(data: { id: number; remark?: string }) {
-    return request(`${API_BASE}/orders/refund`, { method: 'POST', data });
+// export async function refundOrder(data: { id: number; remark?: string }) {
+//     return request(`${API_BASE}/orders/refund`, { method: 'POST', data });
+// }
+/**
+ * ✅ 退款（兼容两种调用方式）
+ * - refundOrder({ id, remark })
+ * - refundOrder(id, { remark })
+ *
+ * 后端路由：POST /orders/refund
+ */
+export async function refundOrder(
+    idOrDto: number | { id: number; remark?: string },
+    payload?: { remark?: string },
+) {
+    // 兼容：refundOrder(orderId, { remark })
+    if (typeof idOrDto === 'number') {
+        const id = Number(idOrDto);
+        return request(`${API_BASE}/orders/refund`, {
+            method: 'POST',
+            data: { id, remark: payload?.remark },
+        });
+    }
+
+    // 兼容：refundOrder({ id, remark })
+    return request(`${API_BASE}/orders/refund`, {
+        method: 'POST',
+        data: { id: Number(idOrDto.id), remark: idOrDto.remark },
+    });
 }
+
 
 // 更新订单
 export async function updateOrder(data: any) {
@@ -726,3 +753,148 @@ export async function financeReconcileOrderDetail(data: { orderId?: number; auto
     });
 }
 
+// ======================
+// ✅ Orders API Wrappers（为 Detail.tsx 统一方法名）
+// - 不改现有接口，只做“方法名对齐 + 参数形状对齐”
+// ======================
+
+/**
+ * ✅ 兼容：详情页使用的派单方法名
+ * 后端路由：POST /orders/dispatch
+ */
+export async function assignDispatchOrUpdate(orderId: number, data: { playerIds: number[]; remark?: string }) {
+    return assignDispatch(orderId, data);
+}
+
+/**
+ * ✅ 兼容：详情页使用的“补收/改实付”方法名
+ * 后端路由：POST /orders/update-paid-amount
+ *
+ * 注意：
+ * - confirmPaid 允许 string/boolean，后端内部会 Boolean() 处理
+ */
+export async function updatePaidAmount(
+    orderId: number,
+    paidAmount: number,
+    opts?: { remark?: string; confirmPaid?: boolean | string },
+) {
+    return updateOrderPaidAmount({
+        id: orderId,
+        paidAmount,
+        remark: opts?.remark,
+        confirmPaid: opts?.confirmPaid as any,
+    });
+}
+
+/**
+ * ✅ 存单进度修复（输入“本轮总进度整数”，后端按有效参与者均分）
+ * 后端路由：POST /orders/dispatch/participant/update-progress
+ */
+export async function updateArchivedParticipantProgress(
+    dispatchId: number,
+    participantId: number,
+    progressBaseWan: number,
+    opts?: { remark?: string },
+) {
+    return request(`${API_BASE}/orders/dispatch/participant/update-progress`, {
+        method: 'POST',
+        data: {
+            dispatchId,
+            participantId,
+            progressBaseWan,
+            remark: opts?.remark,
+        },
+    });
+}
+
+/**
+ * ⚠️ 最终确认结单（方案 C）
+ * 你当前上传的 orders.controller.ts 里【还没有】这个路由，需要你后端加一个：
+ *   POST /orders/confirm-complete
+ * body 示例：{ id: orderId, remark?: string }
+ *
+ * 等你后端补好后，这个 API 就能直接用，前端不用再改。
+ */
+export async function confirmCompleteOrder(opts:any) {
+    console.log("=====opts");
+    console.log(opts);
+    return request(`${API_BASE}/orders/confirm-complete`, {
+        method: 'POST',
+        data: {
+            id: opts?.id,
+            paidAmount: opts?.paidAmount,
+            remark: opts?.remark,
+            confirmPaid: opts?.confirmPaid,
+        },
+    });
+}
+
+/**
+ * ✅ 退款：提供一个“按 id + remark”的调用方式（更贴合 Detail.tsx 的写法）
+ * 后端路由：POST /orders/refund
+ */
+export async function refundOrderById(orderId: number, opts?: { remark?: string }) {
+    return refundOrder({ id: orderId, remark: opts?.remark });
+}
+
+
+// ---------------------- Orders / Dispatch Fix (Archived) ----------------------
+// 存单后修复：单个参与者进度修正（后端一次只支持一个 participantId）
+export async function updateDispatchParticipantProgress(body: {
+    dispatchId: number;
+    participantId: number;
+    progressBaseWan: number;
+    remark?: string;
+}) {
+    return request(`${API_BASE}/orders/update-archived-progress`, {
+        method: 'POST',
+        data: body,
+    });
+}
+
+// 存单后修复：按“本轮总保底进度(万)”均分到本轮所有参与者，并触发“仅重算结算、不动钱包”
+export async function updateArchivedProgressTotal(body: {
+    dispatchId: number;
+    totalProgressBaseWan: number; // ✅ 允许负数（炸单修正）
+    remark?: string;
+}) {
+    return request(`${API_BASE}/orders/update-archived-progress-total`, {
+        method: 'POST',
+        data: body,
+    });
+}
+
+/**
+ * ✅ 钱包对齐修复（以 settlement.finalEarnings 为准）
+ * POST /orders/repair-wallet-by-settlements
+ * - dryRun=true：只预览差异，不落库
+ */
+export async function repairWalletBySettlements(data: {
+    id: number;
+    reason?: string;
+    scope?: string;
+    dryRun?: boolean;
+}) {
+    return request(`${API_BASE}/orders/repair-wallet-by-settlements`, {
+        method: 'POST',
+        data,
+    });
+}
+
+
+/**
+ * ✅ 重新结算（修历史结算用）
+ * POST /orders/recalculate-settlements
+ * - 默认 allowWalletSync=false：只改结算，不动钱包
+ */
+export async function recalculateOrderSettlements(data: {
+    id: number;
+    reason?: string;
+    scope?: string;
+    allowWalletSync?: boolean;
+}) {
+    return request(`${API_BASE}/orders/recalculate-settlements`, {
+        method: 'POST',
+        data,
+    });
+}

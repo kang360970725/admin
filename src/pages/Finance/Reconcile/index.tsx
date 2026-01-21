@@ -139,7 +139,7 @@ const FinanceReconcilePage: React.FC = () => {
         }
     };
 
-    const columns: ProColumns<any>[] = [
+    const columns: any = [
         {
             title: '订单',
             dataIndex: 'autoSerial',

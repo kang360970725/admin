@@ -1,27 +1,85 @@
-import React, { useRef, useState } from 'react';
-import { useNavigate } from '@umijs/max';
-import { PageContainer, ProTable, type ActionType } from '@ant-design/pro-components';
-import { Button, Tag, Space, message, Modal, Form, InputNumber, Input, Checkbox } from 'antd';
-import { getOrders, createOrder, assignDispatch, markOrderPaid } from '@/services/api';
+import React, {useMemo, useRef, useState} from 'react';
+import {useModel, useNavigate} from '@umijs/max';
+import {Button, Checkbox, Form, Input, InputNumber, message, Modal, Space, Tag, Tooltip} from 'antd';
+import {assignDispatch, createOrder, getOrders, markOrderPaid} from '@/services/api';
 import OrderUpsertModal from './components/OrderForm';
+import {PageContainer, ProTable, type ActionType} from '@ant-design/pro-components';
 
+/**
+ * ✅ 订单状态字典（前端兜底）
+ * - 新增：COMPLETED_PENDING_CONFIRM（已结单待确认）
+ * - 其余保持原样，不动你的历史状态（最小改动）
+ */
 const statusText: Record<string, { text: string; color?: string }> = {
-    WAIT_ASSIGN: { text: '待派单', color: 'default' },
-    WAIT_ACCEPT: { text: '待接单', color: 'orange' },
-    ACCEPTED: { text: '已接单', color: 'blue' },
-    ARCHIVED: { text: '已存单', color: 'purple' },
-    COMPLETED: { text: '已结单', color: 'green' },
-    WAIT_REVIEW: { text: '待评价', color: 'gold' },
-    REVIEWED: { text: '已评价', color: 'cyan' },
-    WAIT_AFTERSALE: { text: '待售后', color: 'volcano' },
-    AFTERSALE_DONE: { text: '已售后', color: 'magenta' },
-    REFUNDED: { text: '已退款', color: 'red' },
+    WAIT_ASSIGN: {text: '待派单', color: 'default'},
+    WAIT_ACCEPT: {text: '待接单', color: 'orange'},
+    ACCEPTED: {text: '已接单', color: 'blue'},
+    ARCHIVED: {text: '已存单', color: 'purple'},
+
+    // ✅ 方案 C：结单两段式
+    COMPLETED_PENDING_CONFIRM: {text: '已结单待确认', color: 'gold'},
+    COMPLETED: {text: '已结单', color: 'green'},
+
+    WAIT_REVIEW: {text: '待评价', color: 'gold'},
+    REVIEWED: {text: '已评价', color: 'cyan'},
+    WAIT_AFTERSALE: {text: '待售后', color: 'volcano'},
+    AFTERSALE_DONE: {text: '已售后', color: 'magenta'},
+    REFUNDED: {text: '已退款', color: 'red'},
 };
 
 const OrdersPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const navigate = useNavigate();
     const [createOpen, setCreateOpen] = useState(false);
+
+    // ✅ 当前用户（用于：敏感字段 customerGameId 在“已结单”状态下脱敏展示）
+    const {initialState} = useModel('@@initialState');
+    const currentUser: any = initialState?.currentUser;
+
+    /**
+     * ✅ 是否允许查看“已结单后的 customerGameId”
+     * 后端也会做强制脱敏/不返回，这里是前端兜底防漏。
+     *
+     * 你要求：仅【超级管理员、客服主管】可见。
+     * - SUPER_ADMIN：通常是 userType
+     * - 客服主管：你的项目里可能是 role.name / role.code / roleKey 等字段（这里做兼容判断）
+     *
+     * 若你后续告诉我“客服主管”的真实字段/枚举值，我会把这里进一步收敛到唯一判断。
+     */
+    const canViewCustomerGameIdAfterCompleted = useMemo(() => {
+        if (!currentUser) return false;
+
+        // 1) 常见：userType
+        if (String(currentUser?.userType || '') === 'SUPER_ADMIN') return true;
+
+        // 2) 常见：role / roles
+        const roleName = String(currentUser?.role?.name || currentUser?.roleName || '').trim();
+        const roleCode = String(currentUser?.role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim();
+
+        // 你提到的是“客服主管”，这里做最小兼容：包含关键字即可（后续可再收敛）
+        if (roleName.includes('客服主管')) return true;
+
+        // 若你后端有固定 code，可在这里补齐（不影响现有逻辑）
+        const allowRoleCodes = new Set([
+            'CS_SUPERVISOR',
+            'CUSTOMER_SERVICE_SUPERVISOR',
+            'CS_MANAGER',
+            'CUSTOMER_SERVICE_MANAGER',
+        ]);
+        if (allowRoleCodes.has(roleCode)) return true;
+
+        return false;
+    }, [currentUser]);
+
+    /**
+     * ✅ 已结单状态判定（用于：customerGameId 脱敏）
+     * - 你要求：已结单状态不允许返回/展示 customerGameId
+     * - 这里覆盖：COMPLETED_PENDING_CONFIRM + COMPLETED（以及稳妥起见包含 REFUNDED）
+     */
+    const isCompletedLikeStatus = (status?: any) => {
+        const s = String(status || '');
+        return s === 'COMPLETED_PENDING_CONFIRM' || s === 'COMPLETED' || s === 'REFUNDED';
+    };
 
     // ✅ 确认收款弹窗（列表页快捷操作）
     const [markPaidOpen, setMarkPaidOpen] = useState(false);
@@ -83,27 +141,27 @@ const OrdersPage: React.FC = () => {
         {
             title: '状态',
             dataIndex: 'status',
-            width: 110,
+            width: 130,
             render: (_: any, row: any) => {
-                const s = statusText[row.status] || { text: row.status };
-                return <Tag color={s.color}>{s.text}</Tag>;
+                const s = statusText[row.status] || {text: row.status};
+                return <Tag color={s?.color}>{s.text}</Tag>;
             },
             valueType: 'select',
-            valueEnum: Object.fromEntries(Object.entries(statusText).map(([k, v]) => [k, { text: v.text }])),
+            valueEnum: Object.fromEntries(Object.entries(statusText).map(([k, v]) => [k, {text: v.text}])),
         },
 
-        // ✅ 新增：收款状态筛选 + 未付款显示
+        // ✅ 收款状态筛选 + 未付款显示
         {
             title: '收款',
             dataIndex: 'isPaid',
             width: 110,
             valueType: 'select',
             valueEnum: {
-                true: { text: '已收款' },
-                false: { text: '未收款' },
+                true: {text: '已收款'},
+                false: {text: '未收款'},
             },
             render: (_: any, row: any) => {
-                // 赠送单：保持“未收款”展示，但不做高亮提示（避免误导）
+                // 赠送单：保持“赠送”展示
                 if (row?.isGifted) return <Tag>赠送</Tag>;
                 if (row?.isPaid === false) return <Tag color="red">未收款</Tag>;
                 return <Tag color="green">已收款</Tag>;
@@ -117,11 +175,43 @@ const OrdersPage: React.FC = () => {
             render: (_: any, row: any) => `¥${row.paidAmount}`,
             search: false,
         },
+
+        /**
+         * ✅ customerGameId 脱敏兜底（仅影响“已结单状态”）
+         * - 后端会做强制脱敏/不返回，这里只是前端兜底，避免意外泄露
+         * - 为了“最小改动”，仍保留该列、也保留 search 入参（你后端若禁止，会自然无结果）
+         */
         {
             title: '客户游戏ID',
             dataIndex: 'customerGameId',
             ellipsis: true,
+            render: (_: any, row: any) => {
+                const raw = row?.customerGameId;
+
+                // 1) 后端已经脱敏/不返回
+                if (raw == null || raw === '') return '-';
+
+                // 2) 仅在“已结单状态”做限制
+                if (!isCompletedLikeStatus(row?.status)) {
+                    return String(raw);
+                }
+
+                // 3) 已结单：仅允许 SUPER_ADMIN / 客服主管查看
+                if (canViewCustomerGameIdAfterCompleted) {
+                    return String(raw);
+                }
+
+                return (
+                    <Tooltip title="已结单订单：非超级管理员/客服主管不允许查看客户游戏ID">
+                        <span style={{letterSpacing: 2}}>******</span>
+                    </Tooltip>
+                );
+            },
+
+            // 搜索框是否显示：如果你希望“非允许角色”不能用 customerGameId 搜索，也可以关掉
+            // 这里按“最小改动”默认保留搜索输入框：后端会自行校验/限制返回
         },
+
         {
             title: '派单客服',
             dataIndex: ['dispatcher', 'name'],
@@ -156,23 +246,29 @@ const OrdersPage: React.FC = () => {
             valueType: 'option',
             width: 260,
             render: (_: any, row: any) => {
+                // ✅ 列表快捷“确认收款”：排除赠送单 + 未收款
                 const canQuickMarkPaid = !row?.isGifted && row?.isPaid === false;
 
                 return [
-                    <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
+                    // <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
+                    <a
+                        href={`/orders/${row.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         详情
                     </a>,
 
-                    // ✅ 新增：未收款订单的快捷“确认收款”
-                    canQuickMarkPaid ? (
-                        <a
-                            key="markPaid"
-                            style={{ color: '#1677ff', fontWeight: 500 }}
-                            onClick={() => openMarkPaidModal(row)}
-                        >
-                            确认收款
-                        </a>
-                    ) : null,
+
+                    // canQuickMarkPaid ? (
+                    //     <a
+                    //         key="markPaid"
+                    //         style={{ color: '#1677ff', fontWeight: 500 }}
+                    //         onClick={() => openMarkPaidModal(row)}
+                    //     >
+                    //         确认收款
+                    //     </a>
+                    // ) : null,
                 ].filter(Boolean);
             },
         },
@@ -193,7 +289,7 @@ const OrdersPage: React.FC = () => {
                 rowKey="id"
                 actionRef={actionRef}
                 columns={columns}
-                search={{ labelWidth: 90 }}
+                search={{labelWidth: 90}}
                 toolbar={{
                     actions: [
                         <Button key="new" type="primary" onClick={() => setCreateOpen(true)}>
@@ -207,6 +303,7 @@ const OrdersPage: React.FC = () => {
                     return row?.isPaid === false ? 'orders-row-unpaid' : '';
                 }}
                 request={async (params) => {
+                    // ProTable select 可能传 string，这里做一次规范化
                     const isPaidParam =
                         params.isPaid === undefined
                             ? undefined
@@ -223,7 +320,7 @@ const OrdersPage: React.FC = () => {
                         status: params.status,
                         customerGameId: params.customerGameId,
 
-                        // ✅ 新增：收款筛选
+                        // ✅ 收款筛选
                         isPaid: isPaidParam,
 
                         // projectId/playerId/dispatcherId 你后续加筛选控件后再传
@@ -258,7 +355,7 @@ const OrdersPage: React.FC = () => {
                         remark: payload?.remark,
                         isGifted: Boolean(payload?.isGifted),
 
-                        // ✅ 新增：是否已收款（不再由 paymentTime 推断）
+                        // ✅ 是否已收款（不再由 paymentTime 推断）
                         isPaid: Boolean(payload?.isPaid),
                     });
 
@@ -266,7 +363,7 @@ const OrdersPage: React.FC = () => {
                     if (!orderId) throw new Error('创建订单失败：未返回订单ID');
 
                     if (payload?.playerIds?.length) {
-                        await assignDispatch(orderId, { playerIds: payload?.playerIds, remark: '新建订单时派单' });
+                        await assignDispatch(orderId, {playerIds: payload?.playerIds, remark: '新建订单时派单'});
                     }
 
                     message.success('创建成功');
@@ -289,15 +386,13 @@ const OrdersPage: React.FC = () => {
                     <Form.Item
                         label="实收金额（实付）"
                         name="paidAmount"
-                        rules={[
-                            { required: true, message: '请输入实收金额' },
-                        ]}
+                        rules={[{required: true, message: '请输入实收金额'}]}
                     >
-                        <InputNumber style={{ width: '100%' }} min={0} step={1} />
+                        <InputNumber style={{width: '100%'}} min={0} step={1}/>
                     </Form.Item>
 
                     <Form.Item label="备注" name="remark">
-                        <Input.TextArea rows={3} placeholder="可填写收款备注（可不填）" />
+                        <Input.TextArea rows={3} placeholder="可填写收款备注（可不填）"/>
                     </Form.Item>
 
                     <Form.Item name="confirmPaid" valuePropName="checked" initialValue={true}>
