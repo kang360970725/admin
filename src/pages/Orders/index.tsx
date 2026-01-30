@@ -262,12 +262,12 @@ const OrdersPage: React.FC = () => {
                 const canQuickMarkPaid = !row?.isGifted && row?.isPaid === false;
 
                 return [
-                    <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
-                    {/*<a*/}
-                    {/*    href={`/orders/${row.id}`}*/}
-                    {/*    target="_blank"*/}
-                    {/*    rel="noopener noreferrer"*/}
-                    {/*>*/}
+                    // <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
+                    <a
+                        href={`/orders/${row.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
                         详情
                     </a>,
 
