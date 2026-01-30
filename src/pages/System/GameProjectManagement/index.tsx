@@ -284,6 +284,7 @@ const GameProjectManagement: React.FC = () => {
                         <Select placeholder="请选择计费模式">
                             <Option value="GUARANTEED">保底单</Option>
                             <Option value="HOURLY">小时单</Option>
+                            <Option value="MODE_PLAY">玩法单</Option>
                         </Select>
                     </Form.Item>
                     <Form.Item

@@ -132,6 +132,18 @@ const OrdersPage: React.FC = () => {
             width: 160,
             copyable: true,
             ellipsis: true,
+            search: false
+        },
+        {
+            title: '搜索',
+            dataIndex: 'keyword',
+            hideInTable: true, // ✅ 只出现在搜索区
+            renderFormItem: () => (
+                <Input
+                    allowClear
+                    placeholder="订单号 / 客服 / 陪玩昵称"
+                />
+            ),
         },
         {
             title: '项目',
@@ -250,12 +262,12 @@ const OrdersPage: React.FC = () => {
                 const canQuickMarkPaid = !row?.isGifted && row?.isPaid === false;
 
                 return [
-                    // <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
-                    <a
-                        href={`/orders/${row.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
+                    <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
+                    {/*<a*/}
+                    {/*    href={`/orders/${row.id}`}*/}
+                    {/*    target="_blank"*/}
+                    {/*    rel="noopener noreferrer"*/}
+                    {/*>*/}
                         详情
                     </a>,
 
@@ -319,7 +331,8 @@ const OrdersPage: React.FC = () => {
                         serial: params.autoSerial,
                         status: params.status,
                         customerGameId: params.customerGameId,
-
+                        // ✅ 新增：综合搜索
+                        keyword: params.keyword,
                         // ✅ 收款筛选
                         isPaid: isPaidParam,
 

@@ -19,6 +19,7 @@ import {
     Row,
     Select,
     Space,
+    Switch,
     Table,
     Tabs,
     Tag,
@@ -49,7 +50,6 @@ import {
     markOrderPaid,
     recalculateOrderSettlements,
     refundOrder,
-    repairWalletBySettlements,
     updateArchivedProgressTotal,
     updateDispatchParticipants,
     updateOrder,
@@ -58,6 +58,8 @@ import {
 import dayjs from 'dayjs';
 import {useIsMobile} from '@/utils/useIsMobile';
 import {generateReceiptImage} from '@/utils/receiptImage';
+import {useOrderReconcile} from "@/hooks/useOrderReconcile";
+import {seedModePlayEqualByRound, validateModePlayAlloc} from "@/utils/format";
 
 type DictMap = Record<string, Record<string, string>>;
 
@@ -115,12 +117,36 @@ const OrderDetailPage: React.FC = () => {
     const [archFixOpen, setArchFixOpen] = useState(false);
     const [archFixSubmitting, setArchFixSubmitting] = useState(false);
     const [archFixDispatch, setArchFixDispatch] = useState<any>(null);
-    const [archFixTotalWan, setArchFixTotalWan] = useState<number | null>(null);
 
-// ✅ 客服确认结单（两段式结单第二步）
+    // ✅ 客服确认结单（两段式结单第二步）
     const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
     const [confirmCompleteLoading, setConfirmCompleteLoading] = useState(false);
     const [confirmCompleteRemark, setConfirmCompleteRemark] = useState('');
+
+    // 重算工具 - 玩法单分轮输入
+    const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<ModePlayAllocState | null>(null);
+
+
+    // ==========================
+    // ✅ 玩法单（MODE_PLAY）多轮不同参与者：分轮收入输入（仅前端校验/UI）
+    // ==========================
+    type ModePlayRoundRow = {
+        key: string;
+        dispatchId: number;
+        round: number;
+        participantIds: number[];
+        participantNames: string[]; // ✅ 新增：用于展示
+        participantCount: number;
+        income: number; // 本轮收入（客服填）
+    };
+
+    type ModePlayAllocState = {
+        need: boolean;           // 是否需要分配（玩法单 + 多轮不同人）
+        rows: ModePlayRoundRow[]; // 表格行
+    };
+
+    const [modePlayAlloc, setModePlayAlloc] = useState<ModePlayAllocState | null>(null);
+
 
     const [editOpen, setEditOpen] = useState(false);
     const openEditModal = () => setEditOpen(true);
@@ -130,6 +156,12 @@ const OrderDetailPage: React.FC = () => {
     const [markPaidOpen, setMarkPaidOpen] = useState(false);
     const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false);
     const [markPaidForm] = Form.useForm();
+
+    const [debugJsonEnabled, setDebugJsonEnabled] = useState(false);
+
+    const [repairPreview, setRepairPreview] = useState<any>(null);
+    const [archFixValue, setArchFixValue] = useState<number>(0);
+
 
     const openMarkPaidModal = () => {
         if (!order) return;
@@ -141,19 +173,6 @@ const OrderDetailPage: React.FC = () => {
         });
 
         setMarkPaidOpen(true);
-    };
-
-    const toCents = (v: any) => {
-        const n = Number(v ?? 0);
-        if (!Number.isFinite(n)) return 0;
-        return Math.round(n * 100);
-    };
-
-    const centsToMoney = (cents: number) => {
-        const n = Number(cents ?? 0);
-        const yuan = n / 100;
-        // 保留 2 位（去掉浮点尾巴）
-        return yuan.toFixed(2);
     };
 
     const submitMarkPaid = async () => {
@@ -207,391 +226,455 @@ const OrderDetailPage: React.FC = () => {
         setRecalcResult(null);
         setWalletPreview(null);
         setWalletApplyResult(null);
-
+        initRecalcModePlayAlloc()
         setToolsOpen(true);
+
     };
 
-    //重新结算方法不动钱包
-    const runRecalculate = async () => {
+    const initRecalcModePlayAlloc = () => {
+        if (!isModePlay) {
+            setRecalcModePlayAlloc(null);
+            return;
+        }
+
+        const alloc = buildModePlayAllocState(order); // 你之前用于确认结单的构建函数
+        // ✅ 默认按轮均分（你已做过 seedModePlayEqualByRound）
+        if (alloc.need) {
+            alloc.rows = seedModePlayEqualByRound(alloc.rows, Number(order?.paidAmount ?? 0));
+        }
+        setRecalcModePlayAlloc(alloc);
+    };
+
+    const renderRecalcResult = (res: any) => {
+        if (!res) return null;
+
+        const vm = res?.plan && res?.plan?.rounds ? res.plan : res; // ✅ 如果 plan 里有 rounds，就用 plan
+        const rounds = Array.isArray(vm?.rounds) ? vm.rounds : [];
+        const columns = Array.isArray(vm?.columns) ? vm.columns : [];
+        const summary = vm?.summary;
+
+        // 兼容：如果还是旧结构，走你原来的逻辑（不删，兜底）
+        if (!rounds.length || !columns.length) {
+            return (
+                <Card size="small" title="① 重新结算结果" style={{borderRadius: 14}}>
+                    <Typography.Text type="secondary">
+                        返回结构不是新视图模型（可开启调试模式查看原始数据）。
+                    </Typography.Text>
+                </Card>
+            );
+        }
+
+        const orderIdText = res?.orderId ?? order?.id ?? '-';
+        const income = summary?.income ?? res?.orderSummary?.paidAmount;
+        const payout = summary?.payout ?? 0;
+        const penaltyIncome = summary?.penaltyIncome ?? 0;
+        const platformNet = summary?.platformNet ?? (
+            Number.isFinite(Number(income)) ? (Number(income) - payout + penaltyIncome) : undefined
+        );
+
+        const deltaTag = (n: any) => {
+            const v = Number(n);
+            if (!Number.isFinite(v) || v === 0) return <Tag style={{borderRadius: 999}}>0</Tag>;
+            return (
+                <Tag color={v > 0 ? 'green' : 'red'} style={{borderRadius: 999}}>
+                    {v > 0 ? '+' : ''}{fmtMoney(v)}
+                </Tag>
+            );
+        };
+
+        // ✅ 行内单元格：同一行展示多个 settlementType（缺失 => —）
+        const renderCell = (cell: any) => {
+            if (!cell) return <Typography.Text type="secondary">—</Typography.Text>;
+
+            const p = cell.preview || {};
+            return (
+                <Space direction="vertical" size={2}>
+                    <span>{fmtMoney(p.oldFinal)} → {fmtMoney(p.expectedFinal)}</span>
+                    <span>{deltaTag(p.deltaFinal)}</span>
+                    {cell.note ? (
+                        <Typography.Text type="secondary" style={{fontSize: 12}}>
+                            {cell.note}
+                        </Typography.Text>
+                    ) : null}
+                </Space>
+            );
+        };
+
+        // ✅ 动态列：全单统一 settlementType 列（A），每列一个 cell
+        const tableColumns: any[] = [
+            {
+                title: '参与人',
+                dataIndex: 'user',
+                width: 110,
+                fixed: isMobile ? undefined : 'left',
+                render: (_: any, r: any) => r?.user?.name ?? `#${r?.userId}`,
+            },
+            ...columns.map((c: any) => {
+                const t = String(c?.settlementType || '');
+                return {
+                    title: t,
+                    dataIndex: ['cellsByType', t],
+                    width: 220,
+                    render: (cell: any) => renderCell(cell),
+                };
+            }),
+            {
+                title: '本行小计',
+                width: 160,
+                render: (_: any, r: any) => (
+                    <Space direction="vertical" size={2}>
+                        <span>支出：{fmtMoney(r?.rowSummary?.payout ?? 0)}</span>
+                        <span>炸单贡献：{fmtMoney(r?.rowSummary?.penaltyIncome ?? 0)}</span>
+                        <span>
+            净额：{deltaTag(r?.rowSummary?.net ?? 0)}
+          </span>
+                    </Space>
+                ),
+            },
+        ];
+
+        return (
+            <Space direction="vertical" size={10} style={{width: '100%'}}>
+                {/* ✅ 图三：总览（融入同一视图顶部） */}
+                <Card size="small" title="① 重新核算结果（预览）" style={{borderRadius: 14}}>
+                    <Space direction="vertical" size={8} style={{width: '100%'}}>
+                        <Descriptions bordered size="small" column={isMobile ? 1 : 4}>
+                            <Descriptions.Item label="订单ID">{orderIdText}</Descriptions.Item>
+                            <Descriptions.Item
+                                label="订单收入">{income !== undefined ? fmtMoney(income) : '-'}</Descriptions.Item>
+                            <Descriptions.Item label="订单成本(总支出)">{fmtMoney(payout)}</Descriptions.Item>
+                            <Descriptions.Item label="炸单贡献收益">{fmtMoney(penaltyIncome)}</Descriptions.Item>
+                        </Descriptions>
+
+                        <div>
+                            平台净额：
+                            <Tag
+                                color={
+                                    platformNet === undefined ? 'default' : Number(platformNet) >= 0 ? 'green' : 'red'
+                                }
+                                style={{borderRadius: 999, marginLeft: 6}}
+                            >
+                                {platformNet === undefined ? '-' : fmtMoney(platformNet)}
+                            </Tag>
+                        </div>
+
+                        <Typography.Text type="secondary" style={{fontSize: 12}}>
+                            说明：负数收益统一视为“炸单贡献收益”（不再依赖 settlementType）。
+                        </Typography.Text>
+                    </Space>
+                </Card>
+
+                {/* ✅ 图二骨架：轮次分组，每轮一个表；单元格就是图一细节 */}
+                <Collapse
+                    defaultActiveKey={[]}
+                    items={rounds.map((rd: any) => {
+                        const title = `第${rd?.dispatchRound ?? '-'}轮（${String(rd?.dispatchStatus ?? '-')}，派单ID:${rd?.dispatchId ?? '-'}）`;
+                        const rs = rd?.roundSummary || {};
+                        return {
+                            key: String(rd?.dispatchId ?? rd?.dispatchRound ?? Math.random()),
+                            label: (
+                                <Space wrap>
+                                    <span>{title}</span>
+                                    <Tag style={{borderRadius: 999}}>支出：{fmtMoney(rs.payout ?? 0)}</Tag>
+                                    <Tag style={{borderRadius: 999}}>炸单贡献：{fmtMoney(rs.penaltyIncome ?? 0)}</Tag>
+                                    <Tag style={{borderRadius: 999}}>净额：{fmtMoney(rs.net ?? 0)}</Tag>
+                                </Space>
+                            ),
+                            children: (
+                                <Table
+                                    size="small"
+                                    rowKey={(r: any) => String(r?.userId)}
+                                    pagination={false}
+                                    scroll={{x: true}}
+                                    dataSource={Array.isArray(rd?.rows) ? rd.rows : []}
+                                    columns={tableColumns}
+                                />
+                            ),
+                        };
+                    })}
+                />
+            </Space>
+        );
+    };
+
+
+    const runRecalcPreview = async () => {
         if (!order?.id) return;
+
+        // ✅ 玩法单：重算必须携带每轮金额
+        let modePlayAllocList: any[] | undefined = undefined;
+
+        if (isModePlay) {
+            const paid = Number(order?.paidAmount ?? 0);
+
+            // 玩法单如果需要分配，但目前未初始化/未录入，则阻断（避免后端算不出来）
+            if (!recalcModePlayAlloc || !Array.isArray(recalcModePlayAlloc?.rows)) {
+                message.warning('玩法单重算需要录入“每轮收入”，请先在工具弹窗中填写后再预览');
+                return;
+            }
+
+            // ✅ 默认按轮均分（如果你 UI 已经填过，就不会覆盖；这里只做兜底：全 0 时才种子）
+            //    注意：我不猜你的 UI 行为，只做“安全兜底”
+            const rows = recalcModePlayAlloc.rows || [];
+            const sum = rows.reduce((acc: number, r: any) => acc + Number(r?.income ?? 0), 0);
+            if (rows.length > 0 && sum === 0 && paid > 0) {
+                const seeded = seedModePlayEqualByRound(rows, paid);
+                setRecalcModePlayAlloc({ ...recalcModePlayAlloc, rows: seeded });
+                // seeded 后继续使用 seeded 参与本次请求
+                const v = validateModePlayAlloc(seeded as any, paid);
+                if (!v.ok) {
+                    message.warning(v.err || '玩法单分轮收入校验未通过');
+                    return;
+                }
+                modePlayAllocList = seeded.map((r: any) => ({
+                    dispatchId: Number(r.dispatchId),
+                    income: Number(r.income ?? 0),
+                }));
+            } else {
+                // 正常走校验
+                const v = validateModePlayAlloc(rows as any, paid);
+                if (!v.ok) {
+                    message.warning(v.err || '玩法单分轮收入校验未通过');
+                    return;
+                }
+                modePlayAllocList = rows.map((r: any) => ({
+                    dispatchId: Number(r.dispatchId),
+                    income: Number(r.income ?? 0),
+                }));
+            }
+        }
+
         try {
             setToolsLoading(true);
+
+            // 清理旧结果，避免误读
+            setRepairPreview(null);
+            setRecalcResult(null);
+            setToolsResult(null);
 
             const res = await recalculateOrderSettlements({
                 id: Number(order.id),
                 reason: toolsRemark || undefined,
                 scope: 'COMPLETED_AND_ARCHIVED',
-                allowWalletSync: false, // ✅ 最安全：不动钱包
-            });
+                dryRun: true,          // ✅ 仅预览
+                applyRepair: false,    // ✅ 明确不应用
 
-            setToolsResult(res);
+                // ✅ 玩法单：传入每轮收入
+                ...(isModePlay ? { modePlayAllocList } : {}),
+            } as any);
+
+            setRepairPreview(res);
             setRecalcResult(res);
-            setToolsStep('RECALCED');
+            setToolsResult(res);
+            setToolsStep('PREVIEWED');
 
-            // ✅ 一旦重新结算，旧的预览/执行结果应失效
-            setWalletPreview(null);
-            setWalletApplyResult(null);
-
-            message.success('重新结算完成（未同步钱包）');
-            await loadDetail();
-        } catch (e: any) {
-            message.error(e?.response?.data?.message || '重新结算失败');
+            message.success('已生成修复预览，请核对后再确认应用');
         } finally {
             setToolsLoading(false);
         }
     };
-    //钱包对齐预览
-    const runWalletPreview = async () => {
+
+
+    const runRecalcApply = async () => {
         if (!order?.id) return;
-        if (toolsStep !== 'RECALCED') {
-            message.warning('请先执行“重新结算（不动钱包）”，再生成钱包对齐预览');
+
+        // ✅ 防呆：必须先预览
+        if (!repairPreview) {
+            message.warning('请先执行“修复预览”，确认无误后再点击“确认应用”');
             return;
         }
+
+        // ✅ 玩法单：应用时也携带每轮金额（便于后端校验/日志；即便 applyRepair 分支忽略也不影响）
+        let modePlayAllocList: any[] | undefined = undefined;
+
+        if (isModePlay) {
+            const paid = Number(order?.paidAmount ?? 0);
+
+            if (!recalcModePlayAlloc || !Array.isArray(recalcModePlayAlloc?.rows)) {
+                message.warning('玩法单重算需要录入“每轮收入”，请先在工具弹窗中填写后再应用');
+                return;
+            }
+
+            const rows = recalcModePlayAlloc.rows || [];
+            const v = validateModePlayAlloc(rows as any, paid);
+            if (!v.ok) {
+                message.warning(v.err || '玩法单分轮收入校验未通过');
+                return;
+            }
+
+            modePlayAllocList = rows.map((r: any) => ({
+                dispatchId: Number(r.dispatchId),
+                income: Number(r.income ?? 0),
+            }));
+        }
+
         try {
             setToolsLoading(true);
-            const res = await repairWalletBySettlements({
+            setToolsResult(null);
+
+            const res = await recalculateOrderSettlements({
                 id: Number(order.id),
                 reason: toolsRemark || undefined,
-                scope: 'COMPLETED_AND_ARCHIVED',
-                dryRun: true,
-            });
+                applyRepair: true, // ✅ 只用缓存应用
+                dryRun: false,     // 可省略，但写上更直观
+                scope: 'COMPLETED_AND_ARCHIVED', // 可留着，后端 applyRepair 分支应忽略它
+
+                // ✅ 玩法单：传入每轮收入
+                ...(isModePlay ? { modePlayAllocList } : {}),
+            } as any);
+
             setToolsResult(res);
-            setWalletPreview(res);
-            setToolsStep('PREVIEWED');
-            message.success('已生成钱包对齐预览');
-        } catch (e: any) {
-            message.error(e?.response?.data?.message || '钱包对齐预览失败');
+            setToolsStep('APPLIED');
+
+            message.success('已确认应用：已重建结算&钱包流水');
+
+            // ✅ 清空预览，避免重复点击误用旧预览
+            setRepairPreview(null);
+
+            // 可选：应用后刷新详情
+            // await reloadOrderDetail();
         } finally {
             setToolsLoading(false);
         }
     };
-    //执行钱包对齐
-    const runWalletApply = async () => {
-        if (!order?.id) return;
-        if (toolsStep !== 'PREVIEWED') {
-            message.warning('请先生成“钱包对齐预览”，确认无误后再执行');
-            return;
-        }
 
-        const preview = walletPreview;
-        const changes: any[] = Array.isArray(preview?.changes) ? preview.changes : Array.isArray(preview?.items) ? preview.items : [];
-        const summary = preview?.summary || {};
 
-        const newCount = Number(summary?.newTxCount ?? 0);
-        const adjustCount = Number(summary?.adjustTxCount ?? 0);
-        const delta = summary?.totalDelta ?? preview?.totalDelta ?? null;
-
-        Modal.confirm({
-            title: '确认执行钱包对齐？',
-            content: (
-                <Space direction="vertical" size={6}>
-                    <Typography.Text>
-                        将写入钱包流水 / 冻结记录，用于让“钱包统计/可提现余额”与结算落库保持一致。
-                    </Typography.Text>
-                    <Typography.Text type="secondary" style={{fontSize: 12}}>
-                        预计新增流水：{newCount} 条；调整流水：{adjustCount} 条；净变动：{fmtMoney(delta)}
-                    </Typography.Text>
-                    <Tag color="gold" style={{borderRadius: 999}}>
-                        执行后会影响冻结余额与可提现余额，请务必先核对预览结果。
-                    </Tag>
-                </Space>
-            ),
-            okText: '确认执行',
-            okButtonProps: {danger: true},
-            cancelText: '取消',
-            onOk: async () => {
-                try {
-                    setToolsLoading(true);
-                    const res = await repairWalletBySettlements({
-                        id: Number(order.id),
-                        reason: toolsRemark || undefined,
-                        scope: 'COMPLETED_AND_ARCHIVED',
-                        dryRun: false,
-                    });
-                    setToolsResult(res);
-                    setWalletApplyResult(res);
-                    message.success('钱包对齐已执行');
-                    await loadDetail();
-                } catch (e: any) {
-                    message.error(e?.response?.data?.message || '执行钱包对齐失败');
-                } finally {
-                    setToolsLoading(false);
-                }
-            },
-        });
+    const toNum = (v: any) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
     };
 
-    // ===== 工具结果渲染：尽量让普通客服可读 =====
-    const ToolStepHeader = (
-        <Space size={8} wrap>
-            <Tag color={toolsStep === 'INIT' ? 'blue' : 'default'} style={{borderRadius: 999}}>
-                ① 重新结算（不动钱包）
-            </Tag>
-            <Tag color={toolsStep === 'RECALCED' ? 'blue' : toolsStep === 'PREVIEWED' ? 'default' : 'default'}
-                 style={{borderRadius: 999}}>
-                ② 钱包对齐预览
-            </Tag>
-            <Tag color={toolsStep === 'PREVIEWED' ? 'blue' : 'default'} style={{borderRadius: 999}}>
-                ③ 执行钱包对齐
-            </Tag>
-        </Space>
-    );
+    const getDispatchParticipantIds = (d: any): number[] => {
+        // 注意：ARCHIVED 轮参与者 isActive 可能 false，这里不要按 isActive 过滤
+        const parts = Array.isArray(d?.participants) ? d.participants : [];
+        const ids = parts
+            .map((p: any) => Number(p?.userId))
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+        return Array.from(new Set(ids)).sort((a, b) => a - b);
+    };
 
-    const renderRecalcResult = (res: any) => {
-        if (!res) return null;
-
-        // 兼容：若后端暂未提供结构化 diff，这里仍能兜底展示 JSON
-        const summary = res?.summary;
-        const byDispatch = Array.isArray(res?.byDispatch) ? res.byDispatch : null;
-
-        if (!summary && !byDispatch) {
-            return (
-                <Card size="small" title="重新结算结果（原始 JSON）">
-                    <pre style={{
-                        margin: 0,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word'
-                    }}>{JSON.stringify(res, null, 2)}</pre>
-                </Card>
-            );
-        }
-
+    const getParticipantDisplayName = (p: any): string => {
         return (
-            <Space direction="vertical" size={10} style={{width: '100%'}}>
-                <Card size="small" title="重新结算结果（结算已更新，钱包未动）">
-                    <Descriptions column={isMobile ? 1 : 3} bordered size="small">
-                        <Descriptions.Item label="订单ID">{res?.orderId ?? order?.id ?? '-'}</Descriptions.Item>
-                        <Descriptions.Item label="批次号">{res?.settlementBatchId || '-'}</Descriptions.Item>
-                        <Descriptions.Item label="是否有变化">
-                            {res?.changed === false ? <Tag>无变化</Tag> : <Tag color="green">已更新</Tag>}
-                        </Descriptions.Item>
-
-                        <Descriptions.Item
-                            label="实收（paidAmount）">{fmtMoney(summary?.paidAmount ?? order?.paidAmount)}</Descriptions.Item>
-                        <Descriptions.Item label="平台收益（前）">{fmtMoney(summary?.platformIncomeBefore)}</Descriptions.Item>
-                        <Descriptions.Item label="平台收益（后）">{fmtMoney(summary?.platformIncomeAfter)}</Descriptions.Item>
-
-                        <Descriptions.Item
-                            label="打手支出（前）">{fmtMoney(summary?.totalPayToPlayersBefore)}</Descriptions.Item>
-                        <Descriptions.Item
-                            label="打手支出（后）">{fmtMoney(summary?.totalPayToPlayersAfter)}</Descriptions.Item>
-                        <Descriptions.Item label="客服抽成（前→后）">
-                            {fmtMoney(summary?.customerServiceShareBefore)} → {fmtMoney(summary?.customerServiceShareAfter)}
-                        </Descriptions.Item>
-                    </Descriptions>
-                </Card>
-
-                {byDispatch ? (
-                    <Card size="small" title="按轮次变化（建议核对最后一轮 + 有争议的轮次）">
-                        <Table
-                            size="small"
-                            rowKey={(r: any) => String(r.dispatchId)}
-                            pagination={false}
-                            dataSource={byDispatch}
-                            columns={[
-                                {title: '轮次ID', dataIndex: 'dispatchId', width: 90},
-                                {
-                                    title: '状态',
-                                    dataIndex: 'status',
-                                    width: 120,
-                                    render: (v: any) => statusTag('DispatchStatus', v),
-                                },
-                                {
-                                    title: '本轮合计（前→后）',
-                                    render: (_: any, r: any) => (
-                                        <span>
-                                            {fmtMoney(r?.before?.total)} → {fmtMoney(r?.after?.total)}
-                                        </span>
-                                    ),
-                                },
-                                {
-                                    title: '打手（前→后）',
-                                    render: (_: any, r: any) => (
-                                        <span>
-                                            {fmtMoney(r?.before?.players)} → {fmtMoney(r?.after?.players)}
-                                        </span>
-                                    ),
-                                },
-                                {
-                                    title: '客服（前→后）',
-                                    render: (_: any, r: any) => (
-                                        <span>
-                                            {fmtMoney(r?.before?.cs)} → {fmtMoney(r?.after?.cs)}
-                                        </span>
-                                    ),
-                                },
-                            ] as any}
-                            expandable={{
-                                expandedRowRender: (r: any) => {
-                                    const items = Array.isArray(r?.items) ? r.items : [];
-                                    return (
-                                        <Table
-                                            size="small"
-                                            rowKey={(x: any) => String(x.settlementId || `${x.userId}_${x.settlementType}`)}
-                                            pagination={false}
-                                            dataSource={items}
-                                            columns={[
-                                                {title: '用户ID', dataIndex: 'userId', width: 90},
-                                                {title: '类型', dataIndex: 'settlementType', width: 160},
-                                                {
-                                                    title: '收益（前→后）',
-                                                    render: (_: any, x: any) => (
-                                                        <span>
-                                                            {fmtMoney(x.beforeFinal)} → {fmtMoney(x.afterFinal)}
-                                                        </span>
-                                                    ),
-                                                },
-                                                {
-                                                    title: '差额',
-                                                    dataIndex: 'diff',
-                                                    width: 120,
-                                                    render: (v: any) => {
-                                                        const n = Number(v);
-                                                        if (!Number.isFinite(n)) return '-';
-                                                        return <Tag
-                                                            color={n === 0 ? 'default' : n > 0 ? 'green' : 'red'}
-                                                            style={{borderRadius: 999}}>{fmtMoney(n)}</Tag>;
-                                                    },
-                                                },
-                                            ] as any}
-                                        />
-                                    );
-                                },
-                            }}
-                        />
-                    </Card>
-                ) : null}
-            </Space>
+            p?.name ||
+            p?.user?.name ||
+            `UID:${p?.id ?? ''}`
         );
     };
 
-    const renderWalletPreview = (res: any) => {
-        if (!res) return null;
-        const summary = res?.summary || {};
-        const changes = Array.isArray(res?.changes) ? res.changes : [];
+    const buildModePlayAllocState = (detail: any): ModePlayAllocState => {
+        const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+        // 只取“确实有参与者”的轮次（避免空轮影响判断）
+        const used = dispatches
+            .map((d: any, idx: number) => {
+                const parts = Array.isArray(d?.participants) ? d.participants : [];
 
-        if (!changes.length) {
-            return (
-                <Card size="small" title="钱包对齐预览">
-                    <Typography.Text type="secondary">暂无可对齐项目（可能结算为 0 或已对齐）。</Typography.Text>
-                    <pre style={{
-                        marginTop: 8,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word'
-                    }}>{JSON.stringify(res, null, 2)}</pre>
-                </Card>
-            );
+                const pids = parts
+                    .map((p: any) => Number(p?.userId))
+                    .filter((n: number) => Number.isFinite(n) && n > 0);
+
+                const uniqueIds = Array.from(new Set(pids)).sort((a, b) => a - b);
+
+                const names = parts
+                    .filter((p: any) => uniqueIds.includes(Number(p?.userId)))
+                    .map(getParticipantDisplayName);
+
+                return {
+                    d,
+                    idx,
+                    pids: uniqueIds,
+                    names,
+                };
+            })
+            .filter((x: any) => x.pids.length > 0);
+
+
+        if (used.length <= 1) {
+            return { need: false, rows: [] };
         }
 
-        return (
-            <Card size="small" title="钱包对齐预览（不会写入钱包）">
-                <Space direction="vertical" size={10} style={{width: '100%'}}>
-                    <Space size={8} wrap>
-                        <Tag style={{borderRadius: 999}}>新增：{summary?.newTxCount ?? '-'}</Tag>
-                        <Tag style={{borderRadius: 999}}>调整：{summary?.adjustTxCount ?? '-'}</Tag>
-                        <Tag style={{borderRadius: 999}}>无需变化：{summary?.noChangeCount ?? '-'}</Tag>
-                        <Tag
-                            color={Number(summary?.totalDelta ?? 0) === 0 ? 'default' : Number(summary?.totalDelta ?? 0) > 0 ? 'green' : 'red'}
-                            style={{borderRadius: 999}}>
-                            净变动：{fmtMoney(summary?.totalDelta)}
-                        </Tag>
-                    </Space>
+        const sig0 = used[0].pids.join(',');
+        const allSame = used.every((x: any) => x.pids.join(',') === sig0);
 
-                    <Table
-                        size="small"
-                        rowKey={(r: any) => String(r.settlementId ?? `${r.userId}_${r.dispatchId}`)}
-                        pagination={{pageSize: 8, hideOnSinglePage: true} as any}
-                        dataSource={changes}
-                        columns={[
-                            {title: '结算ID', dataIndex: 'settlementId', width: 90},
-                            {title: '用户ID', dataIndex: 'userId', width: 80},
-                            {title: '轮次', dataIndex: 'dispatchId', width: 80},
-                            {
-                                title: '变化类型',
-                                dataIndex: 'status',
-                                width: 120,
-                                render: (v: any) => {
-                                    const s = String(v || '');
-                                    const color = s === 'NEW' ? 'green' : s === 'ADJUST' ? 'gold' : s === 'NO_CHANGE' ? 'default' : 'default';
-                                    const text = s === 'NEW' ? '新增冻结流水' : s === 'ADJUST' ? '调整冻结金额' : s === 'NO_CHANGE' ? '无需变化' : s;
-                                    return <Tag color={color} style={{borderRadius: 999}}>{text}</Tag>;
-                                },
-                            },
-                            {
-                                title: '预计金额',
-                                dataIndex: 'expected',
-                                render: (v: any) => fmtMoney(v),
-                            },
-                            {
-                                title: '现有金额',
-                                dataIndex: 'current',
-                                render: (v: any) => fmtMoney(v),
-                            },
-                            {
-                                title: '差额',
-                                dataIndex: 'delta',
-                                render: (v: any) => {
-                                    const n = Number(v);
-                                    if (!Number.isFinite(n)) return '-';
-                                    return <Tag color={n === 0 ? 'default' : n > 0 ? 'green' : 'red'}
-                                                style={{borderRadius: 999}}>{fmtMoney(n)}</Tag>;
-                                },
-                            },
-                        ] as any}
-                    />
-                </Space>
-            </Card>
-        );
+        if (allSame) {
+            return { need: false, rows: [] };
+        }
+
+        // need=true：按派单轮生成输入行
+        let rows: ModePlayRoundRow[] = used.map((x: any, i: number) => ({
+            key: String(x?.d?.id ?? i),
+            dispatchId: Number(x?.d?.id),
+            round: Number(x?.d?.round ?? (i + 1)),
+            participantIds: x.pids,
+            participantNames: x.names,
+            participantCount: x.pids.length,
+            income: 0,
+        }));
+
+    // ✅ 默认：按轮次均分实付金额
+        rows = seedModePlayEqualByRound(rows, toNum(detail?.isGifted !== true ? detail?.paidAmount : detail?.receivableAmount));
+
+        return { need: true, rows };
     };
 
-    const renderWalletApply = (res: any) => {
-        if (!res) return null;
-        // apply 返回结构可能和 preview 相同（只是多了执行结果），这里兜底展示 JSON + 成功提示
-        return (
-            <Card size="small" title="钱包对齐执行结果">
-                <Tag color="green" style={{borderRadius: 999, marginBottom: 8}}>已执行写入（如有失败条目，请根据 JSON 排查）</Tag>
-                <pre style={{
-                    margin: 0,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word'
-                }}>{JSON.stringify(res, null, 2)}</pre>
-            </Card>
-        );
-    };
 
-    // const runRecalculate = async () => {
-    //     if (!order?.id) return;
-    //     try {
-    //         setToolsLoading(true);
-    //         const res = await recalculateOrderSettlements({
-    //             id: Number(order.id),
-    //             reason: toolsRemark || undefined,
-    //             scope: 'COMPLETED_AND_ARCHIVED',
-    //             allowWalletSync: false, // ✅ 最安全：不动钱包
-    //         });
-    //         setToolsResult(res);
-    //         message.success('重新结算已执行（未同步钱包）');
-    //         await loadDetail();
-    //     } catch (e: any) {
-    //         message.error(e?.response?.data?.message || '重新结算失败');
-    //     } finally {
-    //         setToolsLoading(false);
-    //     }
-    // };
 
     // ==========================
     // 客服确认结单（两段式结单第二步）
     // ==========================
     const openConfirmComplete = () => {
         setConfirmCompleteRemark('');
+
+        // ✅ 玩法单：在打开弹窗前一次性初始化分轮表格
+        if (isModePlay) {
+            const alloc = buildModePlayAllocState(order);
+            setModePlayAlloc(alloc);
+        } else {
+            setModePlayAlloc(null);
+        }
+
         setConfirmCompleteOpen(true);
     };
 
     const submitConfirmComplete = async () => {
         if (!order?.id) return;
+
+        // ✅ 玩法单校验：多轮不同参与者必须分配，且累计不得超过 paidAmount
+        if (isModePlay && modePlayAlloc?.need) {
+            const v = validateModePlayAlloc(modePlayAlloc.rows, toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount));
+            if (!v.ok) {
+                message.warning(v.err || '请先完成玩法单分配校验');
+                return;
+            }
+        }
+        console.log('[submitConfirmComplete] called', {
+            isModePlay,
+            need: modePlayAlloc?.need,
+            rows: modePlayAlloc?.rows?.length,
+        });
         try {
             setConfirmCompleteLoading(true);
-            await confirmCompleteOrder({id: Number(order.id), remark: confirmCompleteRemark || undefined});
+            const modePlayAllocList =
+                isModePlay
+                    ? (modePlayAlloc?.need
+                    ? (modePlayAlloc.rows ?? []).map(r => ({
+                        dispatchId: Number(r.dispatchId),
+                        income: Number(r.income ?? 0),
+                    }))
+                    : []) // ✅ 玩法单但无需分配：传空数组
+                    : undefined; // 非玩法单：不传
+
+            const payload: any = {
+                id: Number(order.id),
+                remark: confirmCompleteRemark || undefined,
+                paidAmount: Number(order?.paidAmount ?? 0),
+                confirmPaid: true,
+            };
+
+            // ✅ 只有玩法单才挂这个字段（避免污染其他单型）
+            if (isModePlay) payload.modePlayAllocList = modePlayAllocList;
+
+            await confirmCompleteOrder(payload);
+
             message.success('已确认结单');
             setConfirmCompleteOpen(false);
             await loadDetail();
@@ -601,6 +684,7 @@ const OrderDetailPage: React.FC = () => {
             setConfirmCompleteLoading(false);
         }
     };
+
 
 
     const submitRefund = async () => {
@@ -772,8 +856,9 @@ const OrderDetailPage: React.FC = () => {
         return snap.billingMode || order?.project?.billingMode;
     }, [order]);
 
-    const isHourly = billingMode === 'HOURLY';
-    const isGuaranteed = billingMode === 'GUARANTEED';
+    const isHourly = billingMode === 'HOURLY'; //小时单
+    const isGuaranteed = billingMode === 'GUARANTEED'; //保底单
+    const isModePlay = billingMode === 'MODE_PLAY';  //玩法单
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
@@ -892,8 +977,11 @@ const OrderDetailPage: React.FC = () => {
         // 默认值：本轮当前 progress 合计（万）
         const parts = Array.isArray(d?.participants) ? d.participants : [];
         const total = parts.reduce((sum: number, p: any) => sum + Number(p?.progressBaseWan ?? 0), 0);
-
-        setArchFixTotalWan(Number.isFinite(total) ? total : 0);
+        if (isHourly) {
+            setArchFixValue(Number(d?.billableHours ?? 0));
+        } else if (isGuaranteed) {
+            setArchFixValue(Number.isFinite(total) ? total : 0);
+        }
         setArchFixOpen(true);
     };
 
@@ -919,7 +1007,7 @@ const OrderDetailPage: React.FC = () => {
             const parts = Array.isArray(d?.participants) ? d.participants : [];
 
             // ✅ ARCHIVED 轮 participants 很可能 isActive 全 false，所以不要按 isActive 过滤
-            // ✅ 关键：必须拿到 OrderParticipant.id（p.id），否则后端无法定位要修复的参与者
+            // ✅ 必须拿到 OrderParticipant.id
             const fixParts = parts.filter((p: any) => Number(p?.id) > 0);
 
             if (!fixParts.length) {
@@ -927,31 +1015,47 @@ const OrderDetailPage: React.FC = () => {
                 return;
             }
 
-            const total = Number(archFixTotalWan ?? 0);
-            if (!Number.isFinite(total)) {
-                message.warning('请输入合法的整数进度（万）');
+            const value = Number(archFixValue ?? 0);
+            if (!Number.isFinite(value)) {
+                message.warning(isHourly ? '请输入合法的小时数' : '请输入合法的整数进度（万）');
                 return;
             }
 
             setArchFixSubmitting(true);
 
-            const splits = splitEvenlyInt(Math.trunc(total), fixParts.length);
+            // =========================
+            // 保底单：仍然按「总进度均分」
+            // =========================
+            if (isGuaranteed) {
+                const splits = splitEvenlyInt(Math.trunc(value), fixParts.length);
 
-            // ✅ 这里必须传 participantId = OrderParticipant.id
-            const progresses = fixParts.map((p: any, idx: number) => ({
-                participantId: Number(p.id),      // ✅ 后端要的就是这个
-                userId: Number(p?.userId),        // ✅ 可留着（如果后端 DTO 允许）
-                progressBaseWan: splits[idx] ?? 0,
-            }));
+                const progresses = fixParts.map((p: any, idx: number) => ({
+                    participantId: Number(p.id),
+                    userId: Number(p?.userId),
+                    progressBaseWan: splits[idx] ?? 0,
+                }));
 
-            // ✅ 新：按“本轮总保底进度(万)”修正，后端自动均分并触发本轮重算（不动钱包）
-            await updateArchivedProgressTotal({
-                dispatchId: Number(d.id),
-                totalProgressBaseWan: Math.trunc(total), // ✅ 允许负数（炸单修正）
-                remark: `ARCHIVED_FIX_TOTAL_WAN=${Math.trunc(total)}（均分到本轮参与人，并重算该轮结算）`,
-            });
+                await updateArchivedProgressTotal({
+                    dispatchId: Number(d.id),
+                    fixType: 'GUARANTEED',
+                    totalProgressBaseWan: Math.trunc(value), // ✅ 允许负数
+                    remark: `ARCHIVED_FIX_TOTAL_WAN=${Math.trunc(value)}（均分到本轮参与人，并重算该轮结算）`,
+                });
+            }
 
-            message.success('已修复该轮保底进度');
+            // =========================
+            // 小时单：修复 billableHours
+            // =========================
+            if (isHourly) {
+                await updateArchivedProgressTotal({
+                    dispatchId: Number(d.id),
+                    fixType: 'HOURLY',
+                    billableHours: value,
+                    remark: `ARCHIVED_FIX_HOURS=${value}（小时单修复，重算该轮结算）`,
+                });
+            }
+
+            message.success('已修复该轮存单数据');
             setArchFixOpen(false);
             await loadDetail();
         } catch (e: any) {
@@ -1077,75 +1181,7 @@ const OrderDetailPage: React.FC = () => {
     // - 总支出：按 settlements.finalEarnings 汇总（只统计非 0 且为数字的值）
     // - 平台收益：收入 - 支出
     // ==========================
-    const earningsSummary = useMemo(() => {
-        const incomeCents = order?.isGifted ? 0 : toCents(order?.paidAmount);
-        const list = Array.isArray(order?.settlements) ? order.settlements : [];
-
-        let payoutIncomeCents = 0;     // 正向收益合计（分）
-        let payoutExpenseAbsCents = 0; // 支出合计（分，绝对值）
-
-        const perUser: Record<string,
-            { userId: number; name: string; phone: string; incomeCents: number; expenseAbsCents: number; netCents: number }> = {};
-
-        for (const s of list as any[]) {
-            const v = Number(s?.finalEarnings ?? 0);
-            if (!Number.isFinite(v) || v === 0) continue;
-
-            const centsAbs = Math.abs(toCents(v));
-            const isLoss = v < 0;
-
-            const u = (s as any)?.user || {};
-            const key = String(s?.userId ?? u?.id ?? '0');
-
-            if (!perUser[key]) {
-                perUser[key] = {
-                    userId: Number(s?.userId ?? u?.id ?? 0),
-                    name: u?.name || '-',
-                    phone: u?.phone || '-',
-                    incomeCents: 0,
-                    expenseAbsCents: 0,
-                    netCents: 0,
-                };
-            }
-
-            if (isLoss) {
-                payoutExpenseAbsCents += centsAbs;
-                perUser[key].expenseAbsCents += centsAbs;
-            } else {
-                payoutIncomeCents += centsAbs;
-                perUser[key].incomeCents += centsAbs;
-            }
-
-            perUser[key].netCents = perUser[key].incomeCents - perUser[key].expenseAbsCents;
-        }
-
-        const platformSuggestedCents = incomeCents - payoutIncomeCents + payoutExpenseAbsCents;
-
-        const perUserList = Object.values(perUser)
-            .map((u) => ({
-                userId: u.userId,
-                name: u.name,
-                phone: u.phone,
-                income: Number(centsToMoney(u.incomeCents)),
-                expense: Number(centsToMoney(u.expenseAbsCents)),
-                net: Number(centsToMoney(u.netCents)),
-            }))
-            .sort((a, b) => b.net - a.net);
-
-        return {
-            income: Number(centsToMoney(incomeCents)),
-
-            payoutIncome: Number(centsToMoney(payoutIncomeCents)),
-            payoutExpenseAbs: Number(centsToMoney(payoutExpenseAbsCents)),
-            platformSuggested: Number(centsToMoney(platformSuggestedCents)),
-
-            // 兼容旧字段（如果还在用）
-            payout: Number(centsToMoney(payoutIncomeCents - payoutExpenseAbsCents)),
-            platform: Number(centsToMoney(incomeCents - (payoutIncomeCents - payoutExpenseAbsCents))),
-
-            perUserList,
-        };
-    }, [order]);
+    const {earningsSummary, walletEarningsSummary, reconcileHint, reconcileHintByUser} = useOrderReconcile(order);
 
 
     const historyDispatches = useMemo(() => {
@@ -1180,6 +1216,12 @@ const OrderDetailPage: React.FC = () => {
             width: 180,
             render: (v: any) => (v ? new Date(v).toLocaleString() : '-')
         },
+        {
+            title: '本轮时长',
+            dataIndex: 'billableHours',
+            width: 120,
+            render: (v: any) => (v ? v + '小时' : '-')
+        },
         {title: '备注', dataIndex: 'remark', ellipsis: true, render: (v: any) => v || '-'},
     ];
 
@@ -1204,20 +1246,20 @@ const OrderDetailPage: React.FC = () => {
                 return v == null ? '-' : `¥${v}`;
             },
         },
-        {
-            title: '操作',
-            width: 120,
-            render: (_: any, row: any) => {
-                const key = `${row.dispatchId}_${row.userId}`;
-                const s = settlementMap.get(key);
-                if (!s) return '-';
-                return (
-                    <Button size="small" onClick={() => openAdjust(s)}>
-                        调整收益
-                    </Button>
-                );
-            },
-        },
+        // {
+        //     title: '操作',
+        //     width: 120,
+        //     render: (_: any, row: any) => {
+        //         const key = `${row.dispatchId}_${row.userId}`;
+        //         const s = settlementMap.get(key);
+        //         if (!s) return '-';
+        //         return (
+        //             <Button size="small" onClick={() => openAdjust(s)}>
+        //                 调整收益
+        //             </Button>
+        //         );
+        //     },
+        // },
     ];
 
     const hideCurrentParticipants = order?.status === 'COMPLETED';
@@ -1390,6 +1432,17 @@ const OrderDetailPage: React.FC = () => {
                         </Button>
                     </Col>
 
+                    <Col span={12}>
+                        <Button
+                            icon={<ReloadOutlined/>}
+                            block
+                            style={{height: 44, borderRadius: 14}}
+                            onClick={loadDetail}
+                        >
+                            刷新
+                        </Button>
+                    </Col>
+
                     {String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
                         <Col span={12}>
                             <Button
@@ -1463,8 +1516,6 @@ const OrderDetailPage: React.FC = () => {
                     items={historyDispatches.map((d: any) => {
                         const parts = Array.isArray(d?.participants) ? d.participants : [];
                         const data = parts.map((p: any) => ({...p, dispatchId: d.id, dispatchStatus: d.status}));
-                        console.log("=========d======");
-                        console.log(d);
                         const canArchFix = String(order?.status) === 'ARCHIVED' &&
                             isGuaranteed && String(d?.status) === 'ARCHIVED' &&
                             Array.isArray(d?.participants) &&
@@ -1496,17 +1547,6 @@ const OrderDetailPage: React.FC = () => {
                                             备注：{d?.remark || '-'}
                                         </Typography.Text>
                                     </Space>
-
-                                    {/*{String(d.status) === 'ARCHIVED' ? (*/}
-                                    {/*    <Button*/}
-                                    {/*        size="small"*/}
-                                    {/*        onClick={() => openFixProgress(Number(d.id), Number(row.id))}*/}
-                                    {/*        style={{borderRadius: 10}}*/}
-                                    {/*    >*/}
-                                    {/*        修复进度*/}
-                                    {/*    </Button>*/}
-                                    {/*) : null}*/}
-                                    {/* ✅ 存单后修复入口（方案 B）：仅 ARCHIVED 轮可见（保底单） */}
                                     {
                                         canArchFix ? (
                                             <div style={{marginBottom: 10}}>
@@ -1604,6 +1644,202 @@ const OrderDetailPage: React.FC = () => {
         </Card>
     );
 
+    // ✅ 对账提示（以钱包流水为准）
+    const ws = walletEarningsSummary as any;
+    const ReconcileHintBlock = (
+        <Card size="small" style={{borderRadius: 14}}>
+            <Space direction="vertical" size={10} style={{width: '100%'}}>
+                {/* ===== 总体状态行 ===== */}
+                <Space wrap>
+                    <Tag
+                        color={
+                            reconcileHint?.status === 'MATCHED'
+                                ? 'green'
+                                : reconcileHint?.status === 'MISMATCHED'
+                                ? 'red'
+                                : 'default'
+                        }
+                        style={{borderRadius: 999, fontWeight: 600}}
+                    >
+                        对账：
+                        {reconcileHint?.status === 'MATCHED'
+                            ? '一致'
+                            : reconcileHint?.status === 'MISMATCHED'
+                                ? '不一致'
+                                : '暂无'}
+                    </Tag>
+
+                    {/* ✅ 钱包净额（IN-OUT） */}
+                    <Tag style={{borderRadius: 999, fontWeight: 600}}>
+                        钱包净额：¥{ws ? Number(ws.netTotal ?? ws.total ?? 0).toFixed(2) : '-'}
+                    </Tag>
+
+                    {/* ✅ 钱包 IN / OUT */}
+                    <Tag style={{borderRadius: 999}}>
+                        钱包入账(IN)：¥{ws ? Number(ws.inTotal || 0).toFixed(2) : '-'}
+                    </Tag>
+                    <Tag style={{borderRadius: 999}}>
+                        扣除(OUT)：¥{ws ? Number(ws.outTotal || 0).toFixed(2) : '-'}
+                    </Tag>
+
+                    {/* 可用/冻结（净额口径，避免误解） */}
+                    <Tag style={{borderRadius: 999}}>
+                        可用净额：¥{ws ? Number(ws.available || 0).toFixed(2) : '-'}
+                    </Tag>
+                    <Tag style={{borderRadius: 999}}>
+                        冻结净额：¥{ws ? Number(ws.frozen || 0).toFixed(2) : '-'}
+                    </Tag>
+
+                    {/* 结算参考 */}
+                    <Tag style={{borderRadius: 999}}>
+                        结算参考：¥{reconcileHint ? Number(reconcileHint.settlementTotal || 0).toFixed(2) : '-'}
+                    </Tag>
+
+                    {/* 差额（钱包净额 - 结算参考） */}
+                    <Tag
+                        color={
+                            reconcileHint
+                                ? Number(reconcileHint.diff || 0) === 0
+                                ? 'green'
+                                : 'red'
+                                : 'default'
+                        }
+                        style={{borderRadius: 999}}
+                    >
+                        差额：
+                        {reconcileHint
+                            ? `${Number(reconcileHint.diff || 0) > 0 ? '+' : ''}¥${Number(reconcileHint.diff || 0).toFixed(2)}`
+                            : '-'}
+                    </Tag>
+                </Space>
+
+                <Typography.Text type="secondary" style={{fontSize: 12}}>
+                    说明：钱包流水按 <b>direction</b> 区分 IN / OUT；对账口径使用
+                    <b>「钱包净额（IN-OUT）」</b> 对比 <b>「结算参考」</b>。
+                </Typography.Text>
+
+                <Collapse
+                    defaultActiveKey={[]}
+                    items={[
+                        {
+                            key: 'reconcileDetail',
+                            label: '展开对账详情（按人）',
+                            children: (
+                                <Space direction="vertical" size={12} style={{width: '100%'}}>
+                                    <Descriptions bordered size="small" column={isMobile ? 1 : 4}>
+                                        <Descriptions.Item label="对账状态">
+                                            {reconcileHint?.status ?? '-'}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="钱包净额（IN-OUT）">
+                                            ¥{ws ? Number(ws.netTotal ?? ws.total ?? 0).toFixed(2) : '-'}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="结算参考（finalEarnings 汇总）">
+                                            ¥{reconcileHint ? Number(reconcileHint.settlementTotal || 0).toFixed(2) : '-'}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="差额（钱包净额-结算）">
+                                            {reconcileHint
+                                                ? `${Number(reconcileHint.diff || 0) > 0 ? '+' : ''}¥${Number(reconcileHint.diff || 0).toFixed(2)}`
+                                                : '-'}
+                                        </Descriptions.Item>
+                                    </Descriptions>
+
+                                    <Table
+                                        size="small"
+                                        rowKey="userId"
+                                        pagination={false}
+                                        dataSource={Array.isArray(reconcileHintByUser) ? reconcileHintByUser : []}
+                                        locale={{emptyText: '暂无对账数据'}}
+                                        columns={[
+                                            {
+                                                title: '参与者',
+                                                dataIndex: 'userName',
+                                                width: 120,
+                                            },
+                                            {
+                                                title: '钱包 总收入',
+                                                dataIndex: 'walletIn',
+                                                align: 'right',
+                                                render: (v) => (
+                                                    <span style={{color: '#389e0d', fontWeight: 500}}>
+                                                        +¥{Number(v).toFixed(2)}
+                                                    </span>
+                                                ),
+                                            },
+                                            {
+                                                title: '钱包 总支出',
+                                                dataIndex: 'walletOut',
+                                                align: 'right',
+                                                render: (v) => (
+                                                    <span style={{color: '#cf1322', fontWeight: 500}}>
+                                                        -¥{Number(v).toFixed(2)}
+                                                    </span>
+                                                ),
+                                            },
+                                            {
+                                                title: '钱包净额',
+                                                dataIndex: 'walletNet',
+                                                align: 'right',
+                                                render: (v) => {
+                                                    const n = Number(v);
+                                                    return (
+                                                        <span
+                                                            style={{
+                                                                fontWeight: 600,
+                                                                color: n >= 0 ? '#389e0d' : '#cf1322',
+                                                            }}>
+                                                            {n >= 0 ? '+' : '-'}¥{n.toFixed(2)}
+                                                        </span>
+                                                    );
+                                                },
+                                            },
+                                            {
+                                                title: '结算参考',
+                                                dataIndex: 'settlementTotal',
+                                                align: 'right',
+                                                render: (v) => `¥${Number(v).toFixed(2)}`,
+                                            },
+                                            {
+                                                title: '差额（净额-结算）',
+                                                dataIndex: 'diff',
+                                                align: 'right',
+                                                render: (v) => {
+                                                    const n = Number(v);
+                                                    return (
+                                                        <span style={{
+                                                                fontWeight: 600,
+                                                                color: n === 0 ? '#389e0d' : '#cf1322',
+                                                            }}>
+                                                            {n > 0 ? '+' : ''}¥{n.toFixed(2)}
+                                                        </span>
+                                                    );
+                                                },
+                                            },
+                                            {
+                                                title: '状态',
+                                                dataIndex: 'status',
+                                                width: 90,
+                                                render: (s) => (
+                                                    <Tag
+                                                        color={s === 'MATCHED' ? 'green' : 'red'}
+                                                        style={{borderRadius: 999}}
+                                                    >
+                                                        {s === 'MATCHED' ? '一致' : '不一致'}
+                                                    </Tag>
+                                                ),
+                                            },
+                                        ]}
+
+                                    />
+                                </Space>
+                            ),
+                        },
+                    ]}
+                />
+            </Space>
+        </Card>
+    );
+
+
     // ===== PC：基本沿用你原来的（保持习惯）=====
     const DesktopView = (
         <Space direction="vertical" style={{width: '100%'}} size={16}>
@@ -1612,6 +1848,9 @@ const OrderDetailPage: React.FC = () => {
                 loading={loading}
                 extra={
                     <Space>
+                        <Button icon={<ReloadOutlined />} onClick={loadDetail}>
+                            刷新
+                        </Button>
                         <Button icon={<ProfileOutlined/>} onClick={openTools}>
                             工具
                         </Button>
@@ -1714,19 +1953,24 @@ const OrderDetailPage: React.FC = () => {
                                 dispatchStatus: dispatchRow.status,
                             }));
                             // ✅ 存单后修复入口（方案 B）：仅 ARCHIVED 轮可见（保底单）且需要订单也是存单状态
-                            const canArchFix = String(order?.status) === 'ARCHIVED' &&
-                                isGuaranteed && String(dispatchRow?.status) === 'ARCHIVED' &&
+                            // const canArchFix = String(order?.status) === 'ARCHIVED' &&
+                            //     isGuaranteed && String(dispatchRow?.status) === 'ARCHIVED' &&
+                            //     Array.isArray(dispatchRow?.participants) &&
+                            //     dispatchRow.participants.length > 0;
+                            const canArchFix = String(order?.status) === 'ARCHIVED' && (isGuaranteed || isHourly) &&
+                                String(dispatchRow?.status) === 'ARCHIVED' &&
                                 Array.isArray(dispatchRow?.participants) &&
                                 dispatchRow.participants.length > 0;
 
                             const ArchFixBar = canArchFix ? (
                                 <div style={{marginBottom: 10}}>
                                     <Tag color="gold" style={{borderRadius: 999, marginRight: 8}}>
-                                        存单修复：修改本轮总保底进度（万），系统将均分给本轮成员
+                                        {isGuaranteed ? '存单修复：修改本轮总保底进度（万），系统将均分给本轮成员' : ''}
+                                        {isHourly ? '存单修复：修改本轮总时长，系统将同步调整本轮参与成员时长' : ''}
                                     </Tag>
                                     <Button size="small" onClick={() => openArchFix(dispatchRow)}
                                             style={{borderRadius: 10}}>
-                                        修复本轮保底
+                                        {`修复本轮${isGuaranteed ? '保底' : '时长'}`}
                                     </Button>
                                 </div>
                             ) : null;
@@ -1748,7 +1992,7 @@ const OrderDetailPage: React.FC = () => {
                     }}
                 />
             </Card>
-
+            {ReconcileHintBlock}
             {/*
                 低权重模块：本单收益概览（仅展示，方便随手查看）
                 - 不参与业务决策；不影响任何表单/派单/结算
@@ -1857,6 +2101,7 @@ const OrderDetailPage: React.FC = () => {
                                     {/* ✅ 你要的：小票入口放第一页（概览） */}
                                     {MobileQuickActions}
                                     {MobileInfo}
+                                    {ReconcileHintBlock}
                                     {order?.status !== 'REFUNDED' && !hideCurrentParticipants ? MobileParticipants : null}
 
                                     <Collapse
@@ -2154,36 +2399,36 @@ const OrderDetailPage: React.FC = () => {
             </Modal>
 
             {/* 调整收益 */}
-            <Modal
-                title="调整实际收益（奖惩/纠错）"
-                open={adjustOpen}
-                onCancel={() => setAdjustOpen(false)}
-                onOk={submitAdjust}
-                confirmLoading={adjustSubmitting}
-                destroyOnClose
-            >
-                <Form form={adjustForm} layout="vertical">
-                    <Form.Item
-                        name="finalEarnings"
-                        label="实际收益"
-                        rules={[
-                            {required: true, message: '请输入实际收益'},
-                            () => ({
-                                validator: async (_, val) => {
-                                    const n = Number(val);
-                                    if (!Number.isFinite(n)) throw new Error('金额非法');
-                                },
-                            }),
-                        ]}
-                    >
-                        <InputNumber precision={2} style={{width: '100%'}}/>
-                    </Form.Item>
-                    <Form.Item name="remark" label="调整原因（必填建议）" rules={[{required: true, message: '请填写调整原因'}]}>
-                        <Input placeholder="例如：违规扣款/优秀奖励/客服补偿" allowClear/>
-                    </Form.Item>
-                    <Tag color="gold" style={{borderRadius: 999}}>该操作会写入操作日志（ADJUST_SETTLEMENT）。</Tag>
-                </Form>
-            </Modal>
+            {/*<Modal*/}
+            {/*    title="调整实际收益（奖惩/纠错）"*/}
+            {/*    open={adjustOpen}*/}
+            {/*    onCancel={() => setAdjustOpen(false)}*/}
+            {/*    onOk={submitAdjust}*/}
+            {/*    confirmLoading={adjustSubmitting}*/}
+            {/*    destroyOnClose*/}
+            {/*>*/}
+            {/*    <Form form={adjustForm} layout="vertical">*/}
+            {/*        <Form.Item*/}
+            {/*            name="finalEarnings"*/}
+            {/*            label="实际收益"*/}
+            {/*            rules={[*/}
+            {/*                {required: true, message: '请输入实际收益'},*/}
+            {/*                () => ({*/}
+            {/*                    validator: async (_, val) => {*/}
+            {/*                        const n = Number(val);*/}
+            {/*                        if (!Number.isFinite(n)) throw new Error('金额非法');*/}
+            {/*                    },*/}
+            {/*                }),*/}
+            {/*            ]}*/}
+            {/*        >*/}
+            {/*            <InputNumber precision={2} style={{width: '100%'}}/>*/}
+            {/*        </Form.Item>*/}
+            {/*        <Form.Item name="remark" label="调整原因（必填建议）" rules={[{required: true, message: '请填写调整原因'}]}>*/}
+            {/*            <Input placeholder="例如：违规扣款/优秀奖励/客服补偿" allowClear/>*/}
+            {/*        </Form.Item>*/}
+            {/*        <Tag color="gold" style={{borderRadius: 999}}>该操作会写入操作日志（ADJUST_SETTLEMENT）。</Tag>*/}
+            {/*    </Form>*/}
+            {/*</Modal>*/}
 
             {/* 退款 */}
             <Modal
@@ -2230,10 +2475,12 @@ const OrderDetailPage: React.FC = () => {
                 存单后修复（方案 B）：仅 ARCHIVED 轮
                 - 修改“本轮总保底进度（万）”，系统均分给本轮成员
                 - 仅影响该轮 participants.progressBaseWan（落库），然后剩余保底会随之变化（页面已按详情重新计算）
+                isHourly 判断小时单
+                isHourly 判断小时单
                ========================== */}
             <Modal
                 open={archFixOpen}
-                title={`存单修复：第 ${archFixDispatch?.round ?? '-'} 轮（总保底进度均分）`}
+                title={`存单修复：第 ${archFixDispatch?.round ?? '-'} 轮${isHourly ? '（调整小时单时长）' : '（总保底进度均分）'}`}
                 onCancel={() => setArchFixOpen(false)}
                 onOk={submitArchFix}
                 confirmLoading={archFixSubmitting}
@@ -2242,25 +2489,47 @@ const OrderDetailPage: React.FC = () => {
             >
                 <Space direction="vertical" size={10} style={{width: '100%'}}>
                     <Typography.Text type="secondary">
-                        说明：仅对“存单（ARCHIVED）”轮开放修复入口。你只需要输入本轮总进度（万），系统会均分到本轮所有成员。
+                        说明：仅对“存单”轮开放修复入口。你只需要输入本轮总进度（万）/时长，系统会根据订单类型调整本轮所有成员。
                     </Typography.Text>
 
                     <div>
-                        <div style={{marginBottom: 6}}>本轮总保底进度（万，允许负数）</div>
+                        <div style={{marginBottom: 6}}>
+                            {isHourly ? '本轮计费时长（小时）' : '本轮总保底进度（万，允许负数）'}
+                        </div>
+
                         <InputNumber
-                            style={{width: '100%'}}
-                            precision={0}
-                            step={1}
-                            value={archFixTotalWan ?? 0}
-                            onChange={(v) => setArchFixTotalWan(typeof v === 'number' ? v : Number(v))}
+                            style={{width: '220px'}}
+                            precision={isHourly ? 1 : 0}
+                            step={isHourly ? 0.5 : 1}
+                            value={archFixValue}
+                            addonAfter={isHourly ? '小时' : '万/哈夫币'}
+                            onChange={(v) => {
+                                if (isHourly) {
+                                    const n = Number(v ?? 0);
+                                    if (!Number.isFinite(n)) {
+                                        setArchFixValue(0);
+                                        return;
+                                    }
+                                    // 向最接近的 0.5 对齐
+                                    const fixed = Math.round(n * 2) / 2;
+                                    setArchFixValue(fixed);
+                                } else {
+                                    setArchFixValue(Number(v ?? 0))
+                                }
+                            }}
                         />
+
                         <div style={{marginTop: 6, fontSize: 12, opacity: 0.65}}>
-                            本轮成员数：{Array.isArray(archFixDispatch?.participants) ? archFixDispatch.participants.filter((p: any) => p?.isActive !== false).length : 0}
+                            本轮成员数：
+                            {Array.isArray(archFixDispatch?.participants)
+                                ? archFixDispatch.participants.length
+                                : 0}人参与 <br/>
+                            注意：{isHourly ? '小时单最小单位为0.5小时' : '保底单存单最低大于30万'}
                         </div>
                     </div>
 
                     <Tag color="gold" style={{borderRadius: 999}}>
-                        注意：这是“纠错/修复”入口，请务必和客服核对确认后再保存。
+                        注意：这是“纠错/修复”入口，不可逆。请务必和参与成员与客户核对确认后再保存。
                     </Tag>
                 </Space>
             </Modal>
@@ -2273,13 +2542,23 @@ const OrderDetailPage: React.FC = () => {
                 title="工具：重新结算 / 钱包对齐"
                 placement="bottom"
                 height={isMobile ? '78vh' : 520}
-                onClose={() => setToolsOpen(false)}
+                onClose={() => {
+                    setToolsOpen(false)
+                    setDebugJsonEnabled(false);
+                }}
                 destroyOnClose
             >
                 <Space direction="vertical" size={12} style={{width: '100%'}}>
-                    {ToolStepHeader}
-
                     <Card size="small" style={{borderRadius: 14}} bodyStyle={{padding: 12}}>
+                        <Space align="center" size={8}>
+                            <Switch
+                                checked={debugJsonEnabled}
+                                onChange={(v) => setDebugJsonEnabled(v)}
+                            />
+                            <Typography.Text type="secondary">
+                                调试模式（显示原始 JSON，仅研发/主管使用）
+                            </Typography.Text>
+                        </Space>
                         <Space direction="vertical" size={10} style={{width: '100%'}}>
                             <Typography.Text strong>操作备注（可选）</Typography.Text>
                             <Input.TextArea
@@ -2288,66 +2567,196 @@ const OrderDetailPage: React.FC = () => {
                                 rows={3}
                                 placeholder="用于审计追溯：例如“客户投诉核对后修复结算/补收后重新计算”等"
                             />
+                            {isModePlay ? (
+                                <Card size="small" style={{ borderRadius: 12, background: '#fffbe6', border: '1px solid #ffe58f' }} bodyStyle={{ padding: 12 }}>
+                                    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                                        <Typography.Text strong style={{ color: '#d48806' }}>
+                                            玩法单：每轮收入（重算必填）
+                                        </Typography.Text>
+
+                                        {recalcModePlayAlloc?.need ? (
+                                            <>
+                                                <Space wrap>
+                                                    <Button
+                                                        size="small"
+                                                        onClick={() => {
+                                                            const paid = Number(order?.paidAmount ?? 0);
+                                                            const rows = recalcModePlayAlloc?.rows ?? [];
+                                                            const seeded = seedModePlayEqualByRound(rows as any, paid);
+                                                            setRecalcModePlayAlloc({ ...recalcModePlayAlloc, rows: seeded });
+                                                        }}
+                                                        style={{ borderRadius: 10 }}
+                                                    >
+                                                        按轮均分实付金额
+                                                    </Button>
+                                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                        默认按轮次均分（最后一轮自动补尾差），可手动微调
+                                                    </Typography.Text>
+                                                </Space>
+
+                                                {(() => {
+                                                    const paid = Number(order?.paidAmount ?? 0);
+                                                    const rows = recalcModePlayAlloc?.rows ?? [];
+                                                    const v = validateModePlayAlloc(rows as any, paid);
+
+                                                    return (
+                                                        <>
+                                                            <Table
+                                                                size="small"
+                                                                rowKey="key"
+                                                                pagination={false}
+                                                                dataSource={rows}
+                                                                columns={[
+                                                                    { title: '轮次', dataIndex: 'round', width: 80 },
+                                                                    {
+                                                                        title: '参与者',
+                                                                        dataIndex: 'participantNames',
+                                                                        render: (names: string[]) => (
+                                                                            <Space size={4} wrap>
+                                                                                {(names || []).map((n, idx) => (
+                                                                                    <Tag key={idx} style={{ borderRadius: 999 }}>
+                                                                                        {n}
+                                                                                    </Tag>
+                                                                                ))}
+                                                                            </Space>
+                                                                        ),
+                                                                    },
+                                                                    { title: '人数', dataIndex: 'participantCount', width: 70 },
+                                                                    {
+                                                                        title: '本轮收入',
+                                                                        dataIndex: 'income',
+                                                                        width: 180,
+                                                                        render: (_: any, row: any) => (
+                                                                            <InputNumber
+                                                                                style={{ width: '100%' }}
+                                                                                min={0}
+                                                                                precision={2}
+                                                                                step={1}
+                                                                                value={row.income}
+                                                                                onChange={(val) => {
+                                                                                    const nv = Number(val ?? 0);
+                                                                                    setRecalcModePlayAlloc((prev: any) => {
+                                                                                        if (!prev) return prev;
+                                                                                        return {
+                                                                                            ...prev,
+                                                                                            rows: (prev.rows || []).map((r: any) =>
+                                                                                                r.key === row.key ? { ...r, income: nv } : r,
+                                                                                            ),
+                                                                                        };
+                                                                                    });
+                                                                                }}
+                                                                                addonAfter="¥"
+                                                                            />
+                                                                        ),
+                                                                    },
+                                                                ]}
+                                                            />
+
+                                                            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                <Tag style={{ borderRadius: 999 }}>已分配：¥{v.sum.toFixed(2)}</Tag>
+                                                                <Tag style={{ borderRadius: 999 }}>实付金额：¥{paid.toFixed(2)}</Tag>
+                                                                <Tag color={v.ok ? 'green' : 'red'} style={{ borderRadius: 999 }}>
+                                                                    {v.ok ? '校验通过' : '校验不通过'}
+                                                                </Tag>
+                                                                {!v.ok ? (
+                                                                    <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                                                                        {v.err}
+                                                                    </Typography.Text>
+                                                                ) : null}
+                                                            </div>
+                                                        </>
+                                                    );
+                                                })()}
+                                            </>
+                                        ) : (
+                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                当前玩法单各派单轮参与者一致：无需录入每轮收入，可直接重算。
+                                            </Typography.Text>
+                                        )}
+                                    </Space>
+                                </Card>
+                            ) : null}
 
                             <Space wrap>
                                 <Button
                                     loading={toolsLoading}
                                     type="primary"
-                                    onClick={runRecalculate}
+                                    onClick={runRecalcPreview} // ✅ ① 只预览（不落库）
                                     icon={<ReloadOutlined/>}
                                     style={{borderRadius: 12}}
+                                    disabled={(() => {
+                                        if (!(isModePlay && recalcModePlayAlloc?.need)) return false;
+                                        const paid = Number(order?.paidAmount ?? 0);
+                                        const v = validateModePlayAlloc((recalcModePlayAlloc?.rows ?? []) as any, paid);
+                                        return !v.ok;
+                                    })()}
                                 >
-                                    ① 重新结算（不动钱包）
-                                </Button>
-
-                                <Button
-                                    loading={toolsLoading}
-                                    onClick={runWalletPreview}
-                                    icon={<WalletOutlined/>}
-                                    disabled={toolsStep !== 'RECALCED'}
-                                    style={{borderRadius: 12}}
-                                >
-                                    ② 钱包对齐预览
+                                    ① 重新核算（预览）
                                 </Button>
 
                                 <Button
                                     loading={toolsLoading}
                                     danger
-                                    onClick={runWalletApply}
-                                    icon={<WalletOutlined/>}
-                                    disabled={toolsStep !== 'PREVIEWED'}
+                                    onClick={runRecalcApply}   // ✅ ② 确认覆盖（落库）
+                                    disabled={(() => {
+                                        // 原逻辑：必须先预览
+                                        if (!recalcResult || toolsStep !== 'PREVIEWED') return true;
+                                        // 玩法单校验
+                                        if (!(isModePlay && recalcModePlayAlloc?.need)) return false;
+                                        const paid = Number(order?.paidAmount ?? 0);
+                                        const v = validateModePlayAlloc((recalcModePlayAlloc?.rows ?? []) as any, paid);
+                                        return !v.ok;
+                                    })()}
+                                    icon={<CheckCircleOutlined/>}
                                     style={{borderRadius: 12}}
                                 >
-                                    ③ 执行钱包对齐
+                                    ② 确认重算（覆盖收益）
+                                </Button>
+
+                                <Button
+                                    loading={toolsLoading}
+                                    onClick={() => {
+                                        setRecalcResult(null);
+                                        setToolsResult(null);
+                                        setToolsStep('INIT');
+                                        initRecalcModePlayAlloc();
+                                    }}
+                                    style={{borderRadius: 12}}
+                                >
+                                    清空结果
                                 </Button>
                             </Space>
 
                             <Typography.Text type="secondary" style={{fontSize: 12}}>
-                                建议流程：先重新结算 → 再生成钱包预览核对差异 → 确认无误后再执行钱包对齐（写入钱包）。
+                                建议流程：① 重新核算（仅预览差异）→ 核对轮次/参与人/各列收益变化 → ② 确认重算（覆盖写入结算收益）。
                             </Typography.Text>
                         </Space>
                     </Card>
 
                     {/* 结果展示：优先用“可读 UI”，必要时兜底展示 JSON */}
                     {recalcResult ? renderRecalcResult(recalcResult) : null}
-                    {walletPreview ? renderWalletPreview(walletPreview) : null}
-                    {walletApplyResult ? renderWalletApply(walletApplyResult) : null}
 
                     {/* 兜底：若后端返回结构未知，仍可查看原始 JSON */}
-                    {toolsResult && !recalcResult && !walletPreview && !walletApplyResult ? (
-                        <Card size="small" title="结果（原始 JSON）"
-                              bodyStyle={{maxHeight: isMobile ? '42vh' : 280, overflow: 'auto'}}>
+
+                    {debugJsonEnabled && toolsResult ? (
+                        <Card
+                            size="small"
+                            title="结果（原始 JSON / 调试）"
+                            style={{borderRadius: 14}}
+                            bodyStyle={{maxHeight: isMobile ? '42vh' : 280, overflow: 'auto'}}
+                        >
                             <pre style={{margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
-                                {JSON.stringify(toolsResult, null, 2)}
+                              {JSON.stringify(toolsResult, null, 2)}
                             </pre>
                         </Card>
                     ) : null}
+
                 </Space>
             </Drawer>
 
             {/* ==========================
-                客服确认结单（两段式结单第二步）
-                ========================== */}
+    客服确认结单（两段式结单第二步）
+    ========================== */}
             <Modal
                 open={confirmCompleteOpen}
                 title={`确认结单：${order?.autoSerial || ''}`}
@@ -2355,14 +2764,124 @@ const OrderDetailPage: React.FC = () => {
                 onOk={submitConfirmComplete}
                 confirmLoading={confirmCompleteLoading}
                 okText="确认"
+                destroyOnClose
+                okButtonProps={{
+                    // ✅ 玩法单 + 需要分配：校验不过不允许确认
+                    disabled: (() => {
+                        if (!(isModePlay && modePlayAlloc?.need)) return false;
+                        const v = validateModePlayAlloc(modePlayAlloc.rows, toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount));
+                        return !v.ok;
+                    })(),
+                }}
             >
-                <Input.TextArea
-                    value={confirmCompleteRemark}
-                    onChange={(e) => setConfirmCompleteRemark(e.target.value)}
-                    rows={3}
-                    placeholder="备注（可不填）：例如核对无误/补充说明"
-                />
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+
+                    {/* ✅ 玩法单：多轮不同参与者 -> 分轮收入输入 */}
+                    {isModePlay && modePlayAlloc?.need ? (() => {
+                        const paid = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+                        const v = validateModePlayAlloc(modePlayAlloc.rows, paid);
+
+                        return (
+                            <div style={{ border: '1px solid #ffe58f', background: '#fffbe6', borderRadius: 12, padding: 12 }}>
+                                <div style={{ fontWeight: 600, color: '#d48806', marginBottom: 6 }}>
+                                    ⚠ 当前玩法单存在多轮不同参与者
+                                </div>
+                                <div style={{ color: '#8c8c8c', marginBottom: 10 }}>
+                                    请按派单轮次分配每一轮收入（系统将自动均分给该轮参与者）。分配合计不得大于订单实付金额。
+                                </div>
+                                <Space style={{ marginBottom: 8 }} wrap>
+                                    <Button
+                                        size="small"
+                                        onClick={() => {
+                                            setModePlayAlloc((prev) => {
+                                                if (!prev) return prev;
+                                                return {
+                                                    ...prev,
+                                                    rows: seedModePlayEqualByRound(prev.rows, toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount)),
+                                                };
+                                            });
+                                        }}
+                                    >
+                                        按轮均分实付金额
+                                    </Button>
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                        默认已按轮次均分（最后一轮自动补尾差）
+                                    </Typography.Text>
+                                </Space>
+                                <Table
+                                    size="small"
+                                    rowKey="key"
+                                    pagination={false}
+                                    dataSource={modePlayAlloc.rows}
+                                    columns={[
+                                        { title: '轮次', dataIndex: 'round', width: 50 },
+                                        {
+                                            title: '参与者',
+                                            dataIndex: 'participantNames',
+                                            render: (names: string[]) => (
+                                                <Space size={4} wrap>
+                                                    {names.map((n, idx) => (
+                                                        <Tag key={idx} style={{ borderRadius: 999 }}>
+                                                            {n}
+                                                        </Tag>
+                                                    ))}
+                                                </Space>
+                                            ),
+                                        },
+                                        {
+                                            title: '本轮收入',
+                                            width:160,
+                                            dataIndex: 'income',
+                                            render: (_: any, row: ModePlayRoundRow) => (
+                                                <InputNumber
+                                                    style={{ width: '100%' }}
+                                                    min={0}
+                                                    precision={2}
+                                                    step={1}
+                                                    value={row.income}
+                                                    onChange={(val) => {
+                                                        const nv = Number(val ?? 0);
+                                                        setModePlayAlloc((prev) => {
+                                                            if (!prev) return prev;
+                                                            return {
+                                                                ...prev,
+                                                                rows: prev.rows.map((r) => (r.key === row.key ? { ...r, income: nv } : r)),
+                                                            };
+                                                        });
+                                                    }}
+                                                    addonAfter="¥"
+                                                />
+                                            ),
+                                        },
+                                    ]}
+                                />
+
+                                <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <Tag style={{ borderRadius: 999 }}>已分配：¥{v.sum.toFixed(2)}</Tag>
+                                    <Tag style={{ borderRadius: 999 }}>实付金额：¥{paid.toFixed(2)}</Tag>
+                                    <Tag color={v.ok ? 'green' : 'red'} style={{ borderRadius: 999 }}>
+                                        {v.ok ? '可继续分配' : '分配超额/非法'}
+                                    </Tag>
+                                </div>
+
+                                <div style={{ marginTop: 8, color: v.ok ? '#8c8c8c' : '#cf1322' }}>
+                                    {v.ok
+                                        ? '说明：每轮收入将自动均分给该轮所有参与者；允许存在未分配金额。'
+                                        : (v.err || '请检查分配金额')}
+                                </div>
+                            </div>
+                        );
+                    })() : null}
+
+                    <Input.TextArea
+                        value={confirmCompleteRemark}
+                        onChange={(e) => setConfirmCompleteRemark(e.target.value)}
+                        rows={3}
+                        placeholder="备注（可不填）：例如核对无误/补充说明"
+                    />
+                </Space>
             </Modal>
+
 
             {/* 小票：移动端更贴合 */}
             <Modal

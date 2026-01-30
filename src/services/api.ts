@@ -816,16 +816,9 @@ export async function updateArchivedParticipantProgress(
  * 等你后端补好后，这个 API 就能直接用，前端不用再改。
  */
 export async function confirmCompleteOrder(opts:any) {
-    console.log("=====opts");
-    console.log(opts);
     return request(`${API_BASE}/orders/confirm-complete`, {
         method: 'POST',
-        data: {
-            id: opts?.id,
-            paidAmount: opts?.paidAmount,
-            remark: opts?.remark,
-            confirmPaid: opts?.confirmPaid,
-        },
+        data: opts,
     });
 }
 
@@ -852,10 +845,26 @@ export async function updateDispatchParticipantProgress(body: {
     });
 }
 
-// 存单后修复：按“本轮总保底进度(万)”均分到本轮所有参与者，并触发“仅重算结算、不动钱包”
+// 存单后修复：
+// - GUARANTEED：按“本轮总保底进度(万)”均分到本轮所有参与者
+// - HOURLY：修复本轮 billableHours
+// 二者都会触发「仅重算结算，不动钱包」
 export async function updateArchivedProgressTotal(body: {
     dispatchId: number;
-    totalProgressBaseWan: number; // ✅ 允许负数（炸单修正）
+
+    // ✅ 修复类型（由后端区分处理逻辑）
+    fixType: 'GUARANTEED' | 'HOURLY';
+
+    // =========================
+    // GUARANTEED 专用
+    // =========================
+    totalProgressBaseWan?: number; // ✅ 允许负数（炸单修正）
+
+    // =========================
+    // HOURLY 专用
+    // =========================
+    billableHours?: number;
+
     remark?: string;
 }) {
     return request(`${API_BASE}/orders/update-archived-progress-total`, {
@@ -863,6 +872,7 @@ export async function updateArchivedProgressTotal(body: {
         data: body,
     });
 }
+
 
 /**
  * ✅ 钱包对齐修复（以 settlement.finalEarnings 为准）
@@ -884,7 +894,7 @@ export async function repairWalletBySettlements(data: {
 
 /**
  * ✅ 重新结算（修历史结算用）
- * POST /orders/recalculate-settlements
+ * POST /orders/repair-wallet-by-settlementsV1
  * - 默认 allowWalletSync=false：只改结算，不动钱包
  */
 export async function recalculateOrderSettlements(data: {
@@ -893,7 +903,7 @@ export async function recalculateOrderSettlements(data: {
     scope?: string;
     allowWalletSync?: boolean;
 }) {
-    return request(`${API_BASE}/orders/recalculate-settlements`, {
+    return request(`${API_BASE}/orders/repair-wallet-by-settlementsV1`, {
         method: 'POST',
         data,
     });
