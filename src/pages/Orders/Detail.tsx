@@ -419,7 +419,7 @@ const OrderDetailPage: React.FC = () => {
             const sum = rows.reduce((acc: number, r: any) => acc + Number(r?.income ?? 0), 0);
             if (rows.length > 0 && sum === 0 && paid > 0) {
                 const seeded = seedModePlayEqualByRound(rows, paid);
-                setRecalcModePlayAlloc({ ...recalcModePlayAlloc, rows: seeded });
+                setRecalcModePlayAlloc({...recalcModePlayAlloc, rows: seeded});
                 // seeded 后继续使用 seeded 参与本次请求
                 const v = validateModePlayAlloc(seeded as any, paid);
                 if (!v.ok) {
@@ -460,7 +460,7 @@ const OrderDetailPage: React.FC = () => {
                 applyRepair: false,    // ✅ 明确不应用
 
                 // ✅ 玩法单：传入每轮收入
-                ...(isModePlay ? { modePlayAllocList } : {}),
+                ...(isModePlay ? {modePlayAllocList} : {}),
             } as any);
 
             setRepairPreview(res);
@@ -520,7 +520,7 @@ const OrderDetailPage: React.FC = () => {
                 scope: 'COMPLETED_AND_ARCHIVED', // 可留着，后端 applyRepair 分支应忽略它
 
                 // ✅ 玩法单：传入每轮收入
-                ...(isModePlay ? { modePlayAllocList } : {}),
+                ...(isModePlay ? {modePlayAllocList} : {}),
             } as any);
 
             setToolsResult(res);
@@ -589,14 +589,14 @@ const OrderDetailPage: React.FC = () => {
 
 
         if (used.length <= 1) {
-            return { need: false, rows: [] };
+            return {need: false, rows: []};
         }
 
         const sig0 = used[0].pids.join(',');
         const allSame = used.every((x: any) => x.pids.join(',') === sig0);
 
         if (allSame) {
-            return { need: false, rows: [] };
+            return {need: false, rows: []};
         }
 
         // need=true：按派单轮生成输入行
@@ -610,12 +610,11 @@ const OrderDetailPage: React.FC = () => {
             income: 0,
         }));
 
-    // ✅ 默认：按轮次均分实付金额
+        // ✅ 默认：按轮次均分实付金额
         rows = seedModePlayEqualByRound(rows, toNum(detail?.isGifted !== true ? detail?.paidAmount : detail?.receivableAmount));
 
-        return { need: true, rows };
+        return {need: true, rows};
     };
-
 
 
     // ==========================
@@ -684,7 +683,6 @@ const OrderDetailPage: React.FC = () => {
             setConfirmCompleteLoading(false);
         }
     };
-
 
 
     const submitRefund = async () => {
@@ -1420,17 +1418,18 @@ const OrderDetailPage: React.FC = () => {
                             修改实付
                         </Button>
                     </Col>
-
-                    <Col span={12}>
-                        <Button
-                            icon={<ProfileOutlined/>}
-                            block
-                            style={{height: 44, borderRadius: 14}}
-                            onClick={openTools}
-                        >
-                            工具
-                        </Button>
-                    </Col>
+                    {String(order?.status) === 'COMPLETED' ? (
+                        <Col span={12}>
+                            <Button
+                                icon={<ProfileOutlined/>}
+                                block
+                                style={{height: 44, borderRadius: 14}}
+                                onClick={openTools}
+                            >
+                                工具
+                            </Button>
+                        </Col>
+                    ) : null}
 
                     <Col span={12}>
                         <Button
@@ -1806,9 +1805,9 @@ const OrderDetailPage: React.FC = () => {
                                                     const n = Number(v);
                                                     return (
                                                         <span style={{
-                                                                fontWeight: 600,
-                                                                color: n === 0 ? '#389e0d' : '#cf1322',
-                                                            }}>
+                                                            fontWeight: 600,
+                                                            color: n === 0 ? '#389e0d' : '#cf1322',
+                                                        }}>
                                                             {n > 0 ? '+' : ''}¥{n.toFixed(2)}
                                                         </span>
                                                     );
@@ -1848,12 +1847,14 @@ const OrderDetailPage: React.FC = () => {
                 loading={loading}
                 extra={
                     <Space>
-                        <Button icon={<ReloadOutlined />} onClick={loadDetail}>
+                        <Button icon={<ReloadOutlined/>} onClick={loadDetail}>
                             刷新
                         </Button>
-                        <Button icon={<ProfileOutlined/>} onClick={openTools}>
-                            工具
-                        </Button>
+                        {String(order?.status) === 'COMPLETED' ? (
+                            <Button icon={<ProfileOutlined/>} onClick={openTools}>
+                                工具
+                            </Button>
+                        ) : null}
 
                         {/* ✅ 两段式结单：客服确认（低频入口，但要可用） */}
                         {String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
@@ -2568,9 +2569,11 @@ const OrderDetailPage: React.FC = () => {
                                 placeholder="用于审计追溯：例如“客户投诉核对后修复结算/补收后重新计算”等"
                             />
                             {isModePlay ? (
-                                <Card size="small" style={{ borderRadius: 12, background: '#fffbe6', border: '1px solid #ffe58f' }} bodyStyle={{ padding: 12 }}>
-                                    <Space direction="vertical" size={10} style={{ width: '100%' }}>
-                                        <Typography.Text strong style={{ color: '#d48806' }}>
+                                <Card size="small"
+                                      style={{borderRadius: 12, background: '#fffbe6', border: '1px solid #ffe58f'}}
+                                      bodyStyle={{padding: 12}}>
+                                    <Space direction="vertical" size={10} style={{width: '100%'}}>
+                                        <Typography.Text strong style={{color: '#d48806'}}>
                                             玩法单：每轮收入（重算必填）
                                         </Typography.Text>
 
@@ -2583,13 +2586,16 @@ const OrderDetailPage: React.FC = () => {
                                                             const paid = Number(order?.paidAmount ?? 0);
                                                             const rows = recalcModePlayAlloc?.rows ?? [];
                                                             const seeded = seedModePlayEqualByRound(rows as any, paid);
-                                                            setRecalcModePlayAlloc({ ...recalcModePlayAlloc, rows: seeded });
+                                                            setRecalcModePlayAlloc({
+                                                                ...recalcModePlayAlloc,
+                                                                rows: seeded
+                                                            });
                                                         }}
-                                                        style={{ borderRadius: 10 }}
+                                                        style={{borderRadius: 10}}
                                                     >
                                                         按轮均分实付金额
                                                     </Button>
-                                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                    <Typography.Text type="secondary" style={{fontSize: 12}}>
                                                         默认按轮次均分（最后一轮自动补尾差），可手动微调
                                                     </Typography.Text>
                                                 </Space>
@@ -2607,28 +2613,33 @@ const OrderDetailPage: React.FC = () => {
                                                                 pagination={false}
                                                                 dataSource={rows}
                                                                 columns={[
-                                                                    { title: '轮次', dataIndex: 'round', width: 80 },
+                                                                    {title: '轮次', dataIndex: 'round', width: 80},
                                                                     {
                                                                         title: '参与者',
                                                                         dataIndex: 'participantNames',
                                                                         render: (names: string[]) => (
                                                                             <Space size={4} wrap>
                                                                                 {(names || []).map((n, idx) => (
-                                                                                    <Tag key={idx} style={{ borderRadius: 999 }}>
+                                                                                    <Tag key={idx}
+                                                                                         style={{borderRadius: 999}}>
                                                                                         {n}
                                                                                     </Tag>
                                                                                 ))}
                                                                             </Space>
                                                                         ),
                                                                     },
-                                                                    { title: '人数', dataIndex: 'participantCount', width: 70 },
+                                                                    {
+                                                                        title: '人数',
+                                                                        dataIndex: 'participantCount',
+                                                                        width: 70
+                                                                    },
                                                                     {
                                                                         title: '本轮收入',
                                                                         dataIndex: 'income',
                                                                         width: 180,
                                                                         render: (_: any, row: any) => (
                                                                             <InputNumber
-                                                                                style={{ width: '100%' }}
+                                                                                style={{width: '100%'}}
                                                                                 min={0}
                                                                                 precision={2}
                                                                                 step={1}
@@ -2640,7 +2651,10 @@ const OrderDetailPage: React.FC = () => {
                                                                                         return {
                                                                                             ...prev,
                                                                                             rows: (prev.rows || []).map((r: any) =>
-                                                                                                r.key === row.key ? { ...r, income: nv } : r,
+                                                                                                r.key === row.key ? {
+                                                                                                    ...r,
+                                                                                                    income: nv
+                                                                                                } : r,
                                                                                             ),
                                                                                         };
                                                                                     });
@@ -2652,14 +2666,24 @@ const OrderDetailPage: React.FC = () => {
                                                                 ]}
                                                             />
 
-                                                            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                                                                <Tag style={{ borderRadius: 999 }}>已分配：¥{v.sum.toFixed(2)}</Tag>
-                                                                <Tag style={{ borderRadius: 999 }}>实付金额：¥{paid.toFixed(2)}</Tag>
-                                                                <Tag color={v.ok ? 'green' : 'red'} style={{ borderRadius: 999 }}>
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                gap: 8,
+                                                                marginTop: 10,
+                                                                alignItems: 'center',
+                                                                flexWrap: 'wrap'
+                                                            }}>
+                                                                <Tag
+                                                                    style={{borderRadius: 999}}>已分配：¥{v.sum.toFixed(2)}</Tag>
+                                                                <Tag
+                                                                    style={{borderRadius: 999}}>实付金额：¥{paid.toFixed(2)}</Tag>
+                                                                <Tag color={v.ok ? 'green' : 'red'}
+                                                                     style={{borderRadius: 999}}>
                                                                     {v.ok ? '校验通过' : '校验不通过'}
                                                                 </Tag>
                                                                 {!v.ok ? (
-                                                                    <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                                                                    <Typography.Text type="danger"
+                                                                                     style={{fontSize: 12}}>
                                                                         {v.err}
                                                                     </Typography.Text>
                                                                 ) : null}
@@ -2669,7 +2693,7 @@ const OrderDetailPage: React.FC = () => {
                                                 })()}
                                             </>
                                         ) : (
-                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                            <Typography.Text type="secondary" style={{fontSize: 12}}>
                                                 当前玩法单各派单轮参与者一致：无需录入每轮收入，可直接重算。
                                             </Typography.Text>
                                         )}
@@ -2774,7 +2798,7 @@ const OrderDetailPage: React.FC = () => {
                     })(),
                 }}
             >
-                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Space direction="vertical" size={12} style={{width: '100%'}}>
 
                     {/* ✅ 玩法单：多轮不同参与者 -> 分轮收入输入 */}
                     {isModePlay && modePlayAlloc?.need ? (() => {
@@ -2782,14 +2806,19 @@ const OrderDetailPage: React.FC = () => {
                         const v = validateModePlayAlloc(modePlayAlloc.rows, paid);
 
                         return (
-                            <div style={{ border: '1px solid #ffe58f', background: '#fffbe6', borderRadius: 12, padding: 12 }}>
-                                <div style={{ fontWeight: 600, color: '#d48806', marginBottom: 6 }}>
+                            <div style={{
+                                border: '1px solid #ffe58f',
+                                background: '#fffbe6',
+                                borderRadius: 12,
+                                padding: 12
+                            }}>
+                                <div style={{fontWeight: 600, color: '#d48806', marginBottom: 6}}>
                                     ⚠ 当前玩法单存在多轮不同参与者
                                 </div>
-                                <div style={{ color: '#8c8c8c', marginBottom: 10 }}>
+                                <div style={{color: '#8c8c8c', marginBottom: 10}}>
                                     请按派单轮次分配每一轮收入（系统将自动均分给该轮参与者）。分配合计不得大于订单实付金额。
                                 </div>
-                                <Space style={{ marginBottom: 8 }} wrap>
+                                <Space style={{marginBottom: 8}} wrap>
                                     <Button
                                         size="small"
                                         onClick={() => {
@@ -2804,7 +2833,7 @@ const OrderDetailPage: React.FC = () => {
                                     >
                                         按轮均分实付金额
                                     </Button>
-                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    <Typography.Text type="secondary" style={{fontSize: 12}}>
                                         默认已按轮次均分（最后一轮自动补尾差）
                                     </Typography.Text>
                                 </Space>
@@ -2814,14 +2843,14 @@ const OrderDetailPage: React.FC = () => {
                                     pagination={false}
                                     dataSource={modePlayAlloc.rows}
                                     columns={[
-                                        { title: '轮次', dataIndex: 'round', width: 50 },
+                                        {title: '轮次', dataIndex: 'round', width: 50},
                                         {
                                             title: '参与者',
                                             dataIndex: 'participantNames',
                                             render: (names: string[]) => (
                                                 <Space size={4} wrap>
                                                     {names.map((n, idx) => (
-                                                        <Tag key={idx} style={{ borderRadius: 999 }}>
+                                                        <Tag key={idx} style={{borderRadius: 999}}>
                                                             {n}
                                                         </Tag>
                                                     ))}
@@ -2830,11 +2859,11 @@ const OrderDetailPage: React.FC = () => {
                                         },
                                         {
                                             title: '本轮收入',
-                                            width:160,
+                                            width: 160,
                                             dataIndex: 'income',
                                             render: (_: any, row: ModePlayRoundRow) => (
                                                 <InputNumber
-                                                    style={{ width: '100%' }}
+                                                    style={{width: '100%'}}
                                                     min={0}
                                                     precision={2}
                                                     step={1}
@@ -2845,7 +2874,10 @@ const OrderDetailPage: React.FC = () => {
                                                             if (!prev) return prev;
                                                             return {
                                                                 ...prev,
-                                                                rows: prev.rows.map((r) => (r.key === row.key ? { ...r, income: nv } : r)),
+                                                                rows: prev.rows.map((r) => (r.key === row.key ? {
+                                                                    ...r,
+                                                                    income: nv
+                                                                } : r)),
                                                             };
                                                         });
                                                     }}
@@ -2856,15 +2888,21 @@ const OrderDetailPage: React.FC = () => {
                                     ]}
                                 />
 
-                                <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                                    <Tag style={{ borderRadius: 999 }}>已分配：¥{v.sum.toFixed(2)}</Tag>
-                                    <Tag style={{ borderRadius: 999 }}>实付金额：¥{paid.toFixed(2)}</Tag>
-                                    <Tag color={v.ok ? 'green' : 'red'} style={{ borderRadius: 999 }}>
+                                <div style={{
+                                    display: 'flex',
+                                    gap: 8,
+                                    marginTop: 10,
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap'
+                                }}>
+                                    <Tag style={{borderRadius: 999}}>已分配：¥{v.sum.toFixed(2)}</Tag>
+                                    <Tag style={{borderRadius: 999}}>实付金额：¥{paid.toFixed(2)}</Tag>
+                                    <Tag color={v.ok ? 'green' : 'red'} style={{borderRadius: 999}}>
                                         {v.ok ? '可继续分配' : '分配超额/非法'}
                                     </Tag>
                                 </div>
 
-                                <div style={{ marginTop: 8, color: v.ok ? '#8c8c8c' : '#cf1322' }}>
+                                <div style={{marginTop: 8, color: v.ok ? '#8c8c8c' : '#cf1322'}}>
                                     {v.ok
                                         ? '说明：每轮收入将自动均分给该轮所有参与者；允许存在未分配金额。'
                                         : (v.err || '请检查分配金额')}
