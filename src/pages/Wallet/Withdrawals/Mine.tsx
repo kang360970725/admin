@@ -228,6 +228,7 @@ const WithdrawalMine: React.FC<Props> = ({ availableBalance, onApplied }) => {
                             message="你有一笔提现正在审核/打款中，当前无法再次申请提现。"
                         />
                     ) : null}
+
                     <ProFormRadio.Group
                         name="channel"
                         label="提现渠道"
@@ -272,7 +273,7 @@ const WithdrawalMine: React.FC<Props> = ({ availableBalance, onApplied }) => {
                             },
                         ]}
                     />
-
+                    <Tag style={{ display: 'block', marginTop: -26 }} color="red">手动转款审批时间为：每日 12:00 - 18:00。请提前备好微信收款码。请合理安排提现时间。</Tag>
                     <Text type="secondary" style={{ display: 'block', marginTop: -6 }}>
                         线上渠道功能即将上线，敬请期待～
                     </Text>
