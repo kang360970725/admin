@@ -1,42 +1,24 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, message, Tag } from 'antd';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import { Button, message, Tag, Space, Alert, Descriptions, Image } from 'antd';
+import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { useModel } from '@umijs/max';
 import { getPendingWithdrawals, reviewWithdrawal, type WalletWithdrawalRequest } from '@/services/api';
 
 /**
  * ✅ 提现审批页（管理端）
- * - 展示：待审核列表（PENDING_REVIEW）
- * - 操作：通过 / 驳回（都需要审批备注可选）
- * - 注意：后端要求传 reviewerId（审批人ID），这里从 currentUser.id 获取
  */
 const WithdrawalsPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const { initialState } = useModel('@@initialState');
 
-    // 当前登录用户（审批人）
     const reviewerId = useMemo(() => {
-        // 1) 优先用 initialState（标准）
-        const idFromState = (initialState as any)?.currentUser?.id;
-        if (idFromState) return Number(idFromState);
-
-        // 2) 兜底读 localStorage（你 app.tsx 里有写入 currentUser）:contentReference[oaicite:7]{index=7}
-        try {
-            const cached = localStorage.getItem('currentUser');
-            if (cached) {
-                const u = JSON.parse(cached);
-                if (u?.id) return Number(u.id);
-            }
-        } catch (e) {
-            // ignore
-        }
-        return 0;
+        const cur = (initialState as any)?.currentUser;
+        return Number(cur?.id || 0);
     }, [initialState]);
 
-    // 审批弹窗状态
     const [reviewOpen, setReviewOpen] = useState(false);
-    const [currentRow, setCurrentRow] = useState<WalletWithdrawalRequest | null>(null);
+    const [currentRow, setCurrentRow] = useState<any>(null);
 
     const columns: any = [
         {
@@ -52,18 +34,28 @@ const WithdrawalsPage: React.FC = () => {
             search: false,
         },
         {
+            title: '用户昵称',
+            dataIndex: 'user',
+            width: 160,
+            search: false,
+            render: (_: any, row: any) => {
+                const u = row?.user;
+                return <span>{u?.nickname || u?.name || '-'}</span>;
+            },
+        },
+        {
             title: '金额',
             dataIndex: 'amount',
             width: 120,
             search: false,
-            render: (_, row) => <span>{Number(row.amount || 0).toFixed(2)}</span>,
+            render: (_: any, row: any) => <span>{Number(row.amount || 0).toFixed(2)}</span>,
         },
         {
             title: '渠道',
             dataIndex: 'channel',
             width: 100,
             search: false,
-            render: (_, row) => {
+            render: (_: any, row: any) => {
                 const ch = row.channel;
                 if (ch === 'WECHAT') return <Tag>微信</Tag>;
                 return <Tag>人工</Tag>;
@@ -74,8 +66,7 @@ const WithdrawalsPage: React.FC = () => {
             dataIndex: 'status',
             width: 140,
             search: false,
-            render: (_, row) => {
-                // 本页默认只看 PENDING_REVIEW，但仍做兜底显示
+            render: (_: any, row: any) => {
                 const s = row.status;
                 if (s === 'PENDING_REVIEW') return <Tag color="processing">待审核</Tag>;
                 if (s === 'APPROVED') return <Tag color="success">已通过</Tag>;
@@ -103,8 +94,7 @@ const WithdrawalsPage: React.FC = () => {
             title: '操作',
             valueType: 'option',
             width: 180,
-            render: (_, row) => {
-                // ✅ 仅待审核可操作
+            render: (_: any, row: any) => {
                 const disabled = row.status !== 'PENDING_REVIEW';
 
                 return [
@@ -113,7 +103,6 @@ const WithdrawalsPage: React.FC = () => {
                         type="primary"
                         disabled={disabled}
                         onClick={() => {
-                            // reviewerId 为 0 说明没取到当前用户（鉴权异常/缓存缺失）
                             if (!reviewerId) {
                                 message.error('未获取到当前登录用户信息（reviewerId），请重新登录');
                                 return;
@@ -132,26 +121,14 @@ const WithdrawalsPage: React.FC = () => {
     return (
         <>
             <ProTable<WalletWithdrawalRequest>
-                headerTitle="提现审批（待审核）"
+                headerTitle="待审核提现"
                 rowKey="id"
                 actionRef={actionRef}
                 search={false}
-                toolBarRender={() => [
-                    <Button
-                        key="refresh"
-                        onClick={() => actionRef.current?.reload()}
-                    >
-                        刷新
-                    </Button>,
-                ]}
                 request={async () => {
-                    // ✅ 这里按你的后端：GET /wallet/withdrawals/pending
-                    // 返回是数组；ProTable 期望 { data, success }
-                    const list = await getPendingWithdrawals();
-                    return {
-                        data: Array.isArray(list) ? list : [],
-                        success: true,
-                    };
+                    const res = await getPendingWithdrawals();
+                    const list = Array.isArray(res) ? res : (res as any)?.list || [];
+                    return { data: list as any, success: true };
                 }}
                 columns={columns}
                 pagination={{ pageSize: 20 }}
@@ -187,14 +164,11 @@ const WithdrawalsPage: React.FC = () => {
                         });
 
                         message.success(values.approve ? '已通过' : '已驳回');
-
-                        // 关闭弹窗并刷新列表
                         setReviewOpen(false);
                         setCurrentRow(null);
                         actionRef.current?.reload();
                         return true;
                     } catch (e: any) {
-                        // ✅ 统一错误提示：兼容 umi-request 的错误结构
                         const msg =
                             e?.data?.message ||
                             e?.response?.data?.message ||
@@ -205,6 +179,57 @@ const WithdrawalsPage: React.FC = () => {
                     }
                 }}
             >
+                {/* ✅ 审批详情：钱包数据 + 收款码 */}
+                {currentRow ? (
+                    <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                        <Alert
+                            type="info"
+                            showIcon
+                            message={`申请人：${currentRow?.user?.nickname || currentRow?.user?.name || currentRow.userId}`}
+                            description={`申请金额：${Number(currentRow.amount || 0).toFixed(2)} 元`}
+                        />
+
+                        <Descriptions bordered size="small" column={1}>
+                            {(() => {
+                                const w = currentRow?.wallet;
+                                const available = Number(w?.availableBalance || 0);
+                                const frozen = Number(w?.frozenBalance || 0);
+                                const total = available + frozen;
+                                return (
+                                    <>
+                                        <Descriptions.Item label="总余额">
+                                            {total.toFixed(2)}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="可用余额">
+                                            {available.toFixed(2)}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="冻结余额">
+                                            {frozen.toFixed(2)}
+                                        </Descriptions.Item>
+                                    </>
+                                );
+                            })()}
+                        </Descriptions>
+
+                        <Alert
+                            type={currentRow?.withdrawQrCodeUrl ? 'success' : 'warning'}
+                            showIcon
+                            message={currentRow?.withdrawQrCodeUrl ? '已获取收款二维码' : '未获取到收款二维码（请提醒用户上传）'}
+                            description={
+                                currentRow?.withdrawQrCodeUrl ? (
+                                    <Image
+                                        src={currentRow.withdrawQrCodeUrl}
+                                        width={180}
+                                        style={{ borderRadius: 12 }}
+                                    />
+                                ) : (
+                                    <span>该用户未上传或二维码不可用</span>
+                                )
+                            }
+                        />
+                    </Space>
+                ) : null}
+
                 <ProFormRadio.Group
                     name="approve"
                     label="审批结果"

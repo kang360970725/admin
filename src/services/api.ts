@@ -908,3 +908,28 @@ export async function recalculateOrderSettlements(data: {
         data,
     });
 }
+/**
+ * 上传提现收款二维码（仅允许一次）
+ * - multipart/form-data
+ * - 后端字段名固定为 file
+ */
+export async function uploadWithdrawQrCode(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return request<{ success: boolean }>(`${API_BASE}/wallet/withdraw/qr-code`, {
+        method: 'POST',
+        data: formData,
+        requestType: 'form', // 关键：让 umi 用 FormData
+    });
+}
+
+/**
+ * 获取提现收款二维码的临时访问 URL
+ * - 返回 { url: string | null }
+ */
+export async function getWithdrawQrCodeUrl() {
+    return request<{ url: string | null }>(`${API_BASE}/wallet/withdraw/qr-code-url`, {
+        method: 'GET',
+    });
+}
