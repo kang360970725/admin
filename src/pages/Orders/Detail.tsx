@@ -124,7 +124,7 @@ const OrderDetailPage: React.FC = () => {
     const [confirmCompleteRemark, setConfirmCompleteRemark] = useState('');
 
     // 重算工具 - 玩法单分轮输入
-    const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<ModePlayAllocState | null>(null);
+    const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<any>(null);
 
 
     // ==========================
@@ -145,7 +145,7 @@ const OrderDetailPage: React.FC = () => {
         rows: ModePlayRoundRow[]; // 表格行
     };
 
-    const [modePlayAlloc, setModePlayAlloc] = useState<ModePlayAllocState | null>(null);
+    const [modePlayAlloc, setModePlayAlloc] = useState<any>(null);
 
 
     const [editOpen, setEditOpen] = useState(false);
@@ -397,50 +397,86 @@ const OrderDetailPage: React.FC = () => {
         );
     };
 
+    const buildModePlayRoundRowsFromOrder = (order: any) => {
+        const dispatches = Array.isArray(order?.dispatches) ? order.dispatches : [];
+        // 只取参与结算/重算的轮次（你后端也是 COMPLETED+ARCHIVED）
+        const inStatuses = ['COMPLETED', 'ARCHIVED'];
+        const list = dispatches
+            .filter((d: any) => inStatuses.includes(String(d?.status)))
+            .sort((a: any, b: any) => (Number(a?.round ?? 0) - Number(b?.round ?? 0)));
+
+        return list.map((d: any) => {
+            const active = (d?.participants ?? []).filter((p: any) => p?.acceptedAt);
+            const names = active.map((p: any) => p?.user?.name).filter(Boolean);
+
+            return {
+                key: String(d.id),
+                dispatchId: Number(d.id),
+                round: Number(d.round ?? 0),
+                participantCount: active.length,
+                participantNames: names,
+                income: 0, // 默认 0，need=false 时会被均分覆盖
+            };
+        });
+    };
 
     const runRecalcPreview = async () => {
         if (!order?.id) return;
 
-        // ✅ 玩法单：重算必须携带每轮金额
+        // ✅ 口径：赠送单用 receivableAmount，否则用 paidAmount（和你 submitConfirmComplete 保持一致）
+        const paidBase = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+
+        // ✅ 玩法单：重算必须携带每轮金额（无论 need 与否）
         let modePlayAllocList: any[] | undefined = undefined;
 
         if (isModePlay) {
-            const paid = Number(order?.paidAmount ?? 0);
+            // 兜底：必须有“轮次 rows”（因为后端按轮循环）
+            const rows = (Array.isArray(recalcModePlayAlloc?.rows) && recalcModePlayAlloc.rows.length > 0)
+                ? (recalcModePlayAlloc.rows as any[])
+                : buildModePlayRoundRowsFromOrder(order);
 
-            // 玩法单如果需要分配，但目前未初始化/未录入，则阻断（避免后端算不出来）
-            if (!recalcModePlayAlloc || !Array.isArray(recalcModePlayAlloc?.rows)) {
-                message.warning('玩法单重算需要录入“每轮收入”，请先在工具弹窗中填写后再预览');
+            if (!Array.isArray(rows) || rows.length === 0) {
+                message.warning('玩法单重算未找到可用的派单轮次（需要 COMPLETED/ARCHIVED 轮次）');
                 return;
             }
 
-            // ✅ 默认按轮均分（如果你 UI 已经填过，就不会覆盖；这里只做兜底：全 0 时才种子）
-            //    注意：我不猜你的 UI 行为，只做“安全兜底”
-            const rows = recalcModePlayAlloc.rows || [];
-            const sum = rows.reduce((acc: number, r: any) => acc + Number(r?.income ?? 0), 0);
-            if (rows.length > 0 && sum === 0 && paid > 0) {
-                const seeded = seedModePlayEqualByRound(rows, paid);
-                setRecalcModePlayAlloc({...recalcModePlayAlloc, rows: seeded});
-                // seeded 后继续使用 seeded 参与本次请求
-                const v = validateModePlayAlloc(seeded as any, paid);
-                if (!v.ok) {
-                    message.warning(v.err || '玩法单分轮收入校验未通过');
-                    return;
-                }
-                modePlayAllocList = seeded.map((r: any) => ({
-                    dispatchId: Number(r.dispatchId),
-                    income: Number(r.income ?? 0),
-                }));
-            } else {
-                // 正常走校验
-                const v = validateModePlayAlloc(rows as any, paid);
+            if (recalcModePlayAlloc?.need) {
+                // ✅ need=true：必须人工输入并校验
+                const v = validateModePlayAlloc(rows as any, paidBase);
                 if (!v.ok) {
                     message.warning(v.err || '玩法单分轮收入校验未通过');
                     return;
                 }
                 modePlayAllocList = rows.map((r: any) => ({
                     dispatchId: Number(r.dispatchId),
-                    income: Number(r.income ?? 0),
+                    income: toNum(r.income ?? 0),
                 }));
+            } else {
+                // ✅ need=false：自动按轮次均分 paidBase（最后一轮吃尾差）
+                const n = rows.length;
+                const totalCents = Math.round(paidBase * 100);
+                const base = Math.floor(totalCents / n);
+                const remainder = totalCents - base * n;
+
+                modePlayAllocList = rows.map((r: any, idx: number) => {
+                    const cents = base + (idx === n - 1 ? remainder : 0);
+                    return {
+                        dispatchId: Number(r.dispatchId),
+                        income: cents / 100,
+                    };
+                });
+
+                // ✅ 把 UI 也同步成默认均分（避免预览结果和表格展示不一致）
+                setRecalcModePlayAlloc((prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        rows: (prev.rows || []).map((r: any, idx: number) => ({
+                            ...r,
+                            income: modePlayAllocList![idx]?.income ?? toNum(r.income ?? 0),
+                        })),
+                    };
+                });
             }
         }
 
@@ -456,11 +492,10 @@ const OrderDetailPage: React.FC = () => {
                 id: Number(order.id),
                 reason: toolsRemark || undefined,
                 scope: 'COMPLETED_AND_ARCHIVED',
-                dryRun: true,          // ✅ 仅预览
-                applyRepair: false,    // ✅ 明确不应用
+                dryRun: true,
+                applyRepair: false,
 
-                // ✅ 玩法单：传入每轮收入
-                ...(isModePlay ? {modePlayAllocList} : {}),
+                ...(isModePlay ? { modePlayAllocList } : {}),
             } as any);
 
             setRepairPreview(res);
@@ -475,37 +510,57 @@ const OrderDetailPage: React.FC = () => {
     };
 
 
+
     const runRecalcApply = async () => {
         if (!order?.id) return;
 
-        // ✅ 防呆：必须先预览
+        // ✅ 防呆：必须先预览（你当前是看 repairPreview）
         if (!repairPreview) {
             message.warning('请先执行“修复预览”，确认无误后再点击“确认应用”');
             return;
         }
 
-        // ✅ 玩法单：应用时也携带每轮金额（便于后端校验/日志；即便 applyRepair 分支忽略也不影响）
+        // ✅ 口径：赠送单用 receivableAmount，否则用 paidAmount
+        const paidBase = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+
+        // ✅ 玩法单：应用时也携带每轮金额（无论 need 与否）
         let modePlayAllocList: any[] | undefined = undefined;
 
         if (isModePlay) {
-            const paid = Number(order?.paidAmount ?? 0);
+            const rows = (Array.isArray(recalcModePlayAlloc?.rows) && recalcModePlayAlloc.rows.length > 0)
+                ? (recalcModePlayAlloc.rows as any[])
+                : buildModePlayRoundRowsFromOrder(order);
 
-            if (!recalcModePlayAlloc || !Array.isArray(recalcModePlayAlloc?.rows)) {
-                message.warning('玩法单重算需要录入“每轮收入”，请先在工具弹窗中填写后再应用');
+            if (!Array.isArray(rows) || rows.length === 0) {
+                message.warning('玩法单重算未找到可用的派单轮次（需要 COMPLETED/ARCHIVED 轮次）');
                 return;
             }
 
-            const rows = recalcModePlayAlloc.rows || [];
-            const v = validateModePlayAlloc(rows as any, paid);
-            if (!v.ok) {
-                message.warning(v.err || '玩法单分轮收入校验未通过');
-                return;
-            }
+            if (recalcModePlayAlloc?.need) {
+                const v = validateModePlayAlloc(rows as any, paidBase);
+                if (!v.ok) {
+                    message.warning(v.err || '玩法单分轮收入校验未通过');
+                    return;
+                }
+                modePlayAllocList = rows.map((r: any) => ({
+                    dispatchId: Number(r.dispatchId),
+                    income: toNum(r.income ?? 0),
+                }));
+            } else {
+                // need=false：自动按轮次均分 paidBase（最后一轮吃尾差）
+                const n = rows.length;
+                const totalCents = Math.round(paidBase * 100);
+                const base = Math.floor(totalCents / n);
+                const remainder = totalCents - base * n;
 
-            modePlayAllocList = rows.map((r: any) => ({
-                dispatchId: Number(r.dispatchId),
-                income: Number(r.income ?? 0),
-            }));
+                modePlayAllocList = rows.map((r: any, idx: number) => {
+                    const cents = base + (idx === n - 1 ? remainder : 0);
+                    return {
+                        dispatchId: Number(r.dispatchId),
+                        income: cents / 100,
+                    };
+                });
+            }
         }
 
         try {
@@ -515,12 +570,11 @@ const OrderDetailPage: React.FC = () => {
             const res = await recalculateOrderSettlements({
                 id: Number(order.id),
                 reason: toolsRemark || undefined,
-                applyRepair: true, // ✅ 只用缓存应用
-                dryRun: false,     // 可省略，但写上更直观
-                scope: 'COMPLETED_AND_ARCHIVED', // 可留着，后端 applyRepair 分支应忽略它
+                applyRepair: true,
+                dryRun: false,
+                scope: 'COMPLETED_AND_ARCHIVED',
 
-                // ✅ 玩法单：传入每轮收入
-                ...(isModePlay ? {modePlayAllocList} : {}),
+                ...(isModePlay ? { modePlayAllocList } : {}),
             } as any);
 
             setToolsResult(res);
@@ -537,6 +591,7 @@ const OrderDetailPage: React.FC = () => {
             setToolsLoading(false);
         }
     };
+
 
 
     const toNum = (v: any) => {
@@ -634,42 +689,102 @@ const OrderDetailPage: React.FC = () => {
         setConfirmCompleteOpen(true);
     };
 
+
+    const buildModePlayAllocList = (params: {
+        isModePlay: boolean;
+        paidAmount: number;
+        allocState: any; // modePlayAlloc 或 recalcModePlayAlloc
+    }) => {
+        const { isModePlay, paidAmount, allocState } = params;
+        if (!isModePlay) return undefined;
+
+        const rows = (allocState?.rows ?? []) as any[];
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return null; // 用于上层提示阻断
+        }
+
+        // need=true：用表格输入
+        if (allocState?.need) {
+            return rows.map((r) => ({
+                dispatchId: Number(r.dispatchId),
+                income: Number(r.income ?? 0),
+            }));
+        }
+
+        // need=false：按轮次均分 paidAmount（最后一轮吃尾差）
+        const n = rows.length;
+        const totalCents = Math.round(Number(paidAmount ?? 0) * 100);
+        const base = Math.floor(totalCents / n);
+        const remainder = totalCents - base * n;
+
+        return rows.map((r, idx) => {
+            const cents = base + (idx === n - 1 ? remainder : 0);
+            return {
+                dispatchId: Number(r.dispatchId),
+                income: cents / 100,
+            };
+        });
+    };
+
     const submitConfirmComplete = async () => {
         if (!order?.id) return;
 
-        // ✅ 玩法单校验：多轮不同参与者必须分配，且累计不得超过 paidAmount
-        if (isModePlay && modePlayAlloc?.need) {
-            const v = validateModePlayAlloc(modePlayAlloc.rows, toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount));
-            if (!v.ok) {
-                message.warning(v.err || '请先完成玩法单分配校验');
-                return;
-            }
-        }
-        console.log('[submitConfirmComplete] called', {
-            isModePlay,
-            need: modePlayAlloc?.need,
-            rows: modePlayAlloc?.rows?.length,
-        });
+        // ✅ 口径：赠送单用 receivableAmount，否则用 paidAmount（和你校验/传参统一）
+        const paidBase = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+
         try {
             setConfirmCompleteLoading(true);
-            const modePlayAllocList =
-                isModePlay
-                    ? (modePlayAlloc?.need
-                    ? (modePlayAlloc.rows ?? []).map(r => ({
+
+            // ✅ 玩法单：无论 need 与否，都必须传 modePlayAllocList（按派单轮次）
+            let modePlayAllocList: any[] | undefined = undefined;
+
+            if (isModePlay) {
+                // ✅ rows 兜底：优先用弹窗 state，没有就从 order.dispatches 现算
+                const rows =
+                    (Array.isArray(modePlayAlloc?.rows) && modePlayAlloc.rows.length > 0)
+                        ? (modePlayAlloc.rows as any[])
+                        : buildModePlayRoundRowsFromOrder(order);
+
+                if (!Array.isArray(rows) || rows.length === 0) {
+                    message.warning('玩法单结单未找到可用派单轮次（需要 COMPLETED/ARCHIVED 轮次）');
+                    return;
+                }
+
+                if (modePlayAlloc?.need === true) {
+                    // ✅ need=true：必须人工分配 + 校验
+                    const v = validateModePlayAlloc(rows as any, paidBase);
+                    if (!v.ok) {
+                        message.warning(v.err || '请先完成玩法单分配校验');
+                        return;
+                    }
+                    modePlayAllocList = rows.map((r: any) => ({
                         dispatchId: Number(r.dispatchId),
-                        income: Number(r.income ?? 0),
-                    }))
-                    : []) // ✅ 玩法单但无需分配：传空数组
-                    : undefined; // 非玩法单：不传
+                        income: toNum(r.income ?? 0),
+                    }));
+                } else {
+                    // ✅ need=false 或 need 未初始化：默认按轮次均分 paidBase（最后一轮吃尾差）
+                    const n = rows.length;
+                    const totalCents = Math.round(paidBase * 100);
+                    const base = Math.floor(totalCents / n);
+                    const remainder = totalCents - base * n;
+
+                    modePlayAllocList = rows.map((r: any, idx: number) => {
+                        const cents = base + (idx === n - 1 ? remainder : 0);
+                        return {
+                            dispatchId: Number(r.dispatchId),
+                            income: cents / 100,
+                        };
+                    });
+                }
+            }
 
             const payload: any = {
                 id: Number(order.id),
                 remark: confirmCompleteRemark || undefined,
-                paidAmount: Number(order?.paidAmount ?? 0),
+                paidAmount: paidBase,
                 confirmPaid: true,
             };
 
-            // ✅ 只有玩法单才挂这个字段（避免污染其他单型）
             if (isModePlay) payload.modePlayAllocList = modePlayAllocList;
 
             await confirmCompleteOrder(payload);
@@ -683,6 +798,8 @@ const OrderDetailPage: React.FC = () => {
             setConfirmCompleteLoading(false);
         }
     };
+
+
 
 
     const submitRefund = async () => {
