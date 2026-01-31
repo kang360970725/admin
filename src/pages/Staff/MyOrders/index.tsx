@@ -62,32 +62,32 @@ const MyOrdersPage: React.FC = () => {
                     return <Tag>{t('BillingMode', billingMode, billingMode)}</Tag>;
                 },
             },
-            // {
-            //     title: '订单状态',
-            //     dataIndex: ['order', 'status'],
-            //     width: 120,
-            //     valueType: 'select',
-            //     render: (_, row) => {
-            //         const v = row?.order?.status;
-            //         return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
-            //             {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
-            //         </Tag>;
-            //     },
-            // },
-            // {
-            //     title: '本轮派单状态',
-            //     dataIndex: 'status',
-            //     width: 140,
-            //     valueType: 'select',
-            //     render: (_, row) => {
-            //         const v = row?.status;
-            //         return (
-            //             <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
-            //                 {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
-            //             </Tag>
-            //         );
-            //     },
-            // },
+            {
+                title: '订单最新状态',
+                dataIndex: ['order', 'status'],
+                width: 120,
+                valueType: 'select',
+                render: (_, row) => {
+                    const v = row?.order?.status;
+                    return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
+                        {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
+                    </Tag>;
+                },
+            },
+            {
+                title: '参与轮状态',
+                dataIndex: 'status',
+                width: 140,
+                valueType: 'select',
+                render: (_, row) => {
+                    const v = row?.status;
+                    return (
+                        <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
+                            {pickStatusText({ dicts, group: 'DispatchStatus', key: v, fallback: String(v ?? '-') })}
+                        </Tag>
+                    );
+                },
+            },
             // {
             //     title: '本轮参与者',
             //     dataIndex: 'participants',
