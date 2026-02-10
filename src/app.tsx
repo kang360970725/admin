@@ -1,10 +1,11 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import { Avatar, Dropdown, message, Typography } from 'antd';
+import {Avatar, Button, Dropdown, message, Result, Space, Typography} from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { getCurrentUser } from './services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import './global.less';
+import { history } from '@umijs/max';
 
 const { Text } = Typography;
 
@@ -173,6 +174,15 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                 document.body.classList.remove(cls);
             }
         },
+        childrenRender: (children) => {
+            // ✅ 兜底：清掉历史遗留 403 标记，防止全站被截胡
+            try {
+                sessionStorage.removeItem('LAST_403_CODE');
+                sessionStorage.removeItem('LAST_403_MESSAGE');
+            } catch {}
+            return children;
+        },
+
     };
 };
 
@@ -189,10 +199,35 @@ export const request: RuntimeConfig['request'] = {
                 return;
             }
             if (status === 403) {
-                message.error(data?.message || '无权限访问');
-                window.location.href = '/403';
+                const code = data?.code || '';
+                const msg = data?.message || '无权访问';
+
+                // 冻结：引导去钱包（仍在 Layout 内跳转，不刷新）
+                if (code === 'ACCOUNT_FROZEN') {
+                    message.warning(msg);
+                    history.push('/wallet/overview');
+                    return;
+                }
+
+                // 禁用：清登录态并去登录页
+                if (code === 'ACCOUNT_DISABLED') {
+                    message.error(msg);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('currentUser');
+                    history.push('/login');
+                    return;
+                }
+
+                // 其他 403：最简单——进 403 路由（Layout 仍然保留）
+                message.error(msg);
+                history.push(`/403?code=${encodeURIComponent(code)}&msg=${encodeURIComponent(msg)}`);
                 return;
             }
+
+
+
+
+
             if (status && status >= 400) {
                 message.error(data?.message || '请求失败');
                 return;

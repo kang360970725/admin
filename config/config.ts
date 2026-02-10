@@ -58,7 +58,7 @@ export default defineConfig({
     // ===========
     { path: '/login', component: '@/pages/Login', layout: false },
     { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
-    { path: '/403', component: '@/pages/403', layout: false },
+    { path: '/403', component: '@/pages/403'},
 
     // ===========
     // ✅ Mobile routes (pure content)
@@ -120,7 +120,9 @@ export default defineConfig({
     {
       path: '/user-logs',
       name: '操作日志',
+      icon: 'FileSearchOutlined',
       component: './UserLogs',
+      access: 'canViewRoleManagement'
     },
     {
       path: '/finance',
