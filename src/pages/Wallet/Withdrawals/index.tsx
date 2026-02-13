@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, message, Tag, Space, Alert, Descriptions, Image } from 'antd';
+import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { useModel } from '@umijs/max';
@@ -19,6 +19,10 @@ const WithdrawalsPage: React.FC = () => {
 
     const [reviewOpen, setReviewOpen] = useState(false);
     const [currentRow, setCurrentRow] = useState<any>(null);
+
+    // ✅ 新增统计状态
+    const [pendingCount, setPendingCount] = useState<number>(0);
+    const [pendingAmount, setPendingAmount] = useState<number>(0);
 
     const columns: any = [
         {
@@ -120,6 +124,24 @@ const WithdrawalsPage: React.FC = () => {
 
     return (
         <>
+            {/* ✅ 顶部统计 */}
+            <Card style={{ marginBottom: 16 }}>
+                <Row gutter={24}>
+                    <Col>
+                        <Statistic title="待审核笔数" value={pendingCount} />
+                    </Col>
+                    <Col>
+                        <Statistic
+                            title="待审核总金额"
+                            value={pendingAmount}
+                            precision={2}
+                            prefix="¥"
+                            valueStyle={{ color: '#cf1322' }}
+                        />
+                    </Col>
+                </Row>
+            </Card>
+
             <ProTable<WalletWithdrawalRequest>
                 headerTitle="待审核提现"
                 rowKey="id"
@@ -127,7 +149,16 @@ const WithdrawalsPage: React.FC = () => {
                 search={false}
                 request={async () => {
                     const res = await getPendingWithdrawals();
-                    const list = Array.isArray(res) ? res : (res as any)?.list || [];
+
+                    const list = Array.isArray(res)
+                        ? res
+                        : (res as any)?.list || [];
+
+                    if (!Array.isArray(res)) {
+                        setPendingCount((res as any)?.count || 0);
+                        setPendingAmount((res as any)?.totalAmount || 0);
+                    }
+
                     return { data: list as any, success: true };
                 }}
                 columns={columns}
