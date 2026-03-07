@@ -48,6 +48,8 @@ export default function WalletTransactions() {
         SETTLEMENT_EARNING: 'green',
         SETTLEMENT_EARNING_BASE: 'green',
         SETTLEMENT_EARNING_CARRY: 'geekblue',
+        SETTLEMENT_REVERSAL: 'red',
+        SETTLEMENT_RECALC: 'green',
         SETTLEMENT_BOMB_LOSS: 'red',
         SETTLEMENT_EARNING_CS: 'orange',
         RELEASE_FROZEN: 'blue',
@@ -67,6 +69,7 @@ export default function WalletTransactions() {
         {
             title: '流向',
             dataIndex: 'direction',
+            search: false,
             width: 90,
             valueEnum: enums?.WalletDirection
                 ? Object.fromEntries(Object.entries(enums.WalletDirection).map(([k, v]) => [k, { text: v }]))
@@ -102,6 +105,7 @@ export default function WalletTransactions() {
             dataIndex: 'amount',
             width: 160,
             align: 'right',
+            search: false,
             render: (v: any, r: WalletTransactionRow) => {
                 const isIn = r.direction === 'IN';
                 const n = Number(v ?? 0);

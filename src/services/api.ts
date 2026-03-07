@@ -933,3 +933,12 @@ export async function getWithdrawQrCodeUrl() {
         method: 'GET',
     });
 }
+
+/**
+ * 获取平台钱包统计信息
+ */
+export async function getWalletStatistics() {
+    return request<{ url: string | null }>(`${API_BASE}/wallet/statistics`, {
+        method: 'GET',
+    });
+}

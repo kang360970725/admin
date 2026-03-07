@@ -1,15 +1,25 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip} from 'antd';
+import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col} from 'antd';
 import {useAccess} from 'umi';
 import dayjs from 'dayjs';
-import {deleteUser, getAvailableRatings, getUsers, updateUser} from '@/services/api';
+import {deleteUser, getAvailableRatings, getUsers, getWalletStatistics, updateUser} from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
 import ChangeLevelModal from './components/ChangeLevelModal';
 import ResetPasswordModal from './components/ResetPasswordModal';
 import AssignRoleModal from '@/components/AssignRoleModal';
+import UserWalletDrawer from './components/UserWalletDrawer';
 
+const formatDaysAgo = (date?: string) => {
+    if (!date) return '从未';
+
+    const diff = dayjs().diff(dayjs(date), 'day');
+
+    if (diff <= 0) return '今天';
+
+    return `${diff || '-'}天前`;
+};
 // 用户类型映射
 const userTypeMap = {
     SUPER_ADMIN: { text: '超级管理员', color: 'red' },
@@ -37,6 +47,9 @@ export default function UsersPage() {
     const [availableRatings, setAvailableRatings] = useState<any[]>([]);
     const [assignRoleModalVisible, setAssignRoleModalVisible] = useState(false);
     const actionRef = useRef<any>();
+    const [walletVisible, setWalletVisible] = useState(false);
+    const [walletUser, setWalletUser] = useState<any>(null);
+    const [walletStats, setWalletStats] = useState<any>(null);
 
     // 加载可用的员工评级
     useEffect(() => {
@@ -50,6 +63,19 @@ export default function UsersPage() {
         };
         loadRatings();
     }, []);
+
+    useEffect(() => {
+        loadWalletStats();
+    }, []);
+
+    const loadWalletStats = async () => {
+        try {
+            const res = await getWalletStatistics();
+            setWalletStats(res);
+        } catch (e) {
+            console.error('加载钱包统计失败');
+        }
+    };
 
     const handleEdit = (record: any) => {
         setEditingUser(record);
@@ -76,6 +102,11 @@ export default function UsersPage() {
         }
     };
 
+    const openWallet = (record: any) => {
+        setWalletUser(record);
+        setWalletVisible(true);
+    };
+
     //分配角色按钮逻辑
     // 在现有处理函数后添加
     const handleAssignRole = (record: any) => {
@@ -99,20 +130,32 @@ export default function UsersPage() {
 
     const columns = [
         {
+            title: '搜索',
+            dataIndex: 'search',
+            hideInTable: true,
+            valueType: 'text',
+            fieldProps: {
+                placeholder: 'ID / 手机号 / 姓名',
+            },
+        },
+        {
             title: 'ID',
             dataIndex: 'id',
             key: 'id',
+            search: false,
             width: 60,
         },
         {
             title: '手机号',
             dataIndex: 'phone',
+            search: false,
             key: 'phone',
             width: 120,
         },
         {
             title: '姓名',
             dataIndex: 'name',
+            search: false,
             key: 'name',
             width: 100,
         },
@@ -159,7 +202,52 @@ export default function UsersPage() {
             title: '等级',
             dataIndex: 'level',
             key: 'level',
+            search: false,
             width: 80,
+        },
+        // {
+        //     title: '钱包',
+        //     key: 'wallet',
+        //     width: 120,
+        //     search: false,
+        //     render: (_, record) => {
+        //         const balance = record?.wallet?.totalBalance ?? 0;
+        //
+        //         return (
+        //             <Button
+        //                 type="link"
+        //                 onClick={() => openWallet(record)}
+        //             >
+        //                 ¥{Number(balance).toFixed(1)}
+        //             </Button>
+        //         );
+        //     }
+        // },
+        {
+            title: '钱包',
+            key: 'wallet',
+            width: 140,
+            search: false,
+            render: (_, record) => {
+
+                const available = Number(record?.wallet?.availableBalance ?? 0);
+                const frozen = Number(record?.wallet?.frozenBalance ?? 0);
+
+                return (
+                    <div
+                        style={{ cursor: 'pointer', lineHeight: '18px' }}
+                        onClick={() => openWallet(record)}
+                    >
+                        <div style={{ color: '#1677ff', fontSize: 12 }}>
+                            可用 ¥{available.toFixed(1)}
+                        </div>
+
+                        <div style={{ color: '#faad14', fontSize: 12 }}>
+                            冻结 ¥{frozen.toFixed(1)}
+                        </div>
+                    </div>
+                );
+            },
         },
         {
             title: '状态',
@@ -176,13 +264,60 @@ export default function UsersPage() {
         {
             title: '最后登录',
             dataIndex: 'lastLoginAt',
-            key: 'lastLoginAt',
             width: 120,
             render: (date: string) => {
-                if (!date) return '从未登录';
-                return dayjs(date).isValid()
-                    ? dayjs(date).format('YYYY-MM-DD HH:mm')
-                    : '--';
+
+                if (!date) return '从未';
+
+                return (
+                    <Tooltip title={dayjs(date).format('YYYY-MM-DD HH:mm')}>
+                        {formatDaysAgo(date)}
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            title: '最后接单',
+            dataIndex: 'lastAcceptOrderAt',
+            width: 120,
+            search: false,
+            render: (date: string) => {
+
+                if (!date) return '从未';
+
+                return (
+                    <Tooltip title={dayjs(date).format('YYYY-MM-DD HH:mm')}>
+                        {formatDaysAgo(date)}
+                    </Tooltip>
+                );
+            },
+        },
+        {
+            title: '未登录天数',
+            dataIndex: 'loginInactiveDays',
+            hideInTable: true,
+            valueType: 'select',
+            fieldProps: {
+                options: [
+                    { label: '3天未登录', value: 3 },
+                    { label: '7天未登录', value: 7 },
+                    { label: '15天未登录', value: 15 },
+                    { label: '30天未登录', value: 30 },
+                ],
+            },
+        },
+        {
+            title: '未接单天数',
+            dataIndex: 'acceptInactiveDays',
+            hideInTable: true,
+            valueType: 'select',
+            fieldProps: {
+                options: [
+                    { label: '3天未接单', value: 3 },
+                    { label: '7天未接单', value: 7 },
+                    { label: '15天未接单', value: 15 },
+                    { label: '30天未接单', value: 30 },
+                ],
             },
         },
         {
@@ -256,6 +391,42 @@ export default function UsersPage() {
 
     return (
         <PageContainer>
+            <Row gutter={16} style={{ marginBottom: 20 }}>
+
+                <Col span={8}>
+                    <Card>
+                        <Statistic
+                            title="总可用余额"
+                            value={walletStats?.totalAvailableBalance ?? 0}
+                            precision={1}
+                            prefix="¥"
+                        />
+                    </Card>
+                </Col>
+
+                <Col span={8}>
+                    <Card>
+                        <Statistic
+                            title="总冻结余额"
+                            value={walletStats?.totalFrozenBalance ?? 0}
+                            precision={1}
+                            prefix="¥"
+                        />
+                    </Card>
+                </Col>
+
+                <Col span={8}>
+                    <Card>
+                        <Statistic
+                            title="钱包总余额"
+                            value={walletStats?.totalBalance ?? 0}
+                            precision={1}
+                            prefix="¥"
+                        />
+                    </Card>
+                </Col>
+
+            </Row>
             <ProTable
                 columns={columns}
                 request={async (params) => {
@@ -368,6 +539,14 @@ export default function UsersPage() {
                     setEditingUser(null);
                 }}
                 onOk={handleAssignRoleSubmit}
+            />
+            <UserWalletDrawer
+                visible={walletVisible}
+                user={walletUser}
+                onClose={() => {
+                    setWalletVisible(false);
+                    setWalletUser(null);
+                }}
             />
         </PageContainer>
     );
