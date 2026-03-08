@@ -538,7 +538,7 @@ export async function getWalletTransactions(params: {
     dispatchId?: number;
     startAt?: string; // ISO
     endAt?: string;   // ISO
-}) {
+}|any ) {
     return request<{ data: WalletTransaction[]; total: number; page: number; limit: number }>(
         `${API_BASE}/wallet/transactions`,
         { method: 'GET', params },
@@ -941,4 +941,17 @@ export async function getWalletStatistics() {
     return request<{ url: string | null }>(`${API_BASE}/wallet/statistics`, {
         method: 'GET',
     });
+}
+export async function getWalletDepositTransactions(params:any) {
+    return request(`${API_BASE}/wallet/deposit-transactions`, {
+        method:'GET',
+        params
+    })
+}
+
+export async function manualDeposit(data:any) {
+    return request(`${API_BASE}/wallet/deposit/manual`, {
+        method:'POST',
+        data
+    })
 }

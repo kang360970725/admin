@@ -1,7 +1,8 @@
 import React, {useMemo, useRef, useState} from 'react';
 import type {FormInstance} from 'antd';
-import {Alert, Button, message, Space, Tag, Tooltip, Typography, Upload,} from 'antd';
+import {Alert, Button, Divider, message, Space, Tag, Tooltip, Typography, Upload,} from 'antd';
 import type {ActionType, ProColumns} from '@ant-design/pro-components';
+import { Form } from 'antd';
 import {
     ModalForm,
     ProFormDependency,
@@ -39,14 +40,21 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
     const {initialState} = useModel('@@initialState');
     const userId = Number((initialState as any)?.currentUser?.id || 0);
+    const currentUser = (initialState as any)?.currentUser;
+    const isStaff = currentUser?.userType === 'STAFF';
 
     const [open, setOpen] = useState(false);
     const [hasPending, setHasPending] = useState(false);
+    const withdrawAmount = Form.useWatch('amount', formRef.current);
 
     // ✅ 收款二维码：仅人工审核时展示/校验
     const [qrUrl, setQrUrl] = useState<string | null>(null);
     const [qrLoading, setQrLoading] = useState(false);
     const [qrUploading, setQrUploading] = useState(false);
+
+
+    const depositPreview = withdrawAmount ? Math.floor(withdrawAmount * 0.1) : 0;
+    const arrivePreview = withdrawAmount ? withdrawAmount - depositPreview : 0;
 
     // ✅ 最大可提（本期简单：<= availableBalance，且按 10 整数）
     const maxWithdraw = useMemo(() => {
@@ -207,13 +215,18 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
                         const idempotencyKey = genIdempotencyKey();
 
-                        await applyWithdrawal({
+                        const res = await applyWithdrawal({
                             userId,
                             amount,
                             idempotencyKey,
                             remark: values.remark || '',
                             channel,
                         });
+
+                        if (!res.success) {
+                            message.error(res.message)
+                            return
+                        }
 
                         message.success('提现申请已提交，等待审核');
                         setOpen(false);
@@ -258,8 +271,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 label: (
                                     <Space>
                                         <Tag color="gold">线下</Tag>
-                                        <Text strong>人工审核</Text>
-                                        <Text type="secondary">（手动转款）</Text>
+                                        <Text strong>人工审核(仅支持微信)</Text>
+                                        <Text type="secondary">（手动分账）</Text>
                                     </Space>
                                 ),
                                 value: 'MANUAL',
@@ -277,19 +290,19 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 value: 'WECHAT',
                                 disabled: true,
                             },
-                            {
-                                label: (
-                                    <Space>
-                                        <AlipayOutlined style={{color: '#1677ff'}}/>
-                                        <Text strong style={{color: '#1677ff'}}>
-                                            支付宝
-                                        </Text>
-                                        <Text type="secondary">（即将上线）</Text>
-                                    </Space>
-                                ),
-                                value: 'ALIPAY',
-                                disabled: true,
-                            },
+                            // {
+                            //     label: (
+                            //         <Space>
+                            //             <AlipayOutlined style={{color: '#1677ff'}}/>
+                            //             <Text strong style={{color: '#1677ff'}}>
+                            //                 支付宝
+                            //             </Text>
+                            //             <Text type="secondary">（即将上线）</Text>
+                            //         </Space>
+                            //     ),
+                            //     value: 'ALIPAY',
+                            //     disabled: true,
+                            // },
                         ]}
                     />
 
@@ -302,7 +315,13 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 <Space direction="vertical" style={{width: '100%',}} size={6}>
 
                                     <Tag style={{display: 'block'}} color="red">
-                                        手动转款审批时间为：每日 12:00 - 18:00。请提前上传微信收款码。请合理安排提现申请时间。
+                                        当日申请财务将在次日23点前处理完毕。法定节假日将顺延(日常单休，周末为休息日)；请合理计划提款时间。
+                                    </Tag>
+                                    <Tag style={{display: 'block'}} color="red">
+                                        单笔金额大于2000.00的申请将依法按《劳务报酬》申报并预扣个税(总额20%起)，次年汇算多退少补。
+                                    </Tag>
+                                    <Tag style={{display: 'block'}} color="red">
+                                        具体申报记录可在个人所得税app查看。
                                     </Tag>
                                     {qrUrl ? (
                                         <Alert
@@ -379,7 +398,22 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             },
                         ]}
                     />
-
+                    {isStaff && withdrawAmount ? (
+                        <Alert
+                            type="info"
+                            showIcon
+                            message={
+                                <Space>
+                                    <Text>保证金缴纳：</Text>
+                                    <Text strong>{depositPreview}</Text>
+                                    <Text type="secondary">（10%）</Text>
+                                    <Divider type="vertical" />
+                                    <Text>预计到账：</Text>
+                                    <Text strong>{arrivePreview}</Text>
+                                </Space>
+                            }
+                        />
+                    ) : null}
                     <ProFormTextArea
                         name="remark"
                         label="备注"

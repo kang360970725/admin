@@ -1,18 +1,39 @@
 import React from 'react';
-import {Drawer, Tabs, Row, Col, Statistic, Tag, message} from 'antd';
-import {ProTable} from '@ant-design/pro-components';
+import {
+    Drawer,
+    Tabs,
+    Row,
+    Col,
+    Statistic,
+    Tag,
+    message,
+    Button,
+    Modal,
+    InputNumber,
+    Input,
+} from 'antd';
+import { ProTable } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
-import {getEnumDicts, getWalletTransactions} from '@/services/api';
+import {
+    getEnumDicts,
+    getWalletTransactions,
+    getWalletDepositTransactions,
+    manualDeposit,
+} from '@/services/api';
 
 export default function UserWalletDrawer(props: any) {
-
-    const {visible, user, onClose} = props;
+    const { visible, user, onClose } = props;
 
     const wallet = user?.wallet || {};
 
     const available = Number(wallet?.availableBalance ?? 0);
     const frozen = Number(wallet?.frozenBalance ?? 0);
+    const deposit = Number(wallet?.depositBalance ?? 0);
     const total = Number(wallet?.totalBalance ?? 0);
+
+    const [depositModal, setDepositModal] = React.useState(false);
+    const [depositAmount, setDepositAmount] = React.useState<number>(0);
+    const [depositRemark, setDepositRemark] = React.useState('');
 
     const [enums, setEnums] = React.useState<any>({});
 
@@ -26,6 +47,12 @@ export default function UserWalletDrawer(props: any) {
             }
         })();
     }, []);
+
+    const getEnumText = (groupKey: string, code?: string) => {
+        if (!code) return '--';
+        const dict = enums?.[groupKey] || {};
+        return dict?.[code] || code;
+    };
 
     const directionMetaMap: Record<string, { color: string; icon: React.ReactNode }> = {
         IN: { color: 'green', icon: <span style={{ fontWeight: 700 }}>↑</span> },
@@ -47,23 +74,11 @@ export default function UserWalletDrawer(props: any) {
         WITHDRAW_PAYOUT: 'magenta',
     };
 
-    const getEnumText = (groupKey: string, code?: string) => {
-        if (!code) return '--';
-        const dict = enums?.[groupKey] || {};
-        return dict?.[code] || code;
-    };
-
-    const columns: any = [
-
+    const walletColumns: any = [
         {
             title: '流向',
             dataIndex: 'direction',
             width: 90,
-            valueEnum: enums?.WalletDirection
-                ? Object.fromEntries(
-                    Object.entries(enums.WalletDirection).map(([k, v]) => [k, {text: v}])
-                )
-                : undefined,
             render: (_: any, r: any) => {
                 const meta = directionMetaMap[r.direction];
                 const label = getEnumText('WalletDirection', r.direction);
@@ -81,12 +96,6 @@ export default function UserWalletDrawer(props: any) {
             title: '类型',
             dataIndex: 'bizType',
             width: 160,
-            valueType: 'select',
-            valueEnum: enums?.WalletBizType
-                ? Object.fromEntries(
-                    Object.entries(enums.WalletBizType).map(([k, v]) => [k, {text: v}])
-                )
-                : undefined,
             render: (_: any, r: any) => {
                 const label = getEnumText('WalletBizType', r.bizType);
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
@@ -105,9 +114,10 @@ export default function UserWalletDrawer(props: any) {
                 const n = Number(v ?? 0);
 
                 return (
-                    <span style={{color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500}}>
-                        {isIn ? '+' : '-'}{Number.isFinite(n) ? n.toFixed(1) : '0.0'}
-                    </span>
+                    <span style={{ color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500 }}>
+            {isIn ? '+' : '-'}
+                        {Number.isFinite(n) ? n.toFixed(1) : '0.0'}
+          </span>
                 );
             },
         },
@@ -116,12 +126,6 @@ export default function UserWalletDrawer(props: any) {
             title: '状态',
             dataIndex: 'status',
             width: 120,
-            valueType: 'select',
-            valueEnum: enums?.WalletTxStatus
-                ? Object.fromEntries(
-                    Object.entries(enums.WalletTxStatus).map(([k, v]) => [k, {text: v}])
-                )
-                : undefined,
             render: (_: any, r: any) => {
                 const label = getEnumText('WalletTxStatus', r.status);
                 return <Tag>{label}</Tag>;
@@ -158,52 +162,96 @@ export default function UserWalletDrawer(props: any) {
         },
     ];
 
+    const depositColumns: any = [
+        {
+            title: '类型',
+            dataIndex: 'bizType',
+            width: 160,
+            render: (_: any, r: any) => (
+                <Tag color="blue">{getEnumText('DepositBizType', r.bizType)}</Tag>
+            ),
+        },
+
+        {
+            title: '金额',
+            dataIndex: 'amount',
+            width: 140,
+            align: 'right',
+            render: (v: any) => (
+                <span style={{ color: '#1677ff', fontWeight: 500 }}>
+          +{Number(v ?? 0).toFixed(1)}
+        </span>
+            ),
+        },
+
+        {
+            title: '备注',
+            dataIndex: 'remark',
+            ellipsis: true,
+        },
+
+        {
+            title: '操作人',
+            dataIndex: 'operatorId',
+            width: 120,
+        },
+
+        {
+            title: '时间',
+            dataIndex: 'createdAt',
+            width: 200,
+            render: (_: any, r: any) =>
+                r.createdAt ? dayjs(r.createdAt).format('YYYY-MM-DD HH:mm:ss') : '--',
+        },
+    ];
+
     return (
         <Drawer
             title={`用户钱包 - ${user?.phone ?? ''}`}
-            width={900}
+            width={950}
             open={visible}
             onClose={onClose}
             destroyOnClose
         >
-
             <Tabs
                 items={[
                     {
                         key: 'overview',
                         label: '钱包概览',
                         children: (
-                            <Row gutter={24} style={{marginTop: 10}}>
+                            <>
+                                <Row gutter={24} style={{ marginTop: 10 }}>
+                                    <Col span={6}>
+                                        <Statistic title="可用余额" value={available} precision={1} prefix="¥" />
+                                    </Col>
 
-                                <Col span={8}>
-                                    <Statistic
-                                        title="可用余额"
-                                        value={available}
-                                        precision={1}
-                                        prefix="¥"
-                                    />
-                                </Col>
+                                    <Col span={6}>
+                                        <Statistic title="冻结余额" value={frozen} precision={1} prefix="¥" />
+                                    </Col>
 
-                                <Col span={8}>
-                                    <Statistic
-                                        title="冻结余额"
-                                        value={frozen}
-                                        precision={1}
-                                        prefix="¥"
-                                    />
-                                </Col>
+                                    <Col span={6}>
+                                        <Statistic title="保证金账户" value={deposit} precision={1} prefix="¥" />
+                                    </Col>
 
-                                <Col span={8}>
-                                    <Statistic
-                                        title="总余额"
-                                        value={total}
-                                        precision={1}
-                                        prefix="¥"
-                                    />
-                                </Col>
+                                    <Col span={6}>
+                                        <Statistic title="总余额" value={total} precision={1} prefix="¥" />
+                                    </Col>
+                                </Row>
 
-                            </Row>
-                        )
+                                <Row style={{ marginTop: 24 }}>
+                                    <Button
+                                        type="primary"
+                                        onClick={() => {
+                                            setDepositAmount(0);
+                                            setDepositRemark('');
+                                            setDepositModal(true);
+                                        }}
+                                    >
+                                        手动缴纳押金
+                                    </Button>
+                                </Row>
+                            </>
+                        ),
                     },
 
                     {
@@ -212,12 +260,11 @@ export default function UserWalletDrawer(props: any) {
                         children: (
                             <ProTable
                                 rowKey="id"
-                                columns={columns}
-                                search={{labelWidth: 'auto'}}
-                                pagination={{pageSize: 20}}
+                                columns={walletColumns}
+                                search={{ labelWidth: 'auto' }}
+                                pagination={{ pageSize: 20 }}
                                 request={async (params) => {
-
-                                    const {current, pageSize, ...rest} = params;
+                                    const { current, pageSize, ...rest } = params;
 
                                     const res = await getWalletTransactions({
                                         userId: user?.id,
@@ -232,52 +279,84 @@ export default function UserWalletDrawer(props: any) {
                                         success: true,
                                     };
                                 }}
+                            />
+                        ),
+                    },
 
-                                summary={(pageData) => {
+                    {
+                        key: 'deposit',
+                        label: '保证金流水',
+                        children: (
+                            <ProTable
+                                rowKey="id"
+                                columns={depositColumns}
+                                search={false}
+                                pagination={{ pageSize: 20 }}
+                                request={async (params) => {
+                                    const { current, pageSize } = params;
 
-                                    let inSum = 0;
-                                    let outSum = 0;
+                                    const res = await getWalletDepositTransactions({
+                                        userId: user?.id,
+                                        page: current ?? 1,
+                                        limit: pageSize ?? 20,
+                                    });
 
-                                    for (const row of pageData) {
-                                        const amt = Number(row.amount ?? 0);
-                                        if (!Number.isFinite(amt)) continue;
-
-                                        if (row.direction === 'IN') inSum += amt;
-                                        if (row.direction === 'OUT') outSum += amt;
-                                    }
-
-                                    const net = inSum - outSum;
-
-                                    return (
-                                        <ProTable.Summary>
-                                            <ProTable.Summary.Row>
-
-                                                <ProTable.Summary.Cell index={1} colSpan={4}>
-                                                    <strong>本页合计</strong>
-                                                </ProTable.Summary.Cell>
-
-                                                <ProTable.Summary.Cell index={2} colSpan={4} align="right">
-                                                    <span style={{color: '#52c41a', marginRight: 20}}>
-                                                        收入:+{inSum.toFixed(1)}
-                                                    </span>
-
-                                                    <span style={{color: '#ff4d4f', marginRight: 20}}>
-                                                        支出:-{outSum.toFixed(1)}
-                                                    </span>
-
-                                                    <span>净额:{net.toFixed(1)}</span>
-                                                </ProTable.Summary.Cell>
-
-                                            </ProTable.Summary.Row>
-                                        </ProTable.Summary>
-                                    );
+                                    return {
+                                        data: res?.data ?? [],
+                                        total: res?.total ?? 0,
+                                        success: true,
+                                    };
                                 }}
                             />
-                        )
-                    }
+                        ),
+                    },
                 ]}
             />
 
+            <Modal
+                title="手动缴纳保证金"
+                open={depositModal}
+                onCancel={() => setDepositModal(false)}
+                onOk={async () => {
+                    try {
+                        if (!depositAmount || depositAmount <= 0) {
+                            message.error('请输入正确金额');
+                            return;
+                        }
+
+                        await manualDeposit({
+                            userId: user?.id,
+                            amount: depositAmount,
+                            remark: depositRemark,
+                        });
+
+                        message.success('保证金缴纳成功');
+
+                        setDepositModal(false);
+                    } catch (e: any) {
+                        message.error(e?.message || '操作失败');
+                    }
+                }}
+            >
+                <div style={{ marginBottom: 16 }}>
+                    <div style={{ marginBottom: 6 }}>保证金账户</div>
+                    <InputNumber
+                        style={{ width: '100%' }}
+                        min={1}
+                        value={depositAmount}
+                        onChange={(v) => setDepositAmount(Number(v || 0))}
+                    />
+                </div>
+
+                <div>
+                    <div style={{ marginBottom: 6 }}>备注</div>
+                    <Input
+                        value={depositRemark}
+                        onChange={(e) => setDepositRemark(e.target.value)}
+                        placeholder="填写说明"
+                    />
+                </div>
+            </Modal>
         </Drawer>
     );
 }

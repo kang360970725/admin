@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col} from 'antd';
+import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal} from 'antd';
 import {useAccess} from 'umi';
 import dayjs from 'dayjs';
 import {deleteUser, getAvailableRatings, getUsers, getWalletStatistics, updateUser} from '@/services/api';
@@ -250,7 +250,26 @@ export default function UsersPage() {
             },
         },
         {
-            title: '状态',
+            title: '允许提现',
+            dataIndex: 'canWithdraw',
+            width: 90,
+            search: false,
+            render: (value: boolean, record: any) => (
+                <Switch
+                    checked={value}
+                    checkedChildren="开"
+                    unCheckedChildren="关"
+                    onChange={(checked) => {
+                        Modal.confirm({
+                            title: checked ? '确认开启提现权限？' : '确认关闭提现权限？',
+                            onOk: () => handleToggleWithdraw(record, checked),
+                        });
+                    }}
+                />
+            ),
+        },
+        {
+            title: '账号状态',
             dataIndex: 'status',
             key: 'status',
             width: 80,
@@ -388,6 +407,19 @@ export default function UsersPage() {
             ),
         },
     ];
+
+    const handleToggleWithdraw = async (record: any, checked: boolean) => {
+        try {
+            await updateUser(record.id, {
+                canWithdraw: checked,
+            });
+
+            message.success(checked ? '已开启提现权限' : '已关闭提现权限');
+            actionRef.current?.reload();
+        } catch (error) {
+            message.error('更新失败');
+        }
+    };
 
     return (
         <PageContainer>
