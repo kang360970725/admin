@@ -179,7 +179,7 @@ export default function UserWalletDrawer(props: any) {
             align: 'right',
             render: (v: any) => (
                 <span style={{ color: '#1677ff', fontWeight: 500 }}>
-          +{Number(v ?? 0).toFixed(1)}
+          {Number(v ?? 0).toFixed(1) > 0 ? '+' : ''}{Number(v ?? 0).toFixed(1)}
         </span>
             ),
         },
