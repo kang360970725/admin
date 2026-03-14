@@ -250,6 +250,17 @@ export default function UsersPage() {
             },
         },
         {
+            title: '押金阈值',
+            dataIndex: 'depositLimit',
+            width: 120,
+            search: false,
+            render: (v) => (
+                <Tag color="gold">
+                    ¥{Number(v ?? 500)}
+                </Tag>
+            ),
+        },
+        {
             title: '允许提现',
             dataIndex: 'canWithdraw',
             width: 90,

@@ -29,6 +29,7 @@ export interface User {
     lastLoginAt?: string;
     createdAt: string;
     updatedAt: string;
+    depositLimit: string;
 }
 
 export interface PaginationResponse {
@@ -676,6 +677,19 @@ export async function getMyWithdrawals(userId: number) {
     return request<WalletWithdrawalRequest[]>(`${API_BASE}/wallet/withdrawals/mine`, {
         method: 'GET',
         data: { userId },
+    });
+}
+
+/**
+ * 获取提现信息（押金余额 + 阈值）
+ */
+export async function getWithdrawInfo() {
+    return request<{
+        availableBalance: number;
+        depositBalance: number;
+        depositLimit: number;
+    }>(`${API_BASE}/wallet/withdrawals/withdraw-info`, {
+        method: 'GET',
     });
 }
 

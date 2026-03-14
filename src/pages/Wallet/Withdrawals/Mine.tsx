@@ -1,8 +1,7 @@
 import React, {useMemo, useRef, useState} from 'react';
 import type {FormInstance} from 'antd';
-import {Alert, Button, Divider, message, Space, Tag, Tooltip, Typography, Upload,} from 'antd';
-import type {ActionType, ProColumns} from '@ant-design/pro-components';
-import { Form } from 'antd';
+import {Alert, Button, Divider, Form, message, Space, Tag, Tooltip, Typography, Upload} from 'antd';
+import type {ActionType} from '@ant-design/pro-components';
 import {
     ModalForm,
     ProFormDependency,
@@ -12,12 +11,12 @@ import {
     ProTable,
 } from '@ant-design/pro-components';
 import {useModel} from '@umijs/max';
-import {AlipayOutlined, UploadOutlined, WechatOutlined} from '@ant-design/icons';
+import {UploadOutlined, WechatOutlined} from '@ant-design/icons';
+import {getWithdrawInfo} from "@/services/api";
 import {
     applyWithdrawal,
     getMyWithdrawals,
     type WalletWithdrawalRequest,
-    // ✅ 新增：二维码上传/获取
     getWithdrawQrCodeUrl,
     uploadWithdrawQrCode,
 } from '@/services/api';
@@ -26,14 +25,11 @@ const {Text} = Typography;
 
 type Props = {
     availableBalance: number;
-    onApplied?: () => void; // ✅ 提现申请成功后，让父组件刷新余额
+    onApplied?: () => void;
 };
 
-/**
- * ✅ 我的提现（admin 里临时放：申请 + 我的记录）
- */
 const WithdrawalMine: React.FC<Props> = (props) => {
-    const {availableBalance, onApplied} = props;
+    const {availableBalance, onApplied, deposit} = props;
 
     const actionRef = useRef<ActionType>();
     const formRef = useRef<FormInstance>();
@@ -41,26 +37,71 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const {initialState} = useModel('@@initialState');
     const userId = Number((initialState as any)?.currentUser?.id || 0);
     const currentUser = (initialState as any)?.currentUser;
+
     const isStaff = currentUser?.userType === 'STAFF';
+
+    const [depositBalance, setDepositBalance] = useState(0);
+    const [depositLimit, setDepositLimit] = useState(2000);
 
     const [open, setOpen] = useState(false);
     const [hasPending, setHasPending] = useState(false);
+
     const withdrawAmount = Form.useWatch('amount', formRef.current);
 
-    // ✅ 收款二维码：仅人工审核时展示/校验
     const [qrUrl, setQrUrl] = useState<string | null>(null);
     const [qrLoading, setQrLoading] = useState(false);
     const [qrUploading, setQrUploading] = useState(false);
 
+    /**
+     * ✅ 与后端一致的押金计算
+     */
+    const depositPreview = useMemo(() => {
 
-    const depositPreview = withdrawAmount ? Math.floor(withdrawAmount * 0.1) : 0;
-    const arrivePreview = withdrawAmount ? withdrawAmount - depositPreview : 0;
+        if (!withdrawAmount || !isStaff) return 0;
 
-    // ✅ 最大可提（本期简单：<= availableBalance，且按 10 整数）
+        const amount = Number(withdrawAmount);
+
+        const depositNeed = depositLimit - deposit;
+
+        const depositByRate = Math.floor(amount * 0.1);
+
+        if (depositNeed <= 0) return 0;
+
+        return Math.min(depositNeed, depositByRate);
+
+    }, [withdrawAmount, deposit, depositLimit, isStaff]);
+
+    const fetchWithdrawInfo = async () => {
+        try {
+
+            const res = await getWithdrawInfo();
+
+            setDepositBalance(Number(res.depositBalance || 0));
+            setDepositLimit(Number(res.depositLimit || 500));
+
+        } catch (e: any) {
+
+            const msg =
+                e?.data?.message ||
+                e?.response?.data?.message ||
+                e?.message ||
+                '获取提现信息失败';
+
+            message.error(msg);
+        }
+    };
+
+    const arrivePreview = useMemo(() => {
+
+        if (!withdrawAmount) return 0;
+
+        return Number(withdrawAmount) - depositPreview;
+
+    }, [withdrawAmount, depositPreview]);
+
     const maxWithdraw = useMemo(() => {
         const n = Number(availableBalance || 0);
         if (!Number.isFinite(n) || n <= 0) return 0;
-        // 仅 10 的整数
         return Math.floor(n / 10) * 10;
     }, [availableBalance]);
 
@@ -72,6 +113,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
             setQrLoading(true);
             const res = await getWithdrawQrCodeUrl();
             setQrUrl(res?.url || null);
+            if(!res?.url) message.error('还未提供收款码');
         } catch (e: any) {
             const msg =
                 e?.data?.message || e?.response?.data?.message || e?.message || '获取收款码失败';
@@ -91,7 +133,6 @@ const WithdrawalMine: React.FC<Props> = (props) => {
         try {
             setQrUploading(true);
 
-            // ✅ api.ts: uploadWithdrawQrCode(file: File)
             await uploadWithdrawQrCode(file);
 
             message.success('收款二维码已上传（不可修改）');
@@ -108,7 +149,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
         }
     };
 
-    const columns: ProColumns<WalletWithdrawalRequest>[] = [
+    const columns: any = [
         {title: '申请单号', dataIndex: 'requestNo', width: 160, search: false},
         {
             title: '金额',
@@ -146,14 +187,10 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             type="primary"
                             disabled={hasPending || maxWithdraw <= 0}
                             onClick={async () => {
-                                // 打开弹窗时先 reset（避免上次残留）
                                 formRef.current?.resetFields();
                                 setQrUrl(null);
-
-                                // ✅ 先打开
                                 setOpen(true);
-
-                                // ✅ 默认是 MANUAL：打开弹窗就拉一次收款码（仅用于展示/校验）
+                                await fetchWithdrawInfo();
                                 await fetchQrCodeUrl();
                             }}
                         >
@@ -174,7 +211,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 pagination={{pageSize: 20}}
             />
 
-            <ModalForm<{ amount: number; channel: 'MANUAL' | 'WECHAT' | 'ALIPAY'; remark?: string }>
+            <ModalForm<{ amount: number; channel: 'MANUAL' | 'WECHAT'; remark?: string }>
                 title="申请提现"
                 formRef={formRef}
                 open={open}
@@ -184,28 +221,33 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 }}
                 submitter={{searchConfig: {submitText: '提交申请'}}}
                 onFinish={async (values) => {
+
                     try {
+
                         if (hasPending) {
                             message.warning('存在待审核/打款中的提现申请，暂不可重复申请');
                             return false;
                         }
 
                         const amount = Number(values.amount);
+
                         if (!Number.isFinite(amount) || amount <= 0) {
                             message.error('提现金额非法');
                             return false;
                         }
+
                         if (amount % 10 !== 0) {
                             message.error('提现金额必须是 10 的整数');
                             return false;
                         }
+
                         if (amount > maxWithdraw) {
                             message.error(`提现金额不能超过可用余额上限（${maxWithdraw}）`);
                             return false;
                         }
 
-                        // ✅ 仅当选择“人工审核”时：要求已上传收款码
                         const channel = (values.channel || 'MANUAL') as any;
+
                         if (channel === 'MANUAL') {
                             if (!qrUrl) {
                                 message.error('请先上传收款二维码（仅一次）');
@@ -223,24 +265,34 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             channel,
                         });
 
-                        if (!res.success) {
-                            message.error(res.message)
-                            return
+                        if (!res.id) {
+                            message.error(res.message);
+                            return;
                         }
 
                         message.success('提现申请已提交，等待审核');
+
                         setOpen(false);
+
                         actionRef.current?.reload();
+
                         onApplied?.();
+
                         return true;
+
                     } catch (e: any) {
+
                         const msg = e?.data?.message || e?.response?.data?.message || e?.message || '申请失败';
+
                         message.error(msg);
+
                         return false;
                     }
                 }}
             >
+
                 <Space direction="vertical" style={{width: '100%'}} size={12}>
+
                     <Alert
                         type="info"
                         showIcon
@@ -291,21 +343,20 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 disabled: true,
                             },
                             // {
-                            //     label: (
-                            //         <Space>
-                            //             <AlipayOutlined style={{color: '#1677ff'}}/>
-                            //             <Text strong style={{color: '#1677ff'}}>
-                            //                 支付宝
-                            //             </Text>
-                            //             <Text type="secondary">（即将上线）</Text>
-                            //         </Space>
-                            //     ),
-                            //     value: 'ALIPAY',
-                            //     disabled: true,
-                            // },
+                            // label: (
+                            // <Space>
+                            // <AlipayOutlined style={{color: '#1677ff'}}/>
+                            // <Text strong style={{color: '#1677ff'}}>
+                            // 支付宝
+                            // </Text>
+                            // <Text type="secondary">（即将上线）</Text>
+                            // </Space>
+                            // ),
+                            // value: 'ALIPAY',
+                            // disabled: true,
+                            // }
                         ]}
                     />
-
                     {/* ✅ 仅人工审核时：展示并校验收款码 */}
                     <ProFormDependency name={['channel']}>
                         {({channel}) => {
@@ -327,8 +378,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                         <Alert
                                             type="success"
                                             showIcon
-                                            message={<span style={{ fontSize: 13, fontWeight: 600 }}>收款二维码已上传</span>}
-                                            description={<span style={{ fontSize: 12 }}>已完成配置，无需重复上传。</span>}
+                                            message={<span style={{fontSize: 13, fontWeight: 600}}>收款二维码已上传</span>}
+                                            description={<span style={{fontSize: 12}}>已完成配置，无需重复上传。</span>}
                                             style={{
                                                 borderRadius: 12,
                                                 border: 'none',
@@ -364,8 +415,6 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             );
                         }}
                     </ProFormDependency>
-
-
                     <ProFormDigit
                         name="amount"
                         label="提现金额"
@@ -398,28 +447,35 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             },
                         ]}
                     />
+
                     {isStaff && withdrawAmount ? (
                         <Alert
                             type="info"
                             showIcon
                             message={
                                 <Space>
-                                    <Text>保证金缴纳：</Text>
+                                    <Text>保证金补充：</Text>
                                     <Text strong>{depositPreview}</Text>
-                                    <Text type="secondary">（10%）</Text>
-                                    <Divider type="vertical" />
+                                    <Text type="secondary">
+                                        （当前押金 {deposit} / 阈值 {depositLimit}）
+                                    </Text>
+
+                                    <Divider type="vertical"/>
+
                                     <Text>预计到账：</Text>
                                     <Text strong>{arrivePreview}</Text>
                                 </Space>
                             }
                         />
                     ) : null}
+
                     <ProFormTextArea
                         name="remark"
                         label="备注"
                         placeholder="可选：填写申请说明"
                         fieldProps={{rows: 3, maxLength: 200}}
                     />
+
                 </Space>
             </ModalForm>
         </>

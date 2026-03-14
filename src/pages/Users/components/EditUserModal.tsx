@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Modal, Form, Input, Select, InputNumber, message, Tag } from 'antd';
-import { updateUser, User } from '@/services/api';
+import React, {useEffect, useState} from 'react';
+import {Form, Input, InputNumber, message, Modal, Select, Tag} from 'antd';
+import {updateUser, User} from '@/services/api';
 
-const { Option } = Select;
+const {Option} = Select;
 
 interface EditUserModalProps {
     visible: boolean;
@@ -45,6 +45,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 rating: user.rating,
                 balance: user.balance,
                 needResetPwd: user.needResetPwd,
+                depositLimit: user.depositLimit ?? 2000,
             });
         }
     }, [user, visible, form]);
@@ -52,6 +53,34 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     const handleOk = async () => {
         try {
             const values = await form.validateFields();
+            const currentDeposit = Number(user?.walletAccount?.depositBalance ?? 0);
+
+            // 如果押金阈值低于当前押金，需要二次确认
+            if (values.depositLimit !== undefined && values.depositLimit < currentDeposit) {
+
+                Modal.confirm({
+                    title: '押金阈值低于当前押金',
+                    content: `当前押金 ¥${currentDeposit}，调整为 ¥${values.depositLimit} 将退还 ¥${currentDeposit - values.depositLimit} 到用户钱包，是否继续？`,
+                    okText: '确认调整',
+                    cancelText: '取消',
+                    onOk: async () => {
+                        try {
+                            setLoading(true);
+                            await updateUser(user.id, values);
+                            form.resetFields();
+                            onSuccess();
+                        } catch (error: any) {
+                            message.error(error?.response?.data?.message || '更新用户信息失败');
+                        } finally {
+                            setLoading(false);
+                        }
+                    },
+                });
+
+                return;
+            }
+
+            // 正常更新
             setLoading(true);
 
             if (user) {
@@ -59,6 +88,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 form.resetFields();
                 onSuccess();
             }
+
         } catch (error: any) {
             if (error.errorFields) {
                 message.error('请完善表单信息');
@@ -99,19 +129,19 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 layout="vertical"
                 name="editUserForm"
             >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
                     {/* 第一列 */}
                     <div>
                         <Form.Item
                             label="手机号"
                         >
-                            <Input value={user?.phone} disabled />
+                            <Input value={user?.phone} disabled/>
                         </Form.Item>
 
                         <Form.Item
                             label="用户身份"
                             name="userType"
-                            rules={[{ required: true, message: '请选择用户身份' }]}
+                            rules={[{required: true, message: '请选择用户身份'}]}
                         >
                             <Select
                                 placeholder="请选择用户身份"
@@ -130,7 +160,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         <Form.Item
                             label="账号状态"
                             name="status"
-                            rules={[{ required: true, message: '请选择账号状态' }]}
+                            rules={[{required: true, message: '请选择账号状态'}]}
                         >
                             <Select placeholder="请选择账号状态">
                                 <Option value="ACTIVE">正常</Option>
@@ -156,15 +186,15 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             label="姓名"
                             name="name"
                         >
-                            <Input placeholder="请输入姓名" />
+                            <Input placeholder="请输入姓名"/>
                         </Form.Item>
 
                         <Form.Item
                             label="邮箱"
                             name="email"
-                            rules={[{ type: 'email', message: '邮箱格式不正确' }]}
+                            rules={[{type: 'email', message: '邮箱格式不正确'}]}
                         >
-                            <Input placeholder="请输入邮箱" />
+                            <Input placeholder="请输入邮箱"/>
                         </Form.Item>
 
                         {/* 员工专属字段 */}
@@ -193,27 +223,27 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                         {/* 非员工时的普通字段 */}
                         {/*{!isStaff && (*/}
-                            <>
-                                <Form.Item
-                                    label="真实姓名"
-                                    name="realName"
-                                >
-                                    <Input placeholder="请输入真实姓名" />
-                                </Form.Item>
+                        <>
+                            <Form.Item
+                                label="真实姓名"
+                                name="realName"
+                            >
+                                <Input placeholder="请输入真实姓名"/>
+                            </Form.Item>
 
-                                <Form.Item
-                                    label="身份证号"
-                                    name="idCard"
-                                >
-                                    <Input placeholder="请输入身份证号" />
-                                </Form.Item>
-                            </>
+                            <Form.Item
+                                label="身份证号"
+                                name="idCard"
+                            >
+                                <Input placeholder="请输入身份证号"/>
+                            </Form.Item>
+                        </>
                         {/*)}*/}
                     </div>
                 </div>
 
                 {/* 底部一行 - 动态显示评级字段 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px'}}>
                     <Form.Item
                         label="等级"
                         name="level"
@@ -222,7 +252,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             min={1}
                             max={10}
                             placeholder="等级"
-                            style={{ width: '100%' }}
+                            style={{width: '100%'}}
                         />
                     </Form.Item>
 
@@ -231,13 +261,13 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         <Form.Item
                             label="员工评级"
                             name="rating"
-                            rules={[{ required: true, message: '员工必须设置评级' }]}
+                            rules={[{required: true, message: '员工必须设置评级'}]}
                         >
-                            <Select placeholder="请选择评级" style={{ width: '100%' }}>
+                            <Select placeholder="请选择评级" style={{width: '100%'}}>
                                 {availableRatings.map(rating => (
                                     <Option key={rating.id} value={rating.id}>
                                         {rating.name}
-                                        <span style={{ marginLeft: 8, color: '#666', fontSize: 12 }}>
+                                        <span style={{marginLeft: 8, color: '#666', fontSize: 12}}>
                                             ({rating.scope === 'BOTH' ? '通用' : rating.scope === 'ONLINE' ? '线上' : '线下'})
                                         </span>
                                     </Option>
@@ -256,7 +286,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 min={1}
                                 max={5}
                                 placeholder="评级"
-                                style={{ width: '100%' }}
+                                style={{width: '100%'}}
                                 disabled
                             />
                         </Form.Item>
@@ -271,11 +301,42 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             step={0.01}
                             precision={2}
                             placeholder="余额"
-                            style={{ width: '100%' }}
+                            style={{width: '100%'}}
                             formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                             parser={value => value?.replace(/¥\s?|(,*)/g, '') as any}
                         />
                     </Form.Item>
+                    {isStaff && (
+                        <>
+                            <Form.Item label="当前已交押金">
+                                <Tag color="blue">
+                                    ¥{Number(user?.walletAccount?.depositBalance ?? 0)}
+                                </Tag>
+                            </Form.Item>
+                            <Form.Item
+                                label="押金阈值"
+                                name="depositLimit"
+                                rules={[
+                                    {required: true, message: '请输入押金阈值'},
+                                    {
+                                        validator(_, value) {
+                                            if (value < 500) {
+                                                return Promise.reject(new Error('押金阈值不得低于500'));
+                                            }
+                                            return Promise.resolve();
+                                        },
+                                    },
+                                ]}
+                            >
+                                <InputNumber
+                                    style={{width: '100%'}}
+                                    min={500}
+                                    step={100}
+                                    precision={0}
+                                    addonAfter="元"
+                                />
+                            </Form.Item>
+                        </>)}
                 </div>
 
                 {/* 当前评级信息显示 */}
@@ -287,12 +348,12 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         borderRadius: '4px',
                         marginBottom: '16px'
                     }}>
-                        <div style={{ fontWeight: 'bold', color: '#52c41a' }}>
+                        <div style={{fontWeight: 'bold', color: '#52c41a'}}>
                             当前评级信息:
                         </div>
                         <div>
                             <Tag color="blue">{currentRating.name}</Tag>
-                            <span style={{ marginLeft: 8 }}>
+                            <span style={{marginLeft: 8}}>
                                 分红比例: {(currentRating.rate * 100).toFixed(0)}% |
                                 适用范围: {currentRating.scope === 'BOTH' ? '线上线下' : currentRating.scope === 'ONLINE' ? '线上' : '线下'}
                             </span>
@@ -304,7 +365,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                     label="头像URL"
                     name="avatar"
                 >
-                    <Input placeholder="请输入头像URL地址" />
+                    <Input placeholder="请输入头像URL地址"/>
                 </Form.Item>
             </Form>
         </Modal>

@@ -244,6 +244,32 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             />
                         </Form.Item>
                     )}
+                    {isStaff && (
+                        <Form.Item
+                            label="押金阈值"
+                            name="depositLimit"
+                            initialValue={2000}
+                            rules={[
+                                { required: true, message: '请输入押金阈值' },
+                                {
+                                    validator(_, value) {
+                                        if (value < 500) {
+                                            return Promise.reject(new Error('押金阈值不得低于500'));
+                                        }
+                                        return Promise.resolve();
+                                    },
+                                },
+                            ]}
+                        >
+                            <InputNumber
+                                style={{ width: '100%' }}
+                                min={500}
+                                step={100}
+                                precision={0}
+                                addonAfter="元"
+                            />
+                        </Form.Item>
+                    )}
 
                     <Form.Item
                         label="初始余额"

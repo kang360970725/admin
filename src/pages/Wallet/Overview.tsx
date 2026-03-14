@@ -35,17 +35,17 @@ export default function WalletOverview() {
         <PageContainer>
             <ProCard loading={loading} bordered>
                 <Row gutter={16}>
-                    <Col span={8}>
+                    <Col span={6}>
+                        <Statistic title="总资产" value={total} precision={2} />
+                    </Col>
+                    <Col span={6}>
                         <Statistic title="可用余额" value={available} precision={2} />
                     </Col>
-                    <Col span={8}>
+                    <Col span={6}>
                         <Statistic title="冻结余额" value={frozen} precision={2} />
                     </Col>
                     <Col span={6}>
                         <Statistic title="保证金账户" value={deposit} precision={2} />
-                    </Col>
-                    <Col span={8}>
-                        <Statistic title="总资产" value={total} precision={2} />
                     </Col>
                 </Row>
 
@@ -69,6 +69,7 @@ export default function WalletOverview() {
 
             <WithdrawalMine
                 availableBalance={available}
+                deposit={deposit}
                 onApplied={() => load()}
             />
         </PageContainer>
