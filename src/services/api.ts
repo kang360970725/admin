@@ -905,6 +905,15 @@ export async function repairWalletBySettlements(data: {
     });
 }
 
+export async function rollbackWrongSettlementReversals(data: {
+    id: number
+}) {
+    return request(`${API_BASE}/orders/${data.id}/rollback-wrong-settlement-reversals`, {
+        method: 'POST',
+        data,
+    });
+}
+
 
 /**
  * ✅ 重新结算（修历史结算用）

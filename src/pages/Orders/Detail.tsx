@@ -49,7 +49,7 @@ import {
     getPlayerOptions,
     markOrderPaid,
     recalculateOrderSettlements,
-    refundOrder,
+    refundOrder, rollbackWrongSettlementReversals,
     updateArchivedProgressTotal,
     updateDispatchParticipants,
     updateOrder,
@@ -198,6 +198,23 @@ const OrderDetailPage: React.FC = () => {
         }
     };
 
+    const rollbackWrongSettlementReversalsFn = async () => {
+        try {
+            await rollbackWrongSettlementReversals({
+                id: Number(order?.id)
+            });
+
+            message.success('已反修复冲正流水');
+            setMarkPaidOpen(false);
+            await loadDetail();
+        } catch (e: any) {
+            if (e?.errorFields) return;
+            message.error(e?.response?.data?.message || '反修复冲正流水失败');
+        } finally {
+            setMarkPaidSubmitting(false);
+        }
+    };
+
 
     // ==========================
     // 修复工具：钱包对齐 / 重新结算
@@ -244,6 +261,7 @@ const OrderDetailPage: React.FC = () => {
         }
         setRecalcModePlayAlloc(alloc);
     };
+
 
     const renderRecalcResult = (res: any) => {
         if (!res) return null;
@@ -2865,6 +2883,16 @@ const OrderDetailPage: React.FC = () => {
                                     style={{borderRadius: 12}}
                                 >
                                     清空结果
+                                </Button>
+
+                                <Button
+                                    loading={toolsLoading}
+                                    onClick={() => {
+                                        rollbackWrongSettlementReversalsFn();
+                                    }}
+                                    style={{borderRadius: 12}}
+                                >
+                                    反修复冲正流水
                                 </Button>
                             </Space>
 
