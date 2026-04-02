@@ -33,8 +33,13 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
 
     // ✅ 营业数据看板
     canViewDashboard: has('dashboard:revenue:page'),
+    // ✅ 业绩数据看板
+    canViewPerformanceDashboard: has('performance:dashboard:view'),
+    canViewPerformanceStaff: has('performance:staff:view'),
     // ✅ 财务核账
-    canViewFinanceReconcile: has('finance:reconcile:page'),
+    // canViewFinanceReconcile: has('finance:reconcile:page'),
+    canViewFinanceDashboard: has('finance:dashboard:view'), //财务看板
+    canViewFinanceReconcile: has('finance:records:list'), //财务明细
 
   };
 }

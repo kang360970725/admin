@@ -978,3 +978,51 @@ export async function manualDeposit(data:any) {
         data
     })
 }
+
+/**
+ * 获取业绩数据
+ */
+export async function getPerformanceDashboardOverview(data: any) {
+    return request(`${API_BASE}/performance/dashboard/overview`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getPerformanceDashboardList(data: any) {
+    return request(`${API_BASE}/performance/dashboard/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+/**
+ * 运营数据
+ */
+export async function postFinanceDashboardSummary(data: any) {
+    return request(`${API_BASE}/finance/dashboard/summary`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function postFinanceDashboardTrend(data: any) {
+    return request(`${API_BASE}/finance/dashboard/trend`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function postFinanceDashboardCostStructure(data: any) {
+    return request(`${API_BASE}/finance/dashboard/cost-structure`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function postFinanceRecordList(data: any) {
+    return request(`${API_BASE}/finance/records/list`, {
+        method: 'POST',
+        data,
+    });
+}

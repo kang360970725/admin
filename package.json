@@ -12,6 +12,7 @@
     "build:prod": "UMI_ENV=production max build"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^5.0.1",
     "@ant-design/pro-components": "^2.4.4",
     "@umijs/max": "^4.5.3",

@@ -93,15 +93,23 @@ export default defineConfig({
     // ✅ 新增欢迎页：登录后的默认入口
     { path: '/welcome', name: '欢迎页', component: '@/pages/Welcome', icon: 'smile' },
 
+    // {
+    //   path: '/dashboard',
+    //   name: '数据看板',
+    //   icon: 'DashboardOutlined',
+    //   access: 'canViewDashboard',
+    //   routes: [
+    //     { path: '/dashboard', redirect: '/dashboard/revenue' },
+    //     { path: '/dashboard/revenue', name: '营业额看板', component: '@/pages/Dashboard/RevenueOverview' },
+    //   ],
+    // },
+
     {
-      path: '/dashboard',
-      name: '数据看板',
-      icon: 'DashboardOutlined',
-      access: 'canViewDashboard',
-      routes: [
-        { path: '/dashboard', redirect: '/dashboard/revenue' },
-        { path: '/dashboard/revenue', name: '营业额看板', component: '@/pages/Dashboard/RevenueOverview' },
-      ],
+      path: '/performance/dashboard',
+      icon: 'AuditOutlined',
+      name: '业绩看板',
+      component: './Performance/Dashboard',
+      access: 'canViewPerformanceDashboard',
     },
 
     // ✅ 根路径跳欢迎页
@@ -124,14 +132,33 @@ export default defineConfig({
       component: './UserLogs',
       access: 'canViewRoleManagement'
     },
+    // {
+    //   path: '/finance',
+    //   name: '财务核账',
+    //   icon: 'AuditOutlined',
+    //   access: 'canViewFinanceReconcile',
+    //   routes: [
+    //     { path: '/finance', redirect: '/finance/reconcile' },
+    //     { path: '/finance/reconcile', name: '核账报表', component: '@/pages/Finance/Reconcile', access: 'canViewFinanceReconcile' },
+    //   ],
+    // },
     {
       path: '/finance',
-      name: '财务核账',
-      icon: 'AuditOutlined',
-      access: 'canViewFinanceReconcile',
+      name: '财务管理',
+      icon: 'PieChartOutlined',
       routes: [
-        { path: '/finance', redirect: '/finance/reconcile' },
-        { path: '/finance/reconcile', name: '核账报表', component: '@/pages/Finance/Reconcile', access: 'canViewFinanceReconcile' },
+        {
+          path: '/finance/dashboard',
+          name: '财务看板',
+          component: '@/pages/Finance/Dashboard',
+          access: 'canViewFinanceDashboard',
+        },
+        {
+          path: '/finance/records',
+          name: '财务明细',
+          component: '@/pages/Finance/Records',
+          access: 'canViewFinanceReconcile',
+        },
       ],
     },
 

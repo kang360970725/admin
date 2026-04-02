@@ -4,10 +4,15 @@ import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { useModel } from '@umijs/max';
 import { getPendingWithdrawals, reviewWithdrawal, type WalletWithdrawalRequest } from '@/services/api';
+import dayjs from "dayjs";
 
 /**
  * ✅ 提现审批页（管理端）
  */
+const formatDateTime = (value?: string) => {
+    if (!value) return '-';
+    return dayjs(value).format('YYYY-MM-DD HH:mm');
+};
 const WithdrawalsPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const { initialState } = useModel('@@initialState');
@@ -86,6 +91,7 @@ const WithdrawalsPage: React.FC = () => {
             title: '申请时间',
             dataIndex: 'createdAt',
             width: 180,
+            renderText: (v:any) => formatDateTime(v),
             search: false,
         },
         {
