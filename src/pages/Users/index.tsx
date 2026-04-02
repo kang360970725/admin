@@ -168,8 +168,11 @@ export default function UsersPage() {
             valueType: 'select',
             valueEnum: {
                 STAFF: { text: '员工' },
-                PLAYER: { text: '陪玩' },
-                CUSTOMER: { text: '客户' },
+                SUPER_ADMIN: { text: '超级管理员' },
+                OPERATION: { text: '运营' },
+                FINANCE: { text: '财务' },
+                CUSTOMER_SERVICE: { text: '客服' },
+                REGISTERED_USER: { text: '普通用户' },
                 ADMIN: { text: '管理员' },
             },
 
