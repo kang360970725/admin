@@ -164,16 +164,28 @@ export default function UsersPage() {
             dataIndex: 'userType',
             key: 'userType',
             width: 100,
-            render: (userType: keyof typeof userTypeMap) => (
-                <Tag color={userTypeMap[userType]?.color}>
-                    {userTypeMap[userType]?.text}
+            // ✅ 搜索栏改成下拉
+            valueType: 'select',
+            valueEnum: {
+                STAFF: { text: '员工' },
+                PLAYER: { text: '陪玩' },
+                CUSTOMER: { text: '客户' },
+                ADMIN: { text: '管理员' },
+            },
+
+            // ✅ 默认筛选“员工”
+            initialValue: 'STAFF',
+            render: (_, record) => (
+                <Tag color={userTypeMap[record.userType as keyof typeof userTypeMap]?.color}>
+                    {userTypeMap[record.userType as keyof typeof userTypeMap]?.text}
                 </Tag>
-            ),
+            )
         },
         {
             title: '角色',
             dataIndex: 'Role',
             key: 'role',
+            search: false,
             width: 120,
             render: (role: any) => (
                 role ? (
@@ -187,6 +199,7 @@ export default function UsersPage() {
             title: '员工评级',
             dataIndex: 'staffRating',
             key: 'rating',
+            search: false,
             width: 120,
             render: (staffRating: any) => (
                 staffRating ? (
@@ -284,10 +297,20 @@ export default function UsersPage() {
             dataIndex: 'status',
             key: 'status',
             width: 80,
-            render: (status: keyof typeof userStatusMap) => (
+            // ✅ 搜索栏改成下拉
+            valueType: 'select',
+            valueEnum: {
+                ACTIVE: { text: '正常' },
+                FROZEN: { text: '冻结' },
+                DISABLED: { text: '禁用' },
+            },
+
+            // ✅ 默认筛选“正常”
+            initialValue: 'ACTIVE',
+            render: (_, record) => (
                 <Badge
-                    status={userStatusMap[status]?.status as any}
-                    text={userStatusMap[status]?.text}
+                    status={userStatusMap[record.status as keyof typeof userStatusMap]?.status as any}
+                    text={userStatusMap[record.status as keyof typeof userStatusMap]?.text}
                 />
             ),
         },
@@ -295,6 +318,7 @@ export default function UsersPage() {
             title: '最后登录',
             dataIndex: 'lastLoginAt',
             width: 120,
+            search: false,
             render: (date: string) => {
 
                 if (!date) return '从未';
@@ -353,42 +377,9 @@ export default function UsersPage() {
         {
             title: '操作',
             key: 'action',
+            search: false,
             width: 200,
             render: (_, record) => (
-                // <Space>
-                //     {access.canEditUser && (
-                //         <Button type="link" size="small" onClick={() => handleEdit(record)}>
-                //             编辑
-                //         </Button>
-                //     )}
-                //     {access.canEditUser && (
-                //         <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
-                //             分配角色
-                //         </Button>
-                //     )}
-                //     {access.canChangeLevel && record?.userType === 'STAFF' && (
-                //         <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
-                //             升降级
-                //         </Button>
-                //     )}
-                //     {access.canResetPassword && (
-                //         <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
-                //             重置密码
-                //         </Button>
-                //     )}
-                //     {access.canDeleteUser && (
-                //         <Popconfirm
-                //             title="确定删除这个用户吗？"
-                //             onConfirm={() => handleDelete(record.id)}
-                //             okText="确定"
-                //             cancelText="取消"
-                //         >
-                //             <Button type="link" size="small" danger>
-                //                 删除
-                //             </Button>
-                //         </Popconfirm>
-                //     )}
-                // </Space>
                 <Space>
                     <Button type="link" size="small" onClick={() => handleEdit(record)}>
                         编辑
