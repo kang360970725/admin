@@ -12,7 +12,7 @@ import {
 } from '@ant-design/pro-components';
 import {useModel} from '@umijs/max';
 import {UploadOutlined, WechatOutlined} from '@ant-design/icons';
-import {getWithdrawInfo} from "@/services/api";
+import {getOfflineFeeGuardInfo, getWithdrawInfo} from "@/services/api";
 import {
     applyWithdrawal,
     getMyWithdrawals,
@@ -29,7 +29,7 @@ type Props = {
 };
 
 const WithdrawalMine: React.FC<Props> = (props) => {
-    const {availableBalance, onApplied, deposit} = props;
+    const {availableBalance, onApplied} = props;
 
     const actionRef = useRef<ActionType>();
     const formRef = useRef<FormInstance>();
@@ -42,6 +42,11 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
     const [depositBalance, setDepositBalance] = useState(0);
     const [depositLimit, setDepositLimit] = useState(2000);
+    const [offlineFeeGuard, setOfflineFeeGuard] = useState<{
+        hasOutstanding: boolean;
+        partialMinPay: number;
+        bill: any | null;
+    }>({hasOutstanding: false, partialMinPay: 100, bill: null});
 
     const [open, setOpen] = useState(false);
     const [hasPending, setHasPending] = useState(false);
@@ -61,7 +66,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
         const amount = Number(withdrawAmount);
 
-        const depositNeed = depositLimit - deposit;
+        const depositNeed = depositLimit - depositBalance;
 
         const depositByRate = Math.floor(amount * 0.1);
 
@@ -69,15 +74,23 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
         return Math.min(depositNeed, depositByRate);
 
-    }, [withdrawAmount, deposit, depositLimit, isStaff]);
+    }, [withdrawAmount, depositBalance, depositLimit, isStaff]);
 
     const fetchWithdrawInfo = async () => {
         try {
 
-            const res = await getWithdrawInfo();
+            const [res, guardInfo] = await Promise.all([
+                getWithdrawInfo(),
+                getOfflineFeeGuardInfo(),
+            ]);
 
             setDepositBalance(Number(res.depositBalance || 0));
             setDepositLimit(Number(res.depositLimit || 500));
+            setOfflineFeeGuard({
+                hasOutstanding: Boolean(guardInfo?.hasOutstanding),
+                partialMinPay: Number(guardInfo?.partialMinPay || 100),
+                bill: guardInfo?.bill || null,
+            });
 
         } catch (e: any) {
 
@@ -211,7 +224,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 pagination={{pageSize: 20}}
             />
 
-            <ModalForm<{ amount: number; channel: 'MANUAL' | 'WECHAT'; remark?: string }>
+            <ModalForm<{ amount: number; channel: 'MANUAL' | 'WECHAT'; remark?: string; payOfflineFeeAmount?: number }>
                 title="申请提现"
                 formRef={formRef}
                 open={open}
@@ -263,6 +276,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             idempotencyKey,
                             remark: values.remark || '',
                             channel,
+                            payOfflineFeeAmount: Number(values.payOfflineFeeAmount || 0) || undefined,
                         });
 
                         if (!res.id) {
@@ -457,7 +471,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                     <Text>保证金补充：</Text>
                                     <Text strong>{depositPreview}</Text>
                                     <Text type="secondary">
-                                        （当前押金 {deposit} / 阈值 {depositLimit}）
+                                        （当前押金 {depositBalance} / 阈值 {depositLimit}）
                                     </Text>
 
                                     <Divider type="vertical"/>
@@ -466,6 +480,55 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                     <Text strong>{arrivePreview}</Text>
                                 </Space>
                             }
+                        />
+                    ) : null}
+
+                    {offlineFeeGuard.hasOutstanding ? (
+                        <Alert
+                            type="warning"
+                            showIcon
+                            message={
+                                `上月线下费用未缴：${Number(offlineFeeGuard?.bill?.remainingAmount || 0).toFixed(2)}`
+                            }
+                            description={
+                                offlineFeeGuard?.bill?.enforceFullPayment
+                                    ? '当前账单已强制全额缴纳，必须本次补齐。'
+                                    : `本次可部分补缴，最低 ${offlineFeeGuard.partialMinPay}。`
+                            }
+                        />
+                    ) : null}
+
+                    {offlineFeeGuard.hasOutstanding ? (
+                        <ProFormDigit
+                            name="payOfflineFeeAmount"
+                            label="本次补缴线下费用"
+                            min={
+                                offlineFeeGuard?.bill?.enforceFullPayment
+                                    ? Number(offlineFeeGuard?.bill?.remainingAmount || 0)
+                                    : 0
+                            }
+                            max={Number(offlineFeeGuard?.bill?.remainingAmount || 0)}
+                            fieldProps={{ precision: 2, step: 10 }}
+                            rules={[
+                                {
+                                    validator: async (_, v) => {
+                                        const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
+                                        const partialMinPay = Number(offlineFeeGuard?.partialMinPay || 100);
+                                        const enforce = Boolean(offlineFeeGuard?.bill?.enforceFullPayment);
+                                        const n = Number(v || 0);
+
+                                        if (remaining <= 0) return;
+                                        if (!Number.isFinite(n) || n <= 0) {
+                                            throw new Error(`请填写补缴金额（最低 ${partialMinPay}）`);
+                                        }
+                                        if (n > remaining) throw new Error('补缴金额不能超过未缴金额');
+                                        if (enforce && n < remaining) throw new Error('该账单要求强制全额缴纳');
+                                        if (!enforce && n < partialMinPay && n < remaining) {
+                                            throw new Error(`部分补缴最低为 ${partialMinPay}`);
+                                        }
+                                    },
+                                },
+                            ]}
                         />
                     ) : null}
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, Form, Input, Select, InputNumber, message, Tag } from 'antd';
+import { Modal, Form, Input, Select, InputNumber, message, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 import { createUser } from '@/services/api';
 
 const { Option } = Select;
@@ -8,22 +9,39 @@ interface CreateUserModalProps {
     visible: boolean;
     onCancel: () => void;
     onSuccess: () => void;
-    availableRatings?: any[]; // 新增：可用评级列表
+    availableRatings?: any[];
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({
-                                                             visible,
-                                                             onCancel,
-                                                             onSuccess,
-                                                             availableRatings = [],
-                                                         }) => {
+    visible,
+    onCancel,
+    onSuccess,
+    availableRatings = [],
+}) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
     const [userType, setUserType] = useState('REGISTERED_USER');
+    const [workMode, setWorkMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
 
-    // 监听用户类型变化
     const handleUserTypeChange = (value: string) => {
         setUserType(value);
+
+        // 非员工时不再保留线下相关字段，避免误传
+        if (value !== 'STAFF') {
+            setWorkMode('ONLINE');
+            form.setFieldsValue({ workMode: 'ONLINE', offlineJoinedAt: null });
+        } else {
+            form.setFieldsValue({ workMode: 'ONLINE' });
+        }
+    };
+
+    const handleWorkModeChange = (value: 'ONLINE' | 'OFFLINE') => {
+        setWorkMode(value);
+
+        // 切回线上时清空线下入职时间
+        if (value === 'ONLINE') {
+            form.setFieldsValue({ offlineJoinedAt: null });
+        }
     };
 
     const handleOk = async () => {
@@ -31,9 +49,23 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
             const values = await form.validateFields();
             setLoading(true);
 
-            await createUser(values);
+            const payload: any = { ...values };
+
+            if (values.userType === 'STAFF') {
+                payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
+                payload.offlineJoinedAt =
+                    payload.workMode === 'OFFLINE' && values.offlineJoinedAt
+                        ? dayjs(values.offlineJoinedAt).startOf('day').toISOString()
+                        : null;
+            } else {
+                delete payload.workMode;
+                delete payload.offlineJoinedAt;
+            }
+
+            await createUser(payload);
             form.resetFields();
-            setUserType('REGISTERED_USER'); // 重置用户类型
+            setUserType('REGISTERED_USER');
+            setWorkMode('ONLINE');
             onSuccess();
         } catch (error: any) {
             if (error.errorFields) {
@@ -48,11 +80,11 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
     const handleCancel = () => {
         form.resetFields();
-        setUserType('REGISTERED_USER'); // 重置用户类型
+        setUserType('REGISTERED_USER');
+        setWorkMode('ONLINE');
         onCancel();
     };
 
-    // 判断是否为员工类型
     const isStaff = userType === 'STAFF';
 
     return (
@@ -74,10 +106,10 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                     status: 'ACTIVE',
                     level: 1,
                     balance: 0,
+                    workMode: 'ONLINE',
                 }}
             >
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    {/* 第一列 */}
                     <div>
                         <Form.Item
                             label="手机号"
@@ -106,10 +138,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             name="userType"
                             rules={[{ required: true, message: '请选择用户身份' }]}
                         >
-                            <Select
-                                placeholder="请选择用户身份"
-                                onChange={handleUserTypeChange}
-                            >
+                            <Select placeholder="请选择用户身份" onChange={handleUserTypeChange}>
                                 <Option value="REGISTERED_USER">注册用户</Option>
                                 <Option value="STAFF">员工</Option>
                                 <Option value="CUSTOMER_SERVICE">客服</Option>
@@ -133,12 +162,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         </Form.Item>
                     </div>
 
-                    {/* 第二列 */}
                     <div>
-                        <Form.Item
-                            label="昵称"
-                            name="name"
-                        >
+                        <Form.Item label="昵称" name="name">
                             <Input placeholder="请输入昵称" />
                         </Form.Item>
 
@@ -150,74 +175,31 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             <Input placeholder="请输入邮箱" />
                         </Form.Item>
 
-                        {/* 员工专属字段 */}
-                        {/*{isStaff && (*/}
-                        {/*    <>*/}
-                        {/*        <Form.Item*/}
-                        {/*            label="真实姓名"*/}
-                        {/*            name="realName"*/}
-                        {/*            rules={[{ required: true, message: '员工必须填写真实姓名' }]}*/}
-                        {/*        >*/}
-                        {/*            <Input placeholder="请输入真实姓名" />*/}
-                        {/*        </Form.Item>*/}
+                        <>
+                            <Form.Item label="真实姓名" name="realName">
+                                <Input placeholder="请输入真实姓名" />
+                            </Form.Item>
 
-                        {/*        <Form.Item*/}
-                        {/*            label="身份证号"*/}
-                        {/*            name="idCard"*/}
-                        {/*            rules={[*/}
-                        {/*                { required: true, message: '员工必须填写身份证号' },*/}
-                        {/*                { pattern: /^\d{17}[\dXx]$/, message: '身份证号格式不正确' }*/}
-                        {/*            ]}*/}
-                        {/*        >*/}
-                        {/*            <Input placeholder="请输入身份证号" />*/}
-                        {/*        </Form.Item>*/}
-                        {/*    </>*/}
-                        {/*)}*/}
-
-                        {/* 非员工时的普通字段 */}
-                        {/*{!isStaff && (*/}
-                            <>
-                                <Form.Item
-                                    label="真实姓名"
-                                    name="realName"
-                                >
-                                    <Input placeholder="请输入真实姓名" />
-                                </Form.Item>
-
-                                <Form.Item
-                                    label="身份证号"
-                                    name="idCard"
-                                >
-                                    <Input placeholder="请输入身份证号" />
-                                </Form.Item>
-                            </>
-                        {/*)}*/}
+                            <Form.Item label="身份证号" name="idCard">
+                                <Input placeholder="请输入身份证号" />
+                            </Form.Item>
+                        </>
                     </div>
                 </div>
 
-                {/* 底部一行 - 动态显示评级字段 */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-                    <Form.Item
-                        label="等级"
-                        name="level"
-                    >
-                        <InputNumber
-                            min={1}
-                            max={10}
-                            placeholder="等级"
-                            style={{ width: '100%' }}
-                        />
+                    <Form.Item label="等级" name="level">
+                        <InputNumber min={1} max={10} placeholder="等级" style={{ width: '100%' }} />
                     </Form.Item>
 
-                    {/* 员工专属：评级字段 */}
-                    {isStaff && (
+                    {isStaff ? (
                         <Form.Item
                             label="员工评级"
                             name="rating"
                             rules={[{ required: true, message: '员工必须设置评级' }]}
                         >
                             <Select placeholder="请选择评级" style={{ width: '100%' }}>
-                                {availableRatings.map(rating => (
+                                {availableRatings.map((rating) => (
                                     <Option key={rating.id} value={rating.id}>
                                         {rating.name}
                                         <span style={{ marginLeft: 8, color: '#666', fontSize: 12 }}>
@@ -227,23 +209,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                                 ))}
                             </Select>
                         </Form.Item>
-                    )}
-
-                    {/* 非员工时显示普通位置 */}
-                    {!isStaff && (
-                        <Form.Item
-                            label="评级"
-                            name="rating"
-                        >
-                            <InputNumber
-                                min={1}
-                                max={5}
-                                placeholder="评级"
-                                style={{ width: '100%' }}
-                                disabled
-                            />
+                    ) : (
+                        <Form.Item label="评级" name="rating">
+                            <InputNumber min={1} max={5} placeholder="评级" style={{ width: '100%' }} disabled />
                         </Form.Item>
                     )}
+
                     {isStaff && (
                         <Form.Item
                             label="押金阈值"
@@ -271,26 +242,57 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         </Form.Item>
                     )}
 
-                    <Form.Item
-                        label="初始余额"
-                        name="balance"
-                    >
+                    <Form.Item label="初始余额" name="balance">
                         <InputNumber
                             min={0}
                             step={0.01}
                             precision={2}
                             placeholder="初始余额"
                             style={{ width: '100%' }}
-                            formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            parser={value => value?.replace(/¥\s?|(,*)/g, '') as any}
+                            formatter={(value) => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            parser={(value) => value?.replace(/¥\s?|(,*)/g, '') as any}
                         />
                     </Form.Item>
                 </div>
 
-                <Form.Item
-                    label="头像URL"
-                    name="avatar"
-                >
+                {isStaff && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <Form.Item
+                            label="员工工作模式"
+                            name="workMode"
+                            rules={[{ required: true, message: '请选择员工工作模式' }]}
+                        >
+                            <Select onChange={handleWorkModeChange}>
+                                <Option value="ONLINE">线上</Option>
+                                <Option value="OFFLINE">线下</Option>
+                            </Select>
+                        </Form.Item>
+
+                        <Form.Item
+                            label="线下入职时间"
+                            name="offlineJoinedAt"
+                            rules={[
+                                {
+                                    validator: async (_, value) => {
+                                        const mode = form.getFieldValue('workMode');
+                                        if (mode === 'OFFLINE' && !value) {
+                                            throw new Error('线下员工必须填写入职时间');
+                                        }
+                                    },
+                                },
+                            ]}
+                        >
+                            <DatePicker
+                                style={{ width: '100%' }}
+                                placeholder="请选择线下入职时间"
+                                disabled={workMode !== 'OFFLINE'}
+                                allowClear
+                            />
+                        </Form.Item>
+                    </div>
+                )}
+
+                <Form.Item label="头像URL" name="avatar">
                     <Input placeholder="请输入头像URL地址" />
                 </Form.Item>
             </Form>

@@ -10,6 +10,7 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewRoleManagement: has('system:role:page'),
     canViewPermissionManagement: has('system:permission:page'),
     canViewGameProjectManagement: has('system:game-project:page'),
+    canViewSystemConfigs: has('system:role:page'),
 
     // 用户/评级
     canViewUsers: has('users:page'),
@@ -40,6 +41,7 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     // canViewFinanceReconcile: has('finance:reconcile:page'),
     canViewFinanceDashboard: has('finance:dashboard:view'), //财务看板
     canViewFinanceReconcile: has('finance:records:list'), //财务明细
+    canViewFinanceOfflineFees: has('finance:records:list'),
 
   };
 }

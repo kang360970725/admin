@@ -123,6 +123,7 @@ export default defineConfig({
         { path: '/system/role-management', name: '角色管理', component: './System/RoleManagement', access: 'canViewRoleManagement' },
         { path: '/system/permission-management', name: '权限管理', component: './System/PermissionManagement', access: 'canViewPermissionManagement' },
         { path: '/system/game-project-management', name: '菜单项目管理', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
+        { path: '/system/system-configs', name: '基础配置', component: '@/pages/System/SystemConfigs', access: 'canViewSystemConfigs' },
       ],
     },
     {
@@ -158,6 +159,12 @@ export default defineConfig({
           name: '财务明细',
           component: '@/pages/Finance/Records',
           access: 'canViewFinanceReconcile',
+        },
+        {
+          path: '/finance/offline-fees',
+          name: '线下费用',
+          component: '@/pages/Finance/OfflineFees',
+          access: 'canViewFinanceOfflineFees',
         },
       ],
     },

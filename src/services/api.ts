@@ -30,6 +30,8 @@ export interface User {
     createdAt: string;
     updatedAt: string;
     depositLimit: string;
+    workMode?: 'ONLINE' | 'OFFLINE';
+    offlineJoinedAt?: string | null;
 }
 
 export interface PaginationResponse {
@@ -673,10 +675,12 @@ export async function postWithdrawalsList(data: {
  * ⚠️ 你后端目前用 GET + Body（不标准），这里为了兼容，仍用 GET 但带 data
  * 如果你后端后续改为 query 参数，这里再同步
  */
-export async function getMyWithdrawals(userId: number) {
+export async function getMyWithdrawals(userId?: number | { userId?: number }) {
+    const parsedUserId =
+        typeof userId === 'number' ? userId : Number((userId as any)?.userId || 0);
     return request<WalletWithdrawalRequest[]>(`${API_BASE}/wallet/withdrawals/mine`, {
         method: 'GET',
-        data: { userId },
+        data: parsedUserId ? { userId: parsedUserId } : undefined,
     });
 }
 
@@ -688,8 +692,22 @@ export async function getWithdrawInfo() {
         availableBalance: number;
         depositBalance: number;
         depositLimit: number;
+        workMode?: 'ONLINE' | 'OFFLINE';
     }>(`${API_BASE}/wallet/withdrawals/withdraw-info`, {
         method: 'GET',
+    });
+}
+
+/**
+ * 获取提现前线下费用校验信息
+ */
+export async function getOfflineFeeGuardInfo() {
+    return request<{
+        hasOutstanding: boolean;
+        partialMinPay: number;
+        bill: any | null;
+    }>(`${API_BASE}/offline-fees/withdrawal/guard-info`, {
+        method: 'POST',
     });
 }
 
@@ -705,8 +723,117 @@ export async function applyWithdrawal(data: {
     idempotencyKey: string;
     remark?: string;
     channel?: string | 'MANUAL' | 'WECHAT';
+    payOfflineFeeAmount?: number;
 }) {
     return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/apply`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---------------------- System Config API ----------------------
+
+export interface SystemConfigItem {
+    id: number;
+    key: string;
+    value: string;
+    valueType: 'NUMBER' | 'STRING' | 'BOOLEAN' | 'JSON';
+    remark?: string;
+    enabled: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export async function listSystemConfigs() {
+    return request<SystemConfigItem[]>(`${API_BASE}/system-configs/list`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertSystemConfig(data: {
+    key: string;
+    value: string;
+    valueType?: 'NUMBER' | 'STRING' | 'BOOLEAN' | 'JSON';
+    remark?: string;
+    enabled?: boolean;
+}) {
+    return request<SystemConfigItem>(`${API_BASE}/system-configs/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---------------------- Offline Fee Bill API ----------------------
+
+export interface OfflineFeeBill {
+    id: number;
+    userId: number;
+    billMonth: string;
+    periodStart: string;
+    periodEnd: string;
+    performanceBaseAmount: number;
+    rate: number;
+    minAmount: number;
+    capAmount: number;
+    shouldPayAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    status: 'UNPAID' | 'PARTIAL' | 'PAID' | 'WAIVED';
+    enforceFullPayment: boolean;
+    lastRemindAt?: string | null;
+    generatedAt: string;
+    user?: {
+        id: number;
+        name?: string;
+        phone: string;
+        workMode?: 'ONLINE' | 'OFFLINE';
+        offlineJoinedAt?: string | null;
+    };
+}
+
+export async function listOfflineFeeBills(data: {
+    billMonth?: string;
+    status?: string;
+    userId?: number;
+    page?: number;
+    limit?: number;
+    onlyOutstanding?: boolean;
+}) {
+    return request<{
+        list: OfflineFeeBill[];
+        total: number;
+        page: number;
+        limit: number;
+    }>(`${API_BASE}/offline-fees/bills/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function generateOfflineFeeBills(data: { month: string }) {
+    return request(`${API_BASE}/offline-fees/bills/generate`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function enforceOfflineFeeBill(data: { billId: number; enforceFullPayment: boolean }) {
+    return request(`${API_BASE}/offline-fees/bills/enforce`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function remindOfflineFeeBill(data: { billId: number }) {
+    return request(`${API_BASE}/offline-fees/bills/remind`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function payOfflineFeeBill(data: { billId: number; amount: number; remark?: string }) {
+    return request(`${API_BASE}/offline-fees/bills/pay`, {
         method: 'POST',
         data,
     });

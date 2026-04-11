@@ -1,37 +1,54 @@
-import React, {useEffect, useState} from 'react';
-import {Form, Input, InputNumber, message, Modal, Select, Tag} from 'antd';
-import {updateUser, User} from '@/services/api';
+import React, { useEffect, useState } from 'react';
+import { DatePicker, Form, Input, InputNumber, message, Modal, Select, Tag } from 'antd';
+import dayjs from 'dayjs';
+import { updateUser, User } from '@/services/api';
 
-const {Option} = Select;
+const { Option } = Select;
 
 interface EditUserModalProps {
     visible: boolean;
     user: User | null;
     onCancel: () => void;
     onSuccess: () => void;
-    availableRatings?: any[]; // 新增：可用评级列表
+    availableRatings?: any[];
 }
 
 const EditUserModal: React.FC<EditUserModalProps> = ({
-                                                         visible,
-                                                         user,
-                                                         onCancel,
-                                                         onSuccess,
-                                                         availableRatings = [],
-                                                     }) => {
+    visible,
+    user,
+    onCancel,
+    onSuccess,
+    availableRatings = [],
+}) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
     const [userType, setUserType] = useState('REGISTERED_USER');
-    // 监听用户类型变化
+    const [workMode, setWorkMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
+
     const handleUserTypeChange = (value: string) => {
         setUserType(value);
+
+        if (value !== 'STAFF') {
+            setWorkMode('ONLINE');
+            form.setFieldsValue({ workMode: 'ONLINE', offlineJoinedAt: null });
+        }
     };
 
-    // 当用户数据变化时，更新表单
+    const handleWorkModeChange = (value: 'ONLINE' | 'OFFLINE') => {
+        setWorkMode(value);
+
+        if (value === 'ONLINE') {
+            form.setFieldsValue({ offlineJoinedAt: null });
+        }
+    };
+
     useEffect(() => {
         if (user && visible) {
             const currentUserType = user.userType;
+            const currentWorkMode = (user.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
+
             setUserType(currentUserType);
+            setWorkMode(currentWorkMode);
 
             form.setFieldsValue({
                 name: user.name,
@@ -46,6 +63,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 balance: user.balance,
                 needResetPwd: user.needResetPwd,
                 depositLimit: user.depositLimit ?? 2000,
+                workMode: currentWorkMode,
+                offlineJoinedAt: user.offlineJoinedAt ? dayjs(user.offlineJoinedAt) : null,
             });
         }
     }, [user, visible, form]);
@@ -55,18 +74,36 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
             const values = await form.validateFields();
             const currentDeposit = Number(user?.walletAccount?.depositBalance ?? 0);
 
-            // 如果押金阈值低于当前押金，需要二次确认
-            if (values.depositLimit !== undefined && values.depositLimit < currentDeposit) {
+            const buildPayload = () => {
+                const payload: any = { ...values };
 
+                // 统一在前端将员工工作模式字段转换为后端最终格式
+                if (values.userType === 'STAFF') {
+                    payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
+                    payload.offlineJoinedAt =
+                        payload.workMode === 'OFFLINE' && values.offlineJoinedAt
+                            ? dayjs(values.offlineJoinedAt).startOf('day').toISOString()
+                            : null;
+                } else {
+                    payload.workMode = 'ONLINE';
+                    payload.offlineJoinedAt = null;
+                }
+
+                return payload;
+            };
+
+            if (values.depositLimit !== undefined && values.depositLimit < currentDeposit) {
                 Modal.confirm({
                     title: '押金阈值低于当前押金',
-                    content: `当前押金 ¥${currentDeposit}，调整为 ¥${values.depositLimit} 将退还 ¥${currentDeposit - values.depositLimit} 到用户钱包，是否继续？`,
+                    content: `当前押金 ¥${currentDeposit}，调整为 ¥${values.depositLimit} 将退还 ¥${
+                        currentDeposit - values.depositLimit
+                    } 到用户钱包，是否继续？`,
                     okText: '确认调整',
                     cancelText: '取消',
                     onOk: async () => {
                         try {
                             setLoading(true);
-                            await updateUser(user.id, values);
+                            await updateUser(user!.id, buildPayload());
                             form.resetFields();
                             onSuccess();
                         } catch (error: any) {
@@ -80,15 +117,13 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 return;
             }
 
-            // 正常更新
             setLoading(true);
 
             if (user) {
-                await updateUser(user.id, values);
+                await updateUser(user.id, buildPayload());
                 form.resetFields();
                 onSuccess();
             }
-
         } catch (error: any) {
             if (error.errorFields) {
                 message.error('请完善表单信息');
@@ -103,15 +138,13 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     const handleCancel = () => {
         form.resetFields();
         if (user) {
-            setUserType(user.userType); // 重置为用户原始类型
+            setUserType(user.userType);
+            setWorkMode((user.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE');
         }
         onCancel();
     };
 
-    // 判断是否为员工类型
     const isStaff = userType === 'STAFF';
-
-    // 获取当前用户的评级信息
     const currentRating = user?.staffRating;
 
     return (
@@ -124,29 +157,19 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
             width={600}
             destroyOnClose
         >
-            <Form
-                form={form}
-                layout="vertical"
-                name="editUserForm"
-            >
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
-                    {/* 第一列 */}
+            <Form form={form} layout="vertical" name="editUserForm">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <div>
-                        <Form.Item
-                            label="手机号"
-                        >
-                            <Input value={user?.phone} disabled/>
+                        <Form.Item label="手机号">
+                            <Input value={user?.phone} disabled />
                         </Form.Item>
 
                         <Form.Item
                             label="用户身份"
                             name="userType"
-                            rules={[{required: true, message: '请选择用户身份'}]}
+                            rules={[{ required: true, message: '请选择用户身份' }]}
                         >
-                            <Select
-                                placeholder="请选择用户身份"
-                                onChange={handleUserTypeChange}
-                            >
+                            <Select placeholder="请选择用户身份" onChange={handleUserTypeChange}>
                                 <Option value="REGISTERED_USER">注册用户</Option>
                                 <Option value="STAFF">员工</Option>
                                 <Option value="CUSTOMER_SERVICE">客服</Option>
@@ -160,7 +183,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         <Form.Item
                             label="账号状态"
                             name="status"
-                            rules={[{required: true, message: '请选择账号状态'}]}
+                            rules={[{ required: true, message: '请选择账号状态' }]}
                         >
                             <Select placeholder="请选择账号状态">
                                 <Option value="ACTIVE">正常</Option>
@@ -169,10 +192,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             </Select>
                         </Form.Item>
 
-                        <Form.Item
-                            label="需重置密码"
-                            name="needResetPwd"
-                        >
+                        <Form.Item label="需重置密码" name="needResetPwd">
                             <Select placeholder="请选择">
                                 <Option value={true}>是</Option>
                                 <Option value={false}>否</Option>
@@ -180,144 +200,81 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         </Form.Item>
                     </div>
 
-                    {/* 第二列 */}
                     <div>
-                        <Form.Item
-                            label="姓名"
-                            name="name"
-                        >
-                            <Input placeholder="请输入姓名"/>
+                        <Form.Item label="姓名" name="name">
+                            <Input placeholder="请输入姓名" />
                         </Form.Item>
 
                         <Form.Item
                             label="邮箱"
                             name="email"
-                            rules={[{type: 'email', message: '邮箱格式不正确'}]}
+                            rules={[{ type: 'email', message: '邮箱格式不正确' }]}
                         >
-                            <Input placeholder="请输入邮箱"/>
+                            <Input placeholder="请输入邮箱" />
                         </Form.Item>
 
-                        {/* 员工专属字段 */}
-                        {/*{isStaff && (*/}
-                        {/*    <>*/}
-                        {/*        <Form.Item*/}
-                        {/*            label="真实姓名"*/}
-                        {/*            name="realName"*/}
-                        {/*            rules={[{ required: true, message: '员工必须填写真实姓名' }]}*/}
-                        {/*        >*/}
-                        {/*            <Input placeholder="请输入真实姓名" />*/}
-                        {/*        </Form.Item>*/}
-
-                        {/*        <Form.Item*/}
-                        {/*            label="身份证号"*/}
-                        {/*            name="idCard"*/}
-                        {/*            rules={[*/}
-                        {/*                { required: true, message: '员工必须填写身份证号' },*/}
-                        {/*                { pattern: /^\d{17}[\dXx]$/, message: '身份证号格式不正确' }*/}
-                        {/*            ]}*/}
-                        {/*        >*/}
-                        {/*            <Input placeholder="请输入身份证号" />*/}
-                        {/*        </Form.Item>*/}
-                        {/*    </>*/}
-                        {/*)}*/}
-
-                        {/* 非员工时的普通字段 */}
-                        {/*{!isStaff && (*/}
                         <>
-                            <Form.Item
-                                label="真实姓名"
-                                name="realName"
-                            >
-                                <Input placeholder="请输入真实姓名"/>
+                            <Form.Item label="真实姓名" name="realName">
+                                <Input placeholder="请输入真实姓名" />
                             </Form.Item>
 
-                            <Form.Item
-                                label="身份证号"
-                                name="idCard"
-                            >
-                                <Input placeholder="请输入身份证号"/>
+                            <Form.Item label="身份证号" name="idCard">
+                                <Input placeholder="请输入身份证号" />
                             </Form.Item>
                         </>
-                        {/*)}*/}
                     </div>
                 </div>
 
-                {/* 底部一行 - 动态显示评级字段 */}
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px'}}>
-                    <Form.Item
-                        label="等级"
-                        name="level"
-                    >
-                        <InputNumber
-                            min={1}
-                            max={10}
-                            placeholder="等级"
-                            style={{width: '100%'}}
-                        />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                    <Form.Item label="等级" name="level">
+                        <InputNumber min={1} max={10} placeholder="等级" style={{ width: '100%' }} />
                     </Form.Item>
 
-                    {/* 员工专属：评级字段 */}
-                    {isStaff && (
+                    {isStaff ? (
                         <Form.Item
                             label="员工评级"
                             name="rating"
-                            rules={[{required: true, message: '员工必须设置评级'}]}
+                            rules={[{ required: true, message: '员工必须设置评级' }]}
                         >
-                            <Select placeholder="请选择评级" style={{width: '100%'}}>
-                                {availableRatings.map(rating => (
+                            <Select placeholder="请选择评级" style={{ width: '100%' }}>
+                                {availableRatings.map((rating) => (
                                     <Option key={rating.id} value={rating.id}>
                                         {rating.name}
-                                        <span style={{marginLeft: 8, color: '#666', fontSize: 12}}>
+                                        <span style={{ marginLeft: 8, color: '#666', fontSize: 12 }}>
                                             ({rating.scope === 'BOTH' ? '通用' : rating.scope === 'ONLINE' ? '线上' : '线下'})
                                         </span>
                                     </Option>
                                 ))}
                             </Select>
                         </Form.Item>
-                    )}
-
-                    {/* 非员工时显示普通位置 */}
-                    {!isStaff && (
-                        <Form.Item
-                            label="评级"
-                            name="rating"
-                        >
-                            <InputNumber
-                                min={1}
-                                max={5}
-                                placeholder="评级"
-                                style={{width: '100%'}}
-                                disabled
-                            />
+                    ) : (
+                        <Form.Item label="评级" name="rating">
+                            <InputNumber min={1} max={5} placeholder="评级" style={{ width: '100%' }} disabled />
                         </Form.Item>
                     )}
 
-                    <Form.Item
-                        label="余额"
-                        name="balance"
-                    >
+                    <Form.Item label="余额" name="balance">
                         <InputNumber
                             min={0}
                             step={0.01}
                             precision={2}
                             placeholder="余额"
-                            style={{width: '100%'}}
-                            formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                            parser={value => value?.replace(/¥\s?|(,*)/g, '') as any}
+                            style={{ width: '100%' }}
+                            formatter={(value) => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                            parser={(value) => value?.replace(/¥\s?|(,*)/g, '') as any}
                         />
                     </Form.Item>
+
                     {isStaff && (
                         <>
                             <Form.Item label="当前已交押金">
-                                <Tag color="blue">
-                                    ¥{Number(user?.walletAccount?.depositBalance ?? 0)}
-                                </Tag>
+                                <Tag color="blue">¥{Number(user?.walletAccount?.depositBalance ?? 0)}</Tag>
                             </Form.Item>
                             <Form.Item
                                 label="押金阈值"
                                 name="depositLimit"
                                 rules={[
-                                    {required: true, message: '请输入押金阈值'},
+                                    { required: true, message: '请输入押金阈值' },
                                     {
                                         validator(_, value) {
                                             if (value < 500) {
@@ -329,43 +286,81 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 ]}
                             >
                                 <InputNumber
-                                    style={{width: '100%'}}
+                                    style={{ width: '100%' }}
                                     min={500}
                                     step={100}
                                     precision={0}
                                     addonAfter="元"
                                 />
                             </Form.Item>
-                        </>)}
+                        </>
+                    )}
                 </div>
 
-                {/* 当前评级信息显示 */}
+                {isStaff && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <Form.Item
+                            label="员工工作模式"
+                            name="workMode"
+                            rules={[{ required: true, message: '请选择员工工作模式' }]}
+                        >
+                            <Select onChange={handleWorkModeChange}>
+                                <Option value="ONLINE">线上</Option>
+                                <Option value="OFFLINE">线下</Option>
+                            </Select>
+                        </Form.Item>
+
+                        <Form.Item
+                            label="线下入职时间"
+                            name="offlineJoinedAt"
+                            rules={[
+                                {
+                                    validator: async (_, value) => {
+                                        const mode = form.getFieldValue('workMode');
+                                        if (mode === 'OFFLINE' && !value) {
+                                            throw new Error('线下员工必须填写入职时间');
+                                        }
+                                    },
+                                },
+                            ]}
+                        >
+                            <DatePicker
+                                style={{ width: '100%' }}
+                                placeholder="请选择线下入职时间"
+                                disabled={workMode !== 'OFFLINE'}
+                                allowClear
+                            />
+                        </Form.Item>
+                    </div>
+                )}
+
                 {isStaff && currentRating && (
-                    <div style={{
-                        padding: '12px',
-                        backgroundColor: '#f6ffed',
-                        border: '1px solid #b7eb8f',
-                        borderRadius: '4px',
-                        marginBottom: '16px'
-                    }}>
-                        <div style={{fontWeight: 'bold', color: '#52c41a'}}>
-                            当前评级信息:
-                        </div>
+                    <div
+                        style={{
+                            padding: '12px',
+                            backgroundColor: '#f6ffed',
+                            border: '1px solid #b7eb8f',
+                            borderRadius: '4px',
+                            marginBottom: '16px',
+                        }}
+                    >
+                        <div style={{ fontWeight: 'bold', color: '#52c41a' }}>当前评级信息:</div>
                         <div>
                             <Tag color="blue">{currentRating.name}</Tag>
-                            <span style={{marginLeft: 8}}>
-                                分红比例: {(currentRating.rate * 100).toFixed(0)}% |
-                                适用范围: {currentRating.scope === 'BOTH' ? '线上线下' : currentRating.scope === 'ONLINE' ? '线上' : '线下'}
+                            <span style={{ marginLeft: 8 }}>
+                                分红比例: {(currentRating.rate * 100).toFixed(0)}% | 适用范围:{' '}
+                                {currentRating.scope === 'BOTH'
+                                    ? '线上线下'
+                                    : currentRating.scope === 'ONLINE'
+                                      ? '线上'
+                                      : '线下'}
                             </span>
                         </div>
                     </div>
                 )}
 
-                <Form.Item
-                    label="头像URL"
-                    name="avatar"
-                >
-                    <Input placeholder="请输入头像URL地址"/>
+                <Form.Item label="头像URL" name="avatar">
+                    <Input placeholder="请输入头像URL地址" />
                 </Form.Item>
             </Form>
         </Modal>
