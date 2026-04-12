@@ -850,6 +850,16 @@ export async function manualCreateOfflineFeeBill(data: {
     });
 }
 
+export async function updateOfflineFeeBill(data: {
+    billId: number;
+    performanceBaseAmount: number;
+}) {
+    return request(`${API_BASE}/offline-fees/bills/update`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function enforceOfflineFeeBill(data: { billId: number; enforceFullPayment: boolean }) {
     return request(`${API_BASE}/offline-fees/bills/enforce`, {
         method: 'POST',

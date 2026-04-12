@@ -13,6 +13,7 @@ import {
   manualCreateOfflineFeeBill,
   payOfflineFeeBill,
   remindOfflineFeeBill,
+  updateOfflineFeeBill,
 } from '@/services/api';
 
 const money = (v: any) => Number(v ?? 0).toFixed(2);
@@ -28,13 +29,16 @@ const OfflineFeesPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [generateVisible, setGenerateVisible] = useState(false);
   const [manualVisible, setManualVisible] = useState(false);
+  const [editVisible, setEditVisible] = useState(false);
   const [payVisible, setPayVisible] = useState(false);
+  const [editingBill, setEditingBill] = useState<OfflineFeeBill | null>(null);
   const [payingBill, setPayingBill] = useState<OfflineFeeBill | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<OfflineStaffOption[]>([]);
   const [generateForm] = Form.useForm();
   const [manualForm] = Form.useForm();
+  const [editForm] = Form.useForm();
   const [payForm] = Form.useForm();
 
   const fetchOfflineStaffOptions = async (keyword?: string) => {
@@ -137,11 +141,23 @@ const OfflineFeesPage: React.FC = () => {
       {
         title: '操作',
         valueType: 'option',
-        width: 180,
+        width: 240,
         render: (_, row) => {
           const canPay = Number(row.remainingAmount || 0) > 0;
 
           return [
+            <a
+              key="edit"
+              onClick={() => {
+                setEditingBill(row);
+                setEditVisible(true);
+                editForm.setFieldsValue({
+                  performanceBaseAmount: Number(row.performanceBaseAmount || 0),
+                });
+              }}
+            >
+              编辑账单
+            </a>,
             <a
               key="pay"
               onClick={() => {
@@ -172,7 +188,7 @@ const OfflineFeesPage: React.FC = () => {
         },
       },
     ],
-    [payForm],
+    [editForm, payForm],
   );
 
   return (
@@ -319,6 +335,71 @@ const OfflineFeesPage: React.FC = () => {
             ]}
           >
             <Input style={{ width: '100%' }} placeholder="例如 2026-03" maxLength={7} />
+          </Form.Item>
+
+          <Form.Item
+            label="业绩基数"
+            name="performanceBaseAmount"
+            rules={[
+              { required: true, message: '请输入业绩基数' },
+              {
+                validator: async (_, v) => {
+                  const n = Number(v);
+                  if (!Number.isFinite(n) || n < 0) throw new Error('业绩基数不能小于 0');
+                },
+              },
+            ]}
+          >
+            <InputNumber min={0} step={100} precision={2} style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="编辑线下费用账单"
+        open={editVisible}
+        confirmLoading={submitting}
+        onCancel={() => {
+          setEditVisible(false);
+          setEditingBill(null);
+          editForm.resetFields();
+        }}
+        onOk={async () => {
+          try {
+            const values = await editForm.validateFields();
+            if (!editingBill) return;
+
+            setSubmitting(true);
+            await updateOfflineFeeBill({
+              billId: editingBill.id,
+              performanceBaseAmount: Number(values.performanceBaseAmount || 0),
+            });
+            message.success('账单已更新');
+            setEditVisible(false);
+            setEditingBill(null);
+            editForm.resetFields();
+            actionRef.current?.reload();
+          } catch (e: any) {
+            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '更新失败');
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item label="员工">
+            <Input
+              value={
+                editingBill
+                  ? `${editingBill.user?.name || editingBill.user?.phone || `#${editingBill.userId}`}`
+                  : '-'
+              }
+              disabled
+            />
+          </Form.Item>
+
+          <Form.Item label="账单月份">
+            <Input value={editingBill?.billMonth || '-'} disabled />
           </Form.Item>
 
           <Form.Item
