@@ -887,6 +887,7 @@ export interface SystemAnnouncementItem {
     id: number;
     title: string;
     content: string;
+    audience: 'ADMIN' | 'APPLET' | 'ALL';
     forceRead: boolean;
     enabled: boolean;
     publishAt?: string | null;
@@ -911,6 +912,7 @@ export async function adminListAnnouncements(data: { keyword?: string; page?: nu
 export async function adminCreateAnnouncement(data: {
     title: string;
     content: string;
+    audience?: 'ADMIN' | 'APPLET' | 'ALL';
     forceRead?: boolean;
     enabled?: boolean;
     publishAt?: string;
@@ -926,6 +928,7 @@ export async function adminUpdateAnnouncement(data: {
     id: number;
     title?: string;
     content?: string;
+    audience?: 'ADMIN' | 'APPLET' | 'ALL';
     forceRead?: boolean;
     enabled?: boolean;
     publishAt?: string;
@@ -984,6 +987,33 @@ export async function adminDeleteDutyCsSchedule(data: { id: number }) {
         method: 'POST',
         data,
     });
+}
+
+export async function myAnnouncements() {
+    return request<Array<SystemAnnouncementItem & { isRead: boolean; readAt?: string | null }>>(
+        `${API_BASE}/notifications/my/announcements`,
+        {
+            method: 'POST',
+            data: {},
+        },
+    );
+}
+
+export async function readAnnouncement(data: { announcementId: number }) {
+    return request(`${API_BASE}/notifications/my/announcements/read`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function myPendingForceAnnouncements() {
+    return request<{ unreadForceCount: number; list: Array<SystemAnnouncementItem & { isRead: boolean }> }>(
+        `${API_BASE}/notifications/my/announcements/pending-force`,
+        {
+            method: 'POST',
+            data: {},
+        },
+    );
 }
 
 

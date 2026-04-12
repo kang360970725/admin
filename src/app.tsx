@@ -1,8 +1,8 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import {Avatar, Button, Dropdown, message, Result, Space, Typography} from 'antd';
-import { UserOutlined } from '@ant-design/icons';
-import { getCurrentUser } from './services/api';
+import {Avatar, Button, Dropdown, List, message, Modal, Result, Space, Typography} from 'antd';
+import { BellOutlined, UserOutlined } from '@ant-design/icons';
+import { getCurrentUser, myAnnouncements, myPendingForceAnnouncements, readAnnouncement } from './services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import './global.less';
 import { history } from '@umijs/max';
@@ -87,6 +87,29 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const pathname = location?.pathname || window.location.pathname;
     const isMobileShell = pathname.startsWith('/m');
     const isMobile = useIsMobile(768);
+    const [announcementOpen, setAnnouncementOpen] = React.useState(false);
+    const [announcementList, setAnnouncementList] = React.useState<any[]>([]);
+    const [forceUnread, setForceUnread] = React.useState<any[]>([]);
+    const [loadingAnnouncements, setLoadingAnnouncements] = React.useState(false);
+
+    const loadAnnouncements = React.useCallback(async () => {
+        try {
+            setLoadingAnnouncements(true);
+            const [list, force] = await Promise.all([myAnnouncements(), myPendingForceAnnouncements()]);
+            setAnnouncementList(Array.isArray(list) ? list : []);
+            setForceUnread(Array.isArray(force?.list) ? force.list : []);
+        } catch (e: any) {
+            console.error('[announcement] load failed', e?.message || e);
+        } finally {
+            setLoadingAnnouncements(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        loadAnnouncements();
+    }, [loadAnnouncements]);
 
     return {
         logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
@@ -151,6 +174,20 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             },
         },
 
+        actionsRender: () => [
+            <Button
+                key="announcements"
+                type="text"
+                icon={<BellOutlined />}
+                onClick={async () => {
+                    setAnnouncementOpen(true);
+                    await loadAnnouncements();
+                }}
+            >
+                公告{forceUnread.length ? `(${forceUnread.length})` : ''}
+            </Button>,
+        ],
+
         onPageChange: ({ location }: any) => {
             const token = localStorage.getItem('token');
             const path = window.location.pathname;
@@ -180,7 +217,81 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                 sessionStorage.removeItem('LAST_403_CODE');
                 sessionStorage.removeItem('LAST_403_MESSAGE');
             } catch {}
-            return children;
+            return (
+                <>
+                    {children}
+
+                    <Modal
+                        title="系统公告"
+                        open={announcementOpen}
+                        width={760}
+                        footer={null}
+                        onCancel={() => setAnnouncementOpen(false)}
+                    >
+                        <List
+                            loading={loadingAnnouncements}
+                            dataSource={announcementList}
+                            locale={{ emptyText: '暂无公告' }}
+                            renderItem={(item: any) => (
+                                <List.Item
+                                    actions={[
+                                        item.isRead ? (
+                                            <Typography.Text key="read" type="secondary">已读</Typography.Text>
+                                        ) : (
+                                            <a
+                                                key="markRead"
+                                                onClick={async () => {
+                                                    await readAnnouncement({ announcementId: item.id });
+                                                    await loadAnnouncements();
+                                                }}
+                                            >
+                                                标记已读
+                                            </a>
+                                        ),
+                                    ]}
+                                >
+                                    <List.Item.Meta
+                                        title={
+                                            <Space>
+                                                <span>{item.title}</span>
+                                                {item.forceRead ? <Typography.Text type="danger">强制阅读</Typography.Text> : null}
+                                            </Space>
+                                        }
+                                        description={
+                                            <div
+                                                style={{ maxHeight: 200, overflow: 'auto' }}
+                                                dangerouslySetInnerHTML={{ __html: item.content || '' }}
+                                            />
+                                        }
+                                    />
+                                </List.Item>
+                            )}
+                        />
+                    </Modal>
+
+                    <Modal
+                        title="强制阅读公告"
+                        open={forceUnread.length > 0}
+                        closable={false}
+                        maskClosable={false}
+                        cancelButtonProps={{ style: { display: 'none' } }}
+                        okText="已阅读，下一条"
+                        onOk={async () => {
+                            const current = forceUnread[0];
+                            if (!current) return;
+                            await readAnnouncement({ announcementId: current.id });
+                            await loadAnnouncements();
+                        }}
+                    >
+                        {forceUnread[0] ? (
+                            <div>
+                                <Typography.Title level={5}>{forceUnread[0].title}</Typography.Title>
+                                <div dangerouslySetInnerHTML={{ __html: forceUnread[0].content || '' }} />
+                            </div>
+                        ) : null}
+                    </Modal>
+                </>
+            );
         },
 
     };
