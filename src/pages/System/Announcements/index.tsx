@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, DatePicker, Form, Input, message, Modal, Select, Space, Switch, Tag } from 'antd';
 import dayjs from 'dayjs';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
@@ -52,6 +52,15 @@ const AnnouncementsPage: React.FC = () => {
 
   const [editor, setEditor] = useState<IDomEditor | null>(null);
   const [contentHtml, setContentHtml] = useState('');
+
+  useEffect(() => {
+    return () => {
+      // wangeditor 官方建议：组件卸载时手动销毁实例，避免事件与内存残留
+      if (editor) {
+        editor.destroy();
+      }
+    };
+  }, [editor]);
 
   const toolbarConfig = useMemo<Partial<IToolbarConfig>>(
     () => ({
@@ -213,17 +222,23 @@ const AnnouncementsPage: React.FC = () => {
         onCancel={() => {
           setVisible(false);
           setEditing(null);
+          setContentHtml('');
           form.resetFields();
         }}
         onOk={async () => {
           try {
             form.setFieldValue('content', contentHtml);
             const values = await form.validateFields();
+            const normalizedContent = String(values.content || '').replace(/<p><br><\/p>/g, '').trim();
+            if (!normalizedContent) {
+              message.warning('公告内容不能为空');
+              return;
+            }
             setSubmitting(true);
 
             const payload = {
               title: values.title,
-              content: values.content,
+              content: normalizedContent,
               audience: values.audience,
               forceRead: Boolean(values.forceRead),
               enabled: Boolean(values.enabled),
@@ -241,6 +256,7 @@ const AnnouncementsPage: React.FC = () => {
 
             setVisible(false);
             setEditing(null);
+            setContentHtml('');
             form.resetFields();
             actionRef.current?.reload();
           } catch (e: any) {

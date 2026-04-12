@@ -90,7 +90,13 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [announcementOpen, setAnnouncementOpen] = React.useState(false);
     const [announcementList, setAnnouncementList] = React.useState<any[]>([]);
     const [forceUnread, setForceUnread] = React.useState<any[]>([]);
+    // 仅记录“本次进入已确认”的强制公告，刷新或重新登录后会再次弹出
+    const [confirmedForceIds, setConfirmedForceIds] = React.useState<number[]>([]);
     const [loadingAnnouncements, setLoadingAnnouncements] = React.useState(false);
+    const forceQueue = React.useMemo(
+        () => forceUnread.filter((item) => !confirmedForceIds.includes(Number(item?.id))),
+        [forceUnread, confirmedForceIds],
+    );
 
     const loadAnnouncements = React.useCallback(async () => {
         try {
@@ -108,6 +114,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     React.useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) return;
+        setConfirmedForceIds([]);
         loadAnnouncements();
     }, [loadAnnouncements]);
 
@@ -175,11 +182,11 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         },
 
         actionsRender: () => [
-            <Badge key="announcements-badge" count={forceUnread.length} offset={[-2, 4]}>
+            <Badge key="announcements-badge" count={forceQueue.length} offset={[-2, 4]}>
                 <Button
                     key="announcements"
-                    type={forceUnread.length > 0 ? 'primary' : 'text'}
-                    danger={forceUnread.length > 0}
+                    type={forceQueue.length > 0 ? 'primary' : 'text'}
+                    danger={forceQueue.length > 0}
                     icon={<BellOutlined />}
                     onClick={async () => {
                         setAnnouncementOpen(true);
@@ -274,22 +281,22 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
 
                     <Modal
                         title="强制阅读公告（每次进入需确认）"
-                        open={forceUnread.length > 0}
+                        open={forceQueue.length > 0}
                         closable={false}
                         maskClosable={false}
                         cancelButtonProps={{ style: { display: 'none' } }}
                         okText="已阅读，下一条"
                         onOk={async () => {
-                            const current = forceUnread[0];
+                            const current = forceQueue[0];
                             if (!current) return;
                             await readAnnouncement({ announcementId: current.id });
-                            await loadAnnouncements();
+                            setConfirmedForceIds((prev) => [...prev, Number(current.id)]);
                         }}
                     >
-                        {forceUnread[0] ? (
+                        {forceQueue[0] ? (
                             <div>
-                                <Typography.Title level={5}>{forceUnread[0].title}</Typography.Title>
-                                <div dangerouslySetInnerHTML={{ __html: forceUnread[0].content || '' }} />
+                                <Typography.Title level={5}>{forceQueue[0].title}</Typography.Title>
+                                <div dangerouslySetInnerHTML={{ __html: forceQueue[0].content || '' }} />
                             </div>
                         ) : null}
                     </Modal>
