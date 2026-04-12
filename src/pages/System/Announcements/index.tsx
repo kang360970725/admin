@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Button, DatePicker, Form, Input, message, Modal, Select, Space, Switch, Tag } from 'antd';
 import dayjs from 'dayjs';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
+import { Editor, Toolbar } from '@wangeditor/editor-for-react';
+import type { IDomEditor, IEditorConfig, IToolbarConfig } from '@wangeditor/editor';
+import '@wangeditor/editor/dist/css/style.css';
 import {
   adminCreateAnnouncement,
   adminListAnnouncements,
@@ -40,50 +43,6 @@ const quickTemplates = [
   },
 ];
 
-const RichHtmlEditor: React.FC<{
-  value?: string;
-  onChange?: (v: string) => void;
-}> = ({ value, onChange }) => {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== (value || '')) {
-      ref.current.innerHTML = value || '';
-    }
-  }, [value]);
-
-  const exec = (cmd: string, val?: string) => {
-    ref.current?.focus();
-    document.execCommand(cmd, false, val);
-    onChange?.(ref.current?.innerHTML || '');
-  };
-
-  return (
-    <div>
-      <Space wrap style={{ marginBottom: 8 }}>
-        <Button size="small" onClick={() => exec('bold')}>加粗</Button>
-        <Button size="small" onClick={() => exec('italic')}>斜体</Button>
-        <Button size="small" onClick={() => exec('insertUnorderedList')}>无序列表</Button>
-        <Button size="small" onClick={() => exec('formatBlock', 'H3')}>标题</Button>
-        <Button size="small" onClick={() => exec('removeFormat')}>清格式</Button>
-      </Space>
-      <div
-        ref={ref}
-        contentEditable
-        onInput={() => onChange?.(ref.current?.innerHTML || '')}
-        style={{
-          border: '1px solid #d9d9d9',
-          borderRadius: 6,
-          minHeight: 220,
-          padding: 12,
-          background: '#fff',
-          overflow: 'auto',
-        }}
-      />
-    </div>
-  );
-};
-
 const AnnouncementsPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [form] = Form.useForm();
@@ -91,20 +50,67 @@ const AnnouncementsPage: React.FC = () => {
   const [editing, setEditing] = useState<SystemAnnouncementItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [editor, setEditor] = useState<IDomEditor | null>(null);
+  const [contentHtml, setContentHtml] = useState('');
+
+  const toolbarConfig = useMemo<Partial<IToolbarConfig>>(
+    () => ({
+      toolbarKeys: [
+        'headerSelect',
+        'bold',
+        'italic',
+        'underline',
+        'through',
+        '|',
+        'color',
+        'bgColor',
+        '|',
+        'bulletedList',
+        'numberedList',
+        'blockquote',
+        '|',
+        'insertLink',
+        'insertImage',
+        'uploadImage',
+        'insertTable',
+        '|',
+        'undo',
+        'redo',
+      ],
+    }),
+    [],
+  );
+
+  const editorConfig = useMemo<Partial<IEditorConfig>>(
+    () => ({
+      placeholder: '请输入公告内容，支持图文排版',
+      // 最小可用方案：允许本地图片插入，后续如需统一对象存储可接 uploadImage server
+      MENU_CONF: {
+        uploadImage: {
+          base64LimitSize: 5 * 1024 * 1024,
+        },
+      },
+    }),
+    [],
+  );
+
   const openCreate = () => {
     setEditing(null);
     setVisible(true);
+    const initContent = '<p>请填写公告内容</p>';
+    setContentHtml(initContent);
     form.setFieldsValue({
       forceRead: false,
       enabled: true,
       audience: 'ALL',
-      content: '<p>请填写公告内容</p>',
+      content: initContent,
     });
   };
 
   const openEdit = (row: SystemAnnouncementItem) => {
     setEditing(row);
     setVisible(true);
+    setContentHtml(row.content || '');
     form.setFieldsValue({
       title: row.title,
       content: row.content,
@@ -116,62 +122,59 @@ const AnnouncementsPage: React.FC = () => {
     });
   };
 
-  const columns: ProColumns<SystemAnnouncementItem>[] = useMemo(
-    () => [
-      { title: 'ID', dataIndex: 'id', width: 80, search: false },
-      { title: '标题', dataIndex: 'title', ellipsis: true },
-      {
-        title: '受众',
-        dataIndex: 'audience',
-        width: 110,
-        valueEnum: {
-          ADMIN: { text: '仅后台' },
-          APPLET: { text: '仅小程序' },
-          ALL: { text: '全平台' },
-        },
-        render: (_, row) => <Tag>{audienceTextMap[row.audience] || row.audience}</Tag>,
+  const columns: ProColumns<SystemAnnouncementItem>[] = [
+    { title: 'ID', dataIndex: 'id', width: 80, search: false },
+    { title: '标题', dataIndex: 'title', ellipsis: true },
+    {
+      title: '受众',
+      dataIndex: 'audience',
+      width: 110,
+      valueEnum: {
+        ADMIN: { text: '仅后台' },
+        APPLET: { text: '仅小程序' },
+        ALL: { text: '全平台' },
       },
-      {
-        title: '强制阅读',
-        dataIndex: 'forceRead',
-        width: 110,
-        search: false,
-        render: (_, row) => (row.forceRead ? <Tag color="red">是</Tag> : <Tag>否</Tag>),
-      },
-      {
-        title: '状态',
-        dataIndex: 'enabled',
-        width: 100,
-        search: false,
-        render: (_, row) => (row.enabled ? <Tag color="success">启用</Tag> : <Tag>停用</Tag>),
-      },
-      {
-        title: '发布时间',
-        dataIndex: 'publishAt',
-        width: 180,
-        search: false,
-        render: (_, row) => (row.publishAt ? dayjs(row.publishAt).format('YYYY-MM-DD HH:mm') : '-'),
-      },
-      {
-        title: '过期时间',
-        dataIndex: 'expireAt',
-        width: 180,
-        search: false,
-        render: (_, row) => (row.expireAt ? dayjs(row.expireAt).format('YYYY-MM-DD HH:mm') : '-'),
-      },
-      {
-        title: '操作',
-        valueType: 'option',
-        width: 100,
-        render: (_, row) => [
-          <a key="edit" onClick={() => openEdit(row)}>
-            编辑
-          </a>,
-        ],
-      },
-    ],
-    [],
-  );
+      render: (_, row) => <Tag>{audienceTextMap[row.audience] || row.audience}</Tag>,
+    },
+    {
+      title: '强制阅读',
+      dataIndex: 'forceRead',
+      width: 110,
+      search: false,
+      render: (_, row) => (row.forceRead ? <Tag color="red">是</Tag> : <Tag>否</Tag>),
+    },
+    {
+      title: '状态',
+      dataIndex: 'enabled',
+      width: 100,
+      search: false,
+      render: (_, row) => (row.enabled ? <Tag color="success">启用</Tag> : <Tag>停用</Tag>),
+    },
+    {
+      title: '发布时间',
+      dataIndex: 'publishAt',
+      width: 180,
+      search: false,
+      render: (_, row) => (row.publishAt ? dayjs(row.publishAt).format('YYYY-MM-DD HH:mm') : '-'),
+    },
+    {
+      title: '过期时间',
+      dataIndex: 'expireAt',
+      width: 180,
+      search: false,
+      render: (_, row) => (row.expireAt ? dayjs(row.expireAt).format('YYYY-MM-DD HH:mm') : '-'),
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      width: 100,
+      render: (_, row) => [
+        <a key="edit" onClick={() => openEdit(row)}>
+          编辑
+        </a>,
+      ],
+    },
+  ];
 
   return (
     <>
@@ -204,7 +207,8 @@ const AnnouncementsPage: React.FC = () => {
       <Modal
         title={editing ? '编辑公告' : '新建公告'}
         open={visible}
-        width={900}
+        width={960}
+        destroyOnClose
         confirmLoading={submitting}
         onCancel={() => {
           setVisible(false);
@@ -213,6 +217,7 @@ const AnnouncementsPage: React.FC = () => {
         }}
         onOk={async () => {
           try {
+            form.setFieldValue('content', contentHtml);
             const values = await form.validateFields();
             setSubmitting(true);
 
@@ -268,6 +273,7 @@ const AnnouncementsPage: React.FC = () => {
                 <Button
                   key={tpl.key}
                   onClick={() => {
+                    setContentHtml(tpl.content);
                     form.setFieldsValue({
                       title: tpl.title,
                       content: tpl.content,
@@ -285,7 +291,21 @@ const AnnouncementsPage: React.FC = () => {
             name="content"
             rules={[{ required: true, message: '请输入公告内容' }]}
           >
-            <RichHtmlEditor />
+            <div style={{ border: '1px solid #f0f0f0', borderRadius: 6 }}>
+              <Toolbar editor={editor} defaultConfig={toolbarConfig} mode="default" style={{ borderBottom: '1px solid #f0f0f0' }} />
+              <Editor
+                defaultConfig={editorConfig}
+                value={contentHtml}
+                mode="default"
+                onCreated={(ed) => setEditor(ed)}
+                onChange={(ed) => {
+                  const html = ed.getHtml();
+                  setContentHtml(html);
+                  form.setFieldValue('content', html);
+                }}
+                style={{ minHeight: 280, padding: '0 10px' }}
+              />
+            </div>
           </Form.Item>
 
           <Space style={{ width: '100%' }}>

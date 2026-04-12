@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import {Avatar, Button, Dropdown, List, message, Modal, Result, Space, Typography} from 'antd';
+import {Avatar, Badge, Button, Dropdown, List, message, Modal, Result, Space, Typography} from 'antd';
 import { BellOutlined, UserOutlined } from '@ant-design/icons';
 import { getCurrentUser, myAnnouncements, myPendingForceAnnouncements, readAnnouncement } from './services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
@@ -175,17 +175,20 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         },
 
         actionsRender: () => [
-            <Button
-                key="announcements"
-                type="text"
-                icon={<BellOutlined />}
-                onClick={async () => {
-                    setAnnouncementOpen(true);
-                    await loadAnnouncements();
-                }}
-            >
-                公告{forceUnread.length ? `(${forceUnread.length})` : ''}
-            </Button>,
+            <Badge key="announcements-badge" count={forceUnread.length} offset={[-2, 4]}>
+                <Button
+                    key="announcements"
+                    type={forceUnread.length > 0 ? 'primary' : 'text'}
+                    danger={forceUnread.length > 0}
+                    icon={<BellOutlined />}
+                    onClick={async () => {
+                        setAnnouncementOpen(true);
+                        await loadAnnouncements();
+                    }}
+                >
+                    公告中心
+                </Button>
+            </Badge>,
         ],
 
         onPageChange: ({ location }: any) => {
@@ -222,7 +225,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     {children}
 
                     <Modal
-                        title="系统公告"
+                        title="公告中心"
                         open={announcementOpen}
                         width={760}
                         footer={null}
@@ -270,7 +273,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     </Modal>
 
                     <Modal
-                        title="强制阅读公告"
+                        title="强制阅读公告（每次进入需确认）"
                         open={forceUnread.length > 0}
                         closable={false}
                         maskClosable={false}
