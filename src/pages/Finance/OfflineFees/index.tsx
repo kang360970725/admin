@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, Form, Input, InputNumber, message, Modal, Popconfirm, Space, Switch, Tag } from 'antd';
+import { Button, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Tag } from 'antd';
 import dayjs from 'dayjs';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
@@ -8,6 +8,9 @@ import {
   generateOfflineFeeBills,
   listOfflineFeeBills,
   OfflineFeeBill,
+  OfflineStaffOption,
+  listOfflineStaffOptions,
+  manualCreateOfflineFeeBill,
   payOfflineFeeBill,
   remindOfflineFeeBill,
 } from '@/services/api';
@@ -24,11 +27,27 @@ const statusColorMap: Record<string, string> = {
 const OfflineFeesPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [generateVisible, setGenerateVisible] = useState(false);
+  const [manualVisible, setManualVisible] = useState(false);
   const [payVisible, setPayVisible] = useState(false);
   const [payingBill, setPayingBill] = useState<OfflineFeeBill | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffOptions, setStaffOptions] = useState<OfflineStaffOption[]>([]);
   const [generateForm] = Form.useForm();
+  const [manualForm] = Form.useForm();
   const [payForm] = Form.useForm();
+
+  const fetchOfflineStaffOptions = async (keyword?: string) => {
+    try {
+      setStaffLoading(true);
+      const list = await listOfflineStaffOptions({ keyword: String(keyword || '').trim() || undefined });
+      setStaffOptions(Array.isArray(list) ? list : []);
+    } catch (e: any) {
+      message.error(e?.data?.message || e?.message || '获取线下员工列表失败');
+    } finally {
+      setStaffLoading(false);
+    }
+  };
 
   const columns = useMemo<ProColumns<OfflineFeeBill>[]>(
     () => [
@@ -167,6 +186,19 @@ const OfflineFeesPage: React.FC = () => {
         scroll={{ x: 1700 }}
         toolBarRender={() => [
           <Button
+            key="manual"
+            onClick={async () => {
+              setManualVisible(true);
+              manualForm.setFieldsValue({
+                month: dayjs().subtract(1, 'month').format('YYYY-MM'),
+                performanceBaseAmount: 0,
+              });
+              await fetchOfflineStaffOptions();
+            }}
+          >
+            手动录入账单
+          </Button>,
+          <Button
             key="generate"
             type="primary"
             onClick={() => {
@@ -227,6 +259,82 @@ const OfflineFeesPage: React.FC = () => {
             ]}
           >
             <Input style={{ width: '100%' }} placeholder="例如 2026-03" maxLength={7} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="手动录入线下账单"
+        open={manualVisible}
+        confirmLoading={submitting}
+        onCancel={() => {
+          setManualVisible(false);
+          manualForm.resetFields();
+        }}
+        onOk={async () => {
+          try {
+            const values = await manualForm.validateFields();
+            setSubmitting(true);
+            await manualCreateOfflineFeeBill({
+              userId: Number(values.userId),
+              month: String(values.month),
+              performanceBaseAmount: Number(values.performanceBaseAmount || 0),
+            });
+            message.success('线下账单已录入');
+            setManualVisible(false);
+            manualForm.resetFields();
+            actionRef.current?.reload();
+          } catch (e: any) {
+            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '录入失败');
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <Form form={manualForm} layout="vertical">
+          <Form.Item
+            label="线下员工"
+            name="userId"
+            rules={[{ required: true, message: '请选择线下员工' }]}
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              loading={staffLoading}
+              placeholder="请选择线下员工"
+              onSearch={fetchOfflineStaffOptions}
+              options={staffOptions.map((staff) => ({
+                label: `${staff.name || staff.realName || staff.phone} (${staff.phone})`,
+                value: staff.id,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="账单月份"
+            name="month"
+            rules={[
+              { required: true, message: '请输入账单月份' },
+              { pattern: /^\d{4}-\d{2}$/, message: '格式必须为 YYYY-MM' },
+            ]}
+          >
+            <Input style={{ width: '100%' }} placeholder="例如 2026-03" maxLength={7} />
+          </Form.Item>
+
+          <Form.Item
+            label="业绩基数"
+            name="performanceBaseAmount"
+            rules={[
+              { required: true, message: '请输入业绩基数' },
+              {
+                validator: async (_, v) => {
+                  const n = Number(v);
+                  if (!Number.isFinite(n) || n < 0) throw new Error('业绩基数不能小于 0');
+                },
+              },
+            ]}
+          >
+            <InputNumber min={0} step={100} precision={2} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>

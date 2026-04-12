@@ -792,6 +792,16 @@ export interface OfflineFeeBill {
     };
 }
 
+export interface OfflineStaffOption {
+    id: number;
+    label: string;
+    name?: string;
+    realName?: string;
+    phone: string;
+    status: string;
+    offlineJoinedAt?: string | null;
+}
+
 export async function listOfflineFeeBills(data: {
     billMonth?: string;
     status?: string;
@@ -812,7 +822,25 @@ export async function listOfflineFeeBills(data: {
 }
 
 export async function generateOfflineFeeBills(data: { month: string }) {
-    return request(`${API_BASE}/offline-fees/bills/generate`, {
+  return request(`${API_BASE}/offline-fees/bills/generate`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function listOfflineStaffOptions(data?: { keyword?: string }) {
+    return request<OfflineStaffOption[]>(`${API_BASE}/offline-fees/staff/offline-options`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function manualCreateOfflineFeeBill(data: {
+    userId: number;
+    month: string;
+    performanceBaseAmount: number;
+}) {
+    return request(`${API_BASE}/offline-fees/bills/manual-entry`, {
         method: 'POST',
         data,
     });
