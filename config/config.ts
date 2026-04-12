@@ -124,6 +124,8 @@ export default defineConfig({
         { path: '/system/permission-management', name: '权限管理', component: './System/PermissionManagement', access: 'canViewPermissionManagement' },
         { path: '/system/game-project-management', name: '菜单项目管理', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
         { path: '/system/system-configs', name: '基础配置', component: '@/pages/System/SystemConfigs', access: 'canViewSystemConfigs' },
+        { path: '/system/announcements', name: '系统公告', component: '@/pages/System/Announcements', access: 'canViewAnnouncements' },
+        { path: '/system/duty-cs', name: '当班客服配置', component: '@/pages/System/DutyCsSchedules', access: 'canViewDutyCsSchedules' },
       ],
     },
     {

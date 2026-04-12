@@ -11,6 +11,8 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewPermissionManagement: has('system:permission:page'),
     canViewGameProjectManagement: has('system:game-project:page'),
     canViewSystemConfigs: has('system:role:page'),
+    canViewAnnouncements: has('system:role:page'),
+    canViewDutyCsSchedules: has('system:role:page'),
 
     // 用户/评级
     canViewUsers: has('users:page'),

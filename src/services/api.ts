@@ -881,6 +881,111 @@ export async function payOfflineFeeBill(data: { billId: number; amount: number; 
     });
 }
 
+// ---------------------- Notification / Announcement API ----------------------
+
+export interface SystemAnnouncementItem {
+    id: number;
+    title: string;
+    content: string;
+    forceRead: boolean;
+    enabled: boolean;
+    publishAt?: string | null;
+    expireAt?: string | null;
+    createdBy?: number | null;
+    createdAt: string;
+    updatedAt: string;
+    creator?: {
+        id: number;
+        name?: string;
+        phone: string;
+    };
+}
+
+export async function adminListAnnouncements(data: { keyword?: string; page?: number; limit?: number }) {
+    return request<{ list: SystemAnnouncementItem[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/notifications/admin/announcements/list`,
+        { method: 'POST', data },
+    );
+}
+
+export async function adminCreateAnnouncement(data: {
+    title: string;
+    content: string;
+    forceRead?: boolean;
+    enabled?: boolean;
+    publishAt?: string;
+    expireAt?: string;
+}) {
+    return request<SystemAnnouncementItem>(`${API_BASE}/notifications/admin/announcements/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminUpdateAnnouncement(data: {
+    id: number;
+    title?: string;
+    content?: string;
+    forceRead?: boolean;
+    enabled?: boolean;
+    publishAt?: string;
+    expireAt?: string;
+}) {
+    return request<SystemAnnouncementItem>(`${API_BASE}/notifications/admin/announcements/update`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export interface DutyCsScheduleItem {
+    id: number;
+    userId: number;
+    weekday: number;
+    startMinute: number;
+    endMinute: number;
+    startTime?: string;
+    endTime?: string;
+    enabled: boolean;
+    remark?: string | null;
+    user?: {
+        id: number;
+        phone: string;
+        name?: string;
+        realName?: string;
+        userType: string;
+        status: string;
+    };
+}
+
+export async function adminListDutyCsSchedules(data?: { keyword?: string }) {
+    return request<DutyCsScheduleItem[]>(`${API_BASE}/notifications/admin/duty-cs/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminUpsertDutyCsSchedule(data: {
+    id?: number;
+    userId: number;
+    weekday: number;
+    startTime: string;
+    endTime: string;
+    enabled?: boolean;
+    remark?: string;
+}) {
+    return request(`${API_BASE}/notifications/admin/duty-cs/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminDeleteDutyCsSchedule(data: { id: number }) {
+    return request(`${API_BASE}/notifications/admin/duty-cs/delete`, {
+        method: 'POST',
+        data,
+    });
+}
+
 
 
 export async function listUserLogs(data: any) {
