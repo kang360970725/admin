@@ -46,7 +46,19 @@ const WithdrawalMine: React.FC<Props> = (props) => {
         hasOutstanding: boolean;
         partialMinPay: number;
         bill: any | null;
-    }>({hasOutstanding: false, partialMinPay: 100, bill: null});
+        availableBalance: number;
+        frozenBalance: number;
+        walletTotal: number;
+        canPartialPayByWalletRule: boolean;
+    }>({
+        hasOutstanding: false,
+        partialMinPay: 100,
+        bill: null,
+        availableBalance: 0,
+        frozenBalance: 0,
+        walletTotal: 0,
+        canPartialPayByWalletRule: true,
+    });
 
     const [open, setOpen] = useState(false);
     const [hasPending, setHasPending] = useState(false);
@@ -90,6 +102,10 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 hasOutstanding: Boolean(guardInfo?.hasOutstanding),
                 partialMinPay: Number(guardInfo?.partialMinPay || 100),
                 bill: guardInfo?.bill || null,
+                availableBalance: Number(guardInfo?.availableBalance || 0),
+                frozenBalance: Number(guardInfo?.frozenBalance || 0),
+                walletTotal: Number(guardInfo?.walletTotal || 0),
+                canPartialPayByWalletRule: Boolean(guardInfo?.canPartialPayByWalletRule ?? true),
             });
 
         } catch (e: any) {
@@ -260,6 +276,16 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                         }
 
                         const channel = (values.channel || 'MANUAL') as any;
+                        const payOfflineFeeAmount = Number(values.payOfflineFeeAmount || 0) || 0;
+
+                        if (offlineFeeGuard.hasOutstanding) {
+                            const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
+                            const isPartialPay = payOfflineFeeAmount > 0 && payOfflineFeeAmount < remaining;
+                            if (isPartialPay && !offlineFeeGuard.canPartialPayByWalletRule) {
+                                message.error('当前钱包总额度（可用+冻结）不满足部分补缴条件，请选择全额缴纳');
+                                return false;
+                            }
+                        }
 
                         if (channel === 'MANUAL') {
                             if (!qrUrl) {
@@ -276,7 +302,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             idempotencyKey,
                             remark: values.remark || '',
                             channel,
-                            payOfflineFeeAmount: Number(values.payOfflineFeeAmount || 0) || undefined,
+                            payOfflineFeeAmount: payOfflineFeeAmount || undefined,
                         });
 
                         if (!res.id) {
@@ -498,6 +524,18 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                         />
                     ) : null}
 
+                    {offlineFeeGuard.hasOutstanding && !offlineFeeGuard.canPartialPayByWalletRule ? (
+                        <Alert
+                            type="error"
+                            showIcon
+                            message="当前钱包总额度不足以支持“部分补缴”"
+                            description={
+                                `钱包总额度（可用+冻结）${offlineFeeGuard.walletTotal.toFixed(2)}，` +
+                                `未缴金额 ${Number(offlineFeeGuard?.bill?.remainingAmount || 0).toFixed(2)}。请本次全额缴纳。`
+                            }
+                        />
+                    ) : null}
+
                     {offlineFeeGuard.hasOutstanding ? (
                         <ProFormDigit
                             name="payOfflineFeeAmount"
@@ -508,7 +546,23 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                     : 0
                             }
                             max={Number(offlineFeeGuard?.bill?.remainingAmount || 0)}
-                            fieldProps={{ precision: 2, step: 10 }}
+                            fieldProps={{
+                                precision: 2,
+                                step: 10,
+                                addonAfter: (
+                                    <Button
+                                        size="small"
+                                        type="link"
+                                        onClick={() =>
+                                            formRef.current?.setFieldsValue({
+                                                payOfflineFeeAmount: Number(offlineFeeGuard?.bill?.remainingAmount || 0),
+                                            })
+                                        }
+                                    >
+                                        全额缴纳
+                                    </Button>
+                                ),
+                            }}
                             rules={[
                                 {
                                     validator: async (_, v) => {
@@ -523,6 +577,9 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                         }
                                         if (n > remaining) throw new Error('补缴金额不能超过未缴金额');
                                         if (enforce && n < remaining) throw new Error('该账单要求强制全额缴纳');
+                                        if (!enforce && n < remaining && !offlineFeeGuard.canPartialPayByWalletRule) {
+                                            throw new Error('当前钱包总额度不满足部分补缴条件，请全额缴纳');
+                                        }
                                         if (!enforce && n < partialMinPay && n < remaining) {
                                             throw new Error(`部分补缴最低为 ${partialMinPay}`);
                                         }

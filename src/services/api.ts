@@ -706,6 +706,10 @@ export async function getOfflineFeeGuardInfo() {
         hasOutstanding: boolean;
         partialMinPay: number;
         bill: any | null;
+        availableBalance: number;
+        frozenBalance: number;
+        walletTotal: number;
+        canPartialPayByWalletRule: boolean;
     }>(`${API_BASE}/offline-fees/withdrawal/guard-info`, {
         method: 'POST',
     });
