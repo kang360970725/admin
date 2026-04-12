@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import type {FormInstance} from 'antd';
 import {Alert, Button, Divider, Form, message, Space, Tag, Tooltip, Typography, Upload} from 'antd';
 import type {ActionType} from '@ant-design/pro-components';
@@ -64,6 +64,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const [hasPending, setHasPending] = useState(false);
 
     const withdrawAmount = Form.useWatch('amount', formRef.current);
+    const payOfflineFeeAmountWatch = Form.useWatch('payOfflineFeeAmount', formRef.current);
 
     const [qrUrl, setQrUrl] = useState<string | null>(null);
     const [qrLoading, setQrLoading] = useState(false);
@@ -133,6 +134,27 @@ const WithdrawalMine: React.FC<Props> = (props) => {
         if (!Number.isFinite(n) || n <= 0) return 0;
         return Math.floor(n / 10) * 10;
     }, [availableBalance]);
+
+    const maxWithdrawByOfflineFee = useMemo(() => {
+        if (!offlineFeeGuard.hasOutstanding) return maxWithdraw;
+
+        const rawPay = Number(payOfflineFeeAmountWatch || 0);
+        const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
+        const pay = Math.max(0, Math.min(rawPay, remaining));
+
+        const n = Number(availableBalance || 0) - pay;
+        if (!Number.isFinite(n) || n <= 0) return 0;
+        return Math.floor(n / 10) * 10;
+    }, [offlineFeeGuard, payOfflineFeeAmountWatch, availableBalance, maxWithdraw]);
+
+    useEffect(() => {
+        if (!open) return;
+
+        const currentAmount = Number(formRef.current?.getFieldValue('amount') || 0);
+        if (currentAmount > maxWithdrawByOfflineFee) {
+            formRef.current?.setFieldsValue({ amount: maxWithdrawByOfflineFee });
+        }
+    }, [open, maxWithdrawByOfflineFee]);
 
     const genIdempotencyKey = () =>
         `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -270,8 +292,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             return false;
                         }
 
-                        if (amount > maxWithdraw) {
-                            message.error(`提现金额不能超过可用余额上限（${maxWithdraw}）`);
+                        if (amount > maxWithdrawByOfflineFee) {
+                            message.error(`提现金额不能超过当前上限（${maxWithdrawByOfflineFee}）`);
                             return false;
                         }
 
@@ -340,7 +362,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             <Space>
                                 <Text>可用余额：</Text>
                                 <Text strong>{Number(availableBalance || 0).toFixed(2)}</Text>
-                                <Text type="secondary">（本次最多可提：{maxWithdraw}，最少提现10元）</Text>
+                                <Text type="secondary">（本次最多可提：{maxWithdrawByOfflineFee}，最少提现10元）</Text>
                             </Space>
                         }
                     />
@@ -459,7 +481,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                         name="amount"
                         label="提现金额"
                         min={10}
-                        max={maxWithdraw}
+                        max={maxWithdrawByOfflineFee}
                         fieldProps={{
                             precision: 0,
                             step: 10,
@@ -468,8 +490,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 <Button
                                     size="small"
                                     type="link"
-                                    disabled={hasPending || maxWithdraw <= 0}
-                                    onClick={() => formRef.current?.setFieldsValue({amount: maxWithdraw})}
+                                    disabled={hasPending || maxWithdrawByOfflineFee <= 0}
+                                    onClick={() => formRef.current?.setFieldsValue({amount: maxWithdrawByOfflineFee})}
                                 >
                                     全部提现
                                 </Button>
@@ -482,7 +504,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                     const n = Number(v);
                                     if (!Number.isFinite(n) || n <= 0) throw new Error('提现金额非法');
                                     if (n % 10 !== 0) throw new Error('提现金额必须是 10 的整数');
-                                    if (n > maxWithdraw) throw new Error(`不能提现超过 ${maxWithdraw}`);
+                                    if (n > maxWithdrawByOfflineFee) throw new Error(`不能提现超过 ${maxWithdrawByOfflineFee}`);
                                 },
                             },
                         ]}
@@ -554,9 +576,17 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                         size="small"
                                         type="link"
                                         onClick={() =>
-                                            formRef.current?.setFieldsValue({
-                                                payOfflineFeeAmount: Number(offlineFeeGuard?.bill?.remainingAmount || 0),
-                                            })
+                                            {
+                                                const fullPay = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
+                                                const nextMax = Math.floor(Math.max(0, Number(availableBalance || 0) - fullPay) / 10) * 10;
+                                                const currentAmount = Number(formRef.current?.getFieldValue('amount') || 0);
+
+                                                formRef.current?.setFieldsValue({
+                                                    payOfflineFeeAmount: fullPay,
+                                                    // 若当前提现金额超限，自动收敛到联动上限，避免提交时报余额不足
+                                                    amount: currentAmount > nextMax ? nextMax : currentAmount,
+                                                });
+                                            }
                                         }
                                     >
                                         全额缴纳
