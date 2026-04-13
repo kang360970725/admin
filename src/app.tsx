@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import {Avatar, Badge, Button, Drawer, Dropdown, List, message, Modal, Result, Space, Typography} from 'antd';
+import {Avatar, Badge, Button, Dropdown, List, message, Modal, Popover, Result, Space, Typography, notification} from 'antd';
 import { BellOutlined, UserOutlined } from '@ant-design/icons';
 import {
     clearAllRealtimeNotifications,
@@ -103,6 +103,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [realtimeOpen, setRealtimeOpen] = React.useState(false);
     const [realtimeList, setRealtimeList] = React.useState<RealtimeNotificationItem[]>([]);
     const [realtimeUnreadCount, setRealtimeUnreadCount] = React.useState(0);
+    const [api, contextHolder] = notification.useNotification();
     // 仅记录“本次进入已确认”的强制公告，刷新或重新登录后会再次弹出
     const [confirmedForceIds, setConfirmedForceIds] = React.useState<number[]>([]);
     const [loadingAnnouncements, setLoadingAnnouncements] = React.useState(false);
@@ -163,8 +164,20 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     return;
                 }
                 if (payload?.type === 'message' && payload?.item) {
+                    const item = payload.item as RealtimeNotificationItem;
                     setRealtimeList((prev) => [payload.item as RealtimeNotificationItem, ...prev].slice(0, 200));
                     setRealtimeUnreadCount(Number(payload?.unreadCount || 0));
+                    // 弱提示：右上角实时弹出，可点击直接跳转
+                    api.open({
+                        key: item.id,
+                        message: item.title || '消息通知',
+                        description: item.content || '',
+                        placement: 'topRight',
+                        duration: 4.5,
+                        onClick: () => {
+                            if (item.route) history.push(item.route);
+                        },
+                    });
                     return;
                 }
                 if (payload?.type === 'clear_one' || payload?.type === 'clear_all') {
@@ -250,19 +263,88 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         },
 
         actionsRender: () => [
-            <Badge key="realtime-badge" count={realtimeUnreadCount} offset={[-2, 4]}>
-                <Button
-                    key="realtime-notifications"
-                    type={realtimeUnreadCount > 0 ? 'primary' : 'text'}
-                    icon={<BellOutlined />}
-                    onClick={async () => {
-                        setRealtimeOpen(true);
-                        await loadRealtimeNotifications();
-                    }}
-                >
-                    消息中心
-                </Button>
-            </Badge>,
+            <Popover
+                key="realtime-popover"
+                trigger="click"
+                placement="bottomRight"
+                open={realtimeOpen}
+                onOpenChange={async (open) => {
+                    setRealtimeOpen(open);
+                    if (open) await loadRealtimeNotifications();
+                }}
+                content={(
+                    <div style={{ width: 360, maxHeight: 460, overflow: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                            <Text strong>实时消息</Text>
+                            <Button
+                                danger
+                                size="small"
+                                onClick={async () => {
+                                    await clearAllRealtimeNotifications();
+                                    setRealtimeList([]);
+                                    setRealtimeUnreadCount(0);
+                                    message.success('已全部清空');
+                                }}
+                            >
+                                全部清空
+                            </Button>
+                        </div>
+                        <List
+                            dataSource={realtimeList}
+                            locale={{ emptyText: '暂无实时消息' }}
+                            renderItem={(item) => (
+                                <List.Item
+                                    actions={[
+                                        item.route ? (
+                                            <a
+                                                key="goto"
+                                                onClick={() => {
+                                                    history.push(item.route!);
+                                                    setRealtimeOpen(false);
+                                                }}
+                                            >
+                                                跳转
+                                            </a>
+                                        ) : null,
+                                        <a
+                                            key="clear-one"
+                                            onClick={async () => {
+                                                await clearOneRealtimeNotification({ id: item.id });
+                                                setRealtimeList((prev) => prev.filter((x) => x.id !== item.id));
+                                                setRealtimeUnreadCount((prev) => Math.max(0, prev - 1));
+                                            }}
+                                        >
+                                            清空
+                                        </a>,
+                                    ].filter(Boolean as any)}
+                                >
+                                    <List.Item.Meta
+                                        title={<Space><span>{item.title}</span><Text type="secondary">{item.type}</Text></Space>}
+                                        description={(
+                                            <div>
+                                                <div>{item.content}</div>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                    {new Date(item.createdAt).toLocaleString()}
+                                                </Text>
+                                            </div>
+                                        )}
+                                    />
+                                </List.Item>
+                            )}
+                        />
+                    </div>
+                )}
+            >
+                <Badge key="realtime-badge" count={realtimeUnreadCount} offset={[-2, 4]}>
+                    <Button
+                        key="realtime-notifications"
+                        type={realtimeUnreadCount > 0 ? 'primary' : 'text'}
+                        icon={<BellOutlined />}
+                    >
+                        消息中心
+                    </Button>
+                </Badge>
+            </Popover>,
             <Badge key="announcements-badge" count={forceQueue.length} offset={[-2, 4]}>
                 <Button
                     key="announcements"
@@ -310,6 +392,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             } catch {}
             return (
                 <>
+                    {contextHolder}
                     {children}
 
                     <Modal
@@ -359,72 +442,6 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                             )}
                         />
                     </Modal>
-
-                    <Drawer
-                        title="实时消息中心"
-                        placement="right"
-                        width={460}
-                        open={realtimeOpen}
-                        onClose={() => setRealtimeOpen(false)}
-                        extra={
-                            <Button
-                                danger
-                                size="small"
-                                onClick={async () => {
-                                    await clearAllRealtimeNotifications();
-                                    setRealtimeList([]);
-                                    setRealtimeUnreadCount(0);
-                                    message.success('已全部清空');
-                                }}
-                            >
-                                全部清空
-                            </Button>
-                        }
-                    >
-                        <List
-                            dataSource={realtimeList}
-                            locale={{ emptyText: '暂无实时消息' }}
-                            renderItem={(item) => (
-                                <List.Item
-                                    actions={[
-                                        item.route ? (
-                                            <a
-                                                key="goto"
-                                                onClick={() => {
-                                                    history.push(item.route!);
-                                                    setRealtimeOpen(false);
-                                                }}
-                                            >
-                                                跳转
-                                            </a>
-                                        ) : null,
-                                        <a
-                                            key="clear-one"
-                                            onClick={async () => {
-                                                await clearOneRealtimeNotification({ id: item.id });
-                                                setRealtimeList((prev) => prev.filter((x) => x.id !== item.id));
-                                                setRealtimeUnreadCount((prev) => Math.max(0, prev - 1));
-                                            }}
-                                        >
-                                            清空
-                                        </a>,
-                                    ].filter(Boolean as any)}
-                                >
-                                    <List.Item.Meta
-                                        title={<Space><span>{item.title}</span><Text type="secondary">{item.type}</Text></Space>}
-                                        description={
-                                            <div>
-                                                <div>{item.content}</div>
-                                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                                    {new Date(item.createdAt).toLocaleString()}
-                                                </Text>
-                                            </div>
-                                        }
-                                    />
-                                </List.Item>
-                            )}
-                        />
-                    </Drawer>
 
                     <Modal
                         title="强制阅读公告（每次进入需确认）"
