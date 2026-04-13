@@ -173,7 +173,8 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         message: item.title || '消息通知',
                         description: item.content || '',
                         placement: 'topRight',
-                        duration: 4.5,
+                        // 弱提示保留更久，便于客服/打手在忙碌中注意到消息
+                        duration: 180,
                         onClick: () => {
                             if (item.route) history.push(item.route);
                         },
