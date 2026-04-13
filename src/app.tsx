@@ -1,7 +1,7 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
 import {Avatar, Badge, Button, Dropdown, List, message, Modal, Popover, Result, Space, Typography, notification} from 'antd';
-import { BellOutlined, UserOutlined } from '@ant-design/icons';
+import { BellOutlined, InfoCircleFilled, UserOutlined } from '@ant-design/icons';
 import {
     clearAllRealtimeNotifications,
     clearOneRealtimeNotification,
@@ -173,6 +173,12 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         message: item.title || '消息通知',
                         description: item.content || '',
                         placement: 'topRight',
+                        icon: <InfoCircleFilled style={{ color: '#d46b08' }} />,
+                        style: {
+                            background: '#fff7e6',
+                            border: '1px solid #ffd591',
+                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.18)',
+                        },
                         // 弱提示保留更久，便于客服/打手在忙碌中注意到消息
                         duration: 180,
                         onClick: () => {
