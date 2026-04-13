@@ -1,8 +1,18 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import {Avatar, Badge, Button, Dropdown, List, message, Modal, Result, Space, Typography} from 'antd';
+import {Avatar, Badge, Button, Drawer, Dropdown, List, message, Modal, Result, Space, Typography} from 'antd';
 import { BellOutlined, UserOutlined } from '@ant-design/icons';
-import { getCurrentUser, myAnnouncements, myPendingForceAnnouncements, readAnnouncement } from './services/api';
+import {
+    clearAllRealtimeNotifications,
+    clearOneRealtimeNotification,
+    getCurrentUser,
+    getRealtimeStreamUrl,
+    myAnnouncements,
+    myPendingForceAnnouncements,
+    myRealtimeNotifications,
+    readAnnouncement,
+    RealtimeNotificationItem,
+} from './services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import './global.less';
 import { history } from '@umijs/max';
@@ -90,9 +100,13 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [announcementOpen, setAnnouncementOpen] = React.useState(false);
     const [announcementList, setAnnouncementList] = React.useState<any[]>([]);
     const [forceUnread, setForceUnread] = React.useState<any[]>([]);
+    const [realtimeOpen, setRealtimeOpen] = React.useState(false);
+    const [realtimeList, setRealtimeList] = React.useState<RealtimeNotificationItem[]>([]);
+    const [realtimeUnreadCount, setRealtimeUnreadCount] = React.useState(0);
     // 仅记录“本次进入已确认”的强制公告，刷新或重新登录后会再次弹出
     const [confirmedForceIds, setConfirmedForceIds] = React.useState<number[]>([]);
     const [loadingAnnouncements, setLoadingAnnouncements] = React.useState(false);
+    const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
     const forceQueue = React.useMemo(
         () => forceUnread.filter((item) => !confirmedForceIds.includes(Number(item?.id))),
         [forceUnread, confirmedForceIds],
@@ -117,6 +131,60 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         setConfirmedForceIds([]);
         loadAnnouncements();
     }, [loadAnnouncements]);
+
+    const loadRealtimeNotifications = React.useCallback(async () => {
+        try {
+            const res = await myRealtimeNotifications();
+            const list = Array.isArray(res?.list) ? res.list : [];
+            setRealtimeList(list);
+            setRealtimeUnreadCount(Number(res?.unreadCount || list.length));
+        } catch (e: any) {
+            console.error('[realtime-notification] load failed', e?.message || e);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        const token = String(localStorage.getItem('token') || '').trim();
+        if (!token) return;
+
+        loadRealtimeNotifications();
+
+        // 复用浏览器原生 SSE，减少前端依赖；服务端通过 query.token 鉴权
+        const eventSource = new EventSource(getRealtimeStreamUrl(token));
+        realtimeEventSourceRef.current = eventSource;
+
+        eventSource.onmessage = (evt) => {
+            try {
+                const payload = JSON.parse(evt.data || '{}');
+                if (payload?.type === 'snapshot') {
+                    const items = Array.isArray(payload?.items) ? payload.items : [];
+                    setRealtimeList(items);
+                    setRealtimeUnreadCount(Number(payload?.unreadCount || items.length));
+                    return;
+                }
+                if (payload?.type === 'message' && payload?.item) {
+                    setRealtimeList((prev) => [payload.item as RealtimeNotificationItem, ...prev].slice(0, 200));
+                    setRealtimeUnreadCount(Number(payload?.unreadCount || 0));
+                    return;
+                }
+                if (payload?.type === 'clear_one' || payload?.type === 'clear_all') {
+                    setRealtimeUnreadCount(Number(payload?.unreadCount || 0));
+                }
+            } catch (e) {
+                console.error('[realtime-notification] parse failed', e);
+            }
+        };
+
+        eventSource.onerror = () => {
+            // 连接中断时静默重连（浏览器会自动重连）
+            console.warn('[realtime-notification] stream disconnected, browser will retry');
+        };
+
+        return () => {
+            eventSource.close();
+            realtimeEventSourceRef.current = null;
+        };
+    }, [loadRealtimeNotifications]);
 
     return {
         logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
@@ -182,6 +250,19 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         },
 
         actionsRender: () => [
+            <Badge key="realtime-badge" count={realtimeUnreadCount} offset={[-2, 4]}>
+                <Button
+                    key="realtime-notifications"
+                    type={realtimeUnreadCount > 0 ? 'primary' : 'text'}
+                    icon={<BellOutlined />}
+                    onClick={async () => {
+                        setRealtimeOpen(true);
+                        await loadRealtimeNotifications();
+                    }}
+                >
+                    消息中心
+                </Button>
+            </Badge>,
             <Badge key="announcements-badge" count={forceQueue.length} offset={[-2, 4]}>
                 <Button
                     key="announcements"
@@ -278,6 +359,72 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                             )}
                         />
                     </Modal>
+
+                    <Drawer
+                        title="实时消息中心"
+                        placement="right"
+                        width={460}
+                        open={realtimeOpen}
+                        onClose={() => setRealtimeOpen(false)}
+                        extra={
+                            <Button
+                                danger
+                                size="small"
+                                onClick={async () => {
+                                    await clearAllRealtimeNotifications();
+                                    setRealtimeList([]);
+                                    setRealtimeUnreadCount(0);
+                                    message.success('已全部清空');
+                                }}
+                            >
+                                全部清空
+                            </Button>
+                        }
+                    >
+                        <List
+                            dataSource={realtimeList}
+                            locale={{ emptyText: '暂无实时消息' }}
+                            renderItem={(item) => (
+                                <List.Item
+                                    actions={[
+                                        item.route ? (
+                                            <a
+                                                key="goto"
+                                                onClick={() => {
+                                                    history.push(item.route!);
+                                                    setRealtimeOpen(false);
+                                                }}
+                                            >
+                                                跳转
+                                            </a>
+                                        ) : null,
+                                        <a
+                                            key="clear-one"
+                                            onClick={async () => {
+                                                await clearOneRealtimeNotification({ id: item.id });
+                                                setRealtimeList((prev) => prev.filter((x) => x.id !== item.id));
+                                                setRealtimeUnreadCount((prev) => Math.max(0, prev - 1));
+                                            }}
+                                        >
+                                            清空
+                                        </a>,
+                                    ].filter(Boolean as any)}
+                                >
+                                    <List.Item.Meta
+                                        title={<Space><span>{item.title}</span><Text type="secondary">{item.type}</Text></Space>}
+                                        description={
+                                            <div>
+                                                <div>{item.content}</div>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                    {new Date(item.createdAt).toLocaleString()}
+                                                </Text>
+                                            </div>
+                                        }
+                                    />
+                                </List.Item>
+                            )}
+                        />
+                    </Drawer>
 
                     <Modal
                         title="强制阅读公告（每次进入需确认）"

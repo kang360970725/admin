@@ -11,6 +11,11 @@ const API_BASE =
         ? 'http://api.welax-tech.com'
         : '/api';
 
+export function getRealtimeStreamUrl(token: string) {
+    const safeToken = encodeURIComponent(String(token || '').trim());
+    return `${API_BASE}/notifications/my/realtime/stream?token=${safeToken}`;
+}
+
 export interface User {
     id: number;
     phone: string;
@@ -1072,6 +1077,59 @@ export async function myPendingForceAnnouncements() {
             data: {},
         },
     );
+}
+
+export interface RealtimeNotificationItem {
+    id: string;
+    type: string;
+    title: string;
+    content: string;
+    route?: string;
+    payload?: any;
+    createdAt: string;
+}
+
+export async function myRealtimeNotifications() {
+    return request<{ list: RealtimeNotificationItem[]; unreadCount: number }>(
+        `${API_BASE}/notifications/my/realtime/list`,
+        {
+            method: 'POST',
+            data: {},
+        },
+    );
+}
+
+export async function clearOneRealtimeNotification(data: { id: string }) {
+    return request<{ success: boolean; unreadCount: number }>(
+        `${API_BASE}/notifications/my/realtime/clear-one`,
+        {
+            method: 'POST',
+            data,
+        },
+    );
+}
+
+export async function clearAllRealtimeNotifications() {
+    return request<{ success: boolean; unreadCount: number }>(
+        `${API_BASE}/notifications/my/realtime/clear-all`,
+        {
+            method: 'POST',
+            data: {},
+        },
+    );
+}
+
+export async function adminSendTestRealtimePush(data: {
+    targetRole?: 'STAFF' | 'CUSTOMER_SERVICE' | 'BOTH';
+    targetUserIds?: number[];
+    title?: string;
+    content?: string;
+    mockType?: 'DISPATCH_ASSIGNED' | 'DISPATCH_ARCHIVED' | 'DISPATCH_COMPLETED' | 'SYSTEM_ANNOUNCEMENT' | 'CS_DUTY_SUBSTITUTION' | 'CUSTOM';
+}) {
+    return request<{ pushed: number }>(`${API_BASE}/notifications/admin/test-push/send`, {
+        method: 'POST',
+        data,
+    });
 }
 
 

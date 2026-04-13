@@ -13,6 +13,7 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewSystemConfigs: has('system:role:page'),
     canViewAnnouncements: has('system:role:page'),
     canViewDutyCsSchedules: has('system:role:page'),
+    canViewNotificationTestPush: has('system:role:page'),
 
     // 用户/评级
     canViewUsers: has('users:page'),
