@@ -944,6 +944,8 @@ export interface DutyCsScheduleItem {
     id: number;
     userId: number;
     weekday: number;
+    weekdaysMask?: number;
+    weekdays?: number[];
     startMinute: number;
     endMinute: number;
     startTime?: string;
@@ -970,7 +972,8 @@ export async function adminListDutyCsSchedules(data?: { keyword?: string }) {
 export async function adminUpsertDutyCsSchedule(data: {
     id?: number;
     userId: number;
-    weekday: number;
+    weekday?: number;
+    weekdays?: number[];
     startTime: string;
     endTime: string;
     enabled?: boolean;
@@ -984,6 +987,61 @@ export async function adminUpsertDutyCsSchedule(data: {
 
 export async function adminDeleteDutyCsSchedule(data: { id: number }) {
     return request(`${API_BASE}/notifications/admin/duty-cs/delete`, {
+        method: 'POST',
+        data,
+    });
+}
+export interface DutyCsLeaveItem {
+    id: number;
+    userId: number;
+    substituteUserId: number;
+    startAt: string;
+    endAt: string;
+    enabled: boolean;
+    reason?: string | null;
+    isActiveNow?: boolean;
+    user?: {
+        id: number;
+        phone: string;
+        name?: string;
+        realName?: string;
+        userType: string;
+        status: string;
+    };
+    substituteUser?: {
+        id: number;
+        phone: string;
+        name?: string;
+        realName?: string;
+        userType: string;
+        status: string;
+    };
+}
+
+export async function adminListDutyCsLeaves(data?: { keyword?: string }) {
+    return request<DutyCsLeaveItem[]>(`${API_BASE}/notifications/admin/duty-cs/leave/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminUpsertDutyCsLeave(data: {
+    id?: number;
+    userId: number;
+    substituteUserId: number;
+    startAt: string;
+    endAt: string;
+    enabled?: boolean;
+    reason?: string;
+}) {
+    return request(`${API_BASE}/notifications/admin/duty-cs/leave/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminDeleteDutyCsLeave(data: { id: number }) {
+    return request(`${API_BASE}/notifications/admin/duty-cs/leave/delete`, {
         method: 'POST',
         data,
     });
