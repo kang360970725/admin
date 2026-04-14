@@ -38,6 +38,7 @@ import {
     getGameProjectOptions,
     getOrders,
     getPlayerOptions,
+    getUserCoupons,
 } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import OrderUpsertModal from "@/pages/Orders/components/OrderForm";
@@ -144,11 +145,12 @@ export default function CSWorkbenchPage() {
                             csRate: payload?.csRate,
                             inviteRate: payload?.inviteRate,
                             inviter: payload?.inviter,
-                            customClubRate: payload?.customClubRate,
-                            remark: payload?.remark,
-                            // ✅ 新增：赠送单标识
-                            isGifted: Boolean(payload?.isGifted),
-                        });
+                        customClubRate: payload?.customClubRate,
+                        remark: payload?.remark,
+                        // ✅ 新增：赠送单标识
+                        isGifted: Boolean(payload?.isGifted),
+                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
+                    });
 
                         const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
                         if (!orderId) throw new Error('创建订单失败：未返回订单ID');
@@ -200,6 +202,8 @@ export default function CSWorkbenchPage() {
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
     const [playerKeywordCreate, setPlayerKeywordCreate] = useState('');
     const [playerKeywordDispatch, setPlayerKeywordDispatch] = useState('');
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number }>>([]);
 
     const lastFetchRef = useRef<string>('');
     const now = useMemo(() => dayjs(), []);
@@ -247,6 +251,29 @@ export default function CSWorkbenchPage() {
         }
     };
 
+    const fetchCoupons = async () => {
+        setCouponLoading(true);
+        try {
+            const res: any = await getUserCoupons({ page: 1, limit: 100, status: 'UNUSED' });
+            const rows = Array.isArray(res?.data) ? res.data : [];
+            const options = rows.map((row: any) => {
+                const uid = row?.user?.id ? `用户#${row.user.id}` : '用户#-';
+                const uname = row?.user?.name || row?.user?.phone || '-';
+                const tname = row?.template?.name || `模板#${row?.templateId ?? '-'}`;
+                return {
+                    value: Number(row.id),
+                    label: `券#${row.id} ${tname} / ${uid} ${uname}`,
+                };
+            });
+            setCouponOptions(options);
+        } catch (e) {
+            console.error(e);
+            setCouponOptions([]);
+        } finally {
+            setCouponLoading(false);
+        }
+    };
+
     const debouncedFetchProjects = useDebouncedFn(fetchProjects, 250);
     const debouncedFetchPlayers = useDebouncedFn(fetchPlayers, 250);
 
@@ -289,6 +316,7 @@ export default function CSWorkbenchPage() {
     useEffect(() => {
         void fetchProjects('');
         void fetchPlayers('');
+        void fetchCoupons();
 
         // 创建表单默认值（减少手机端输入）
         createForm.setFieldsValue({
@@ -421,6 +449,7 @@ export default function CSWorkbenchPage() {
                 csRate: values.csRate != null && values.csRate !== '' ? Number(values.csRate) : undefined,
                 inviteRate: values.inviteRate != null && values.inviteRate !== '' ? Number(values.inviteRate) : undefined,
                 customClubRate: values.customClubRate != null && values.customClubRate !== '' ? Number(values.customClubRate) : undefined,
+                userCouponId: values.userCouponId != null && values.userCouponId !== '' ? Number(values.userCouponId) : undefined,
                 remark: values.remark?.trim() || undefined,
             };
 
@@ -720,6 +749,19 @@ export default function CSWorkbenchPage() {
                                         粘贴
                                     </Button>
                                 }
+                            />
+                        </Form.Item>
+
+                        <Form.Item name="userCouponId" label="优惠券（可选）">
+                            <Select
+                                allowClear
+                                showSearch
+                                optionFilterProp="label"
+                                placeholder="选择用户券后按券规则计算"
+                                options={couponOptions}
+                                loading={couponLoading}
+                                style={{ width: '100%' }}
+                                {...commonSelectProps}
                             />
                         </Form.Item>
 

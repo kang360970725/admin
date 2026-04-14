@@ -370,6 +370,7 @@ const OrdersPage: React.FC = () => {
 
                         // ✅ 是否已收款（不再由 paymentTime 推断）
                         isPaid: Boolean(payload?.isPaid),
+                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
                     });
 
                     const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);

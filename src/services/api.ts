@@ -345,6 +345,61 @@ export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: bool
     });
 }
 
+// ---------------------- Coupons API ----------------------
+
+export async function getCouponTemplates(data: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    type?: string;
+    keyword?: string;
+}) {
+    return request(`${API_BASE}/coupons/templates/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function createCouponTemplate(data: any) {
+    return request(`${API_BASE}/coupons/templates/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateCouponTemplateStatus(data: { id: number; status: string }) {
+    return request(`${API_BASE}/coupons/templates/update-status`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function grantUserCoupon(data: {
+    userId: number;
+    templateId: number;
+    count?: number;
+    expiresAt?: string;
+}) {
+    return request(`${API_BASE}/coupons/grant`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getUserCoupons(data: {
+    page?: number;
+    limit?: number;
+    userId?: number;
+    templateId?: number;
+    status?: string;
+    orderId?: number;
+}) {
+    return request(`${API_BASE}/coupons/user-coupons/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
 // ---- meta ----
 export async function getEnumDicts() {
     return request(`${API_BASE}/meta/enums`, { method: 'POST' });

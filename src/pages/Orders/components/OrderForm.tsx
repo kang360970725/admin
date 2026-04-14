@@ -23,7 +23,7 @@ import {
     Checkbox,
 } from 'antd';
 import dayjs from 'dayjs';
-import { getGameProjectOptions, getPlayerOptions } from '@/services/api';
+import { getGameProjectOptions, getPlayerOptions, getUserCoupons } from '@/services/api';
 
 type ProjectItem = {
     id: number;
@@ -81,6 +81,7 @@ export type OrderUpsertValues = {
      * - 赠送单 isGifted=true 时，这里仍允许传，但后端会按赠送单规则处理
      */
     isPaid?: boolean;
+    userCouponId?: number;
 };
 
 export default function OrderUpsertModal(props: {
@@ -106,6 +107,8 @@ export default function OrderUpsertModal(props: {
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
+    const [couponLoading, setCouponLoading] = useState(false);
+    const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number }>>([]);
 
     const now = useMemo(() => dayjs(), []);
 
@@ -182,6 +185,29 @@ export default function OrderUpsertModal(props: {
         if (!id) return false;
         const mode = String(projectMap?.[id]?.billingMode ?? '');
         return mode === 'HOURLY';
+    };
+
+    const fetchCouponOptions = async () => {
+        setCouponLoading(true);
+        try {
+            const res: any = await getUserCoupons({ page: 1, limit: 100, status: 'UNUSED' });
+            const list = Array.isArray(res?.data) ? res.data : [];
+            const options = list.map((row: any) => {
+                const uid = row?.user?.id ? `用户#${row.user.id}` : '用户#-';
+                const uname = row?.user?.name || row?.user?.phone || '-';
+                const tname = row?.template?.name || `模板#${row?.templateId ?? '-'}`;
+                return {
+                    value: Number(row.id),
+                    label: `券#${row.id} ${tname} / ${uid} ${uname}`,
+                };
+            });
+            setCouponOptions(options);
+        } catch (e) {
+            console.error(e);
+            setCouponOptions([]);
+        } finally {
+            setCouponLoading(false);
+        }
     };
 
     // 小时单：金额=单价*下单数量（小时）
@@ -266,6 +292,7 @@ export default function OrderUpsertModal(props: {
 
         void fetchProjects('');
         void fetchPlayers('');
+        void fetchCouponOptions();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
@@ -356,6 +383,10 @@ export default function OrderUpsertModal(props: {
                  * - 赠送单：这里仍允许用户勾选，但通常赠送单不需要收款
                  */
                 isPaid: Boolean(v?.isPaid),
+                userCouponId:
+                    v?.userCouponId != null && v?.userCouponId !== ''
+                        ? Number(v.userCouponId)
+                        : undefined,
                 // 小票展示字段
                 projectName: v?.projectName,
                 billingMode: v?.billingMode,
@@ -461,6 +492,19 @@ export default function OrderUpsertModal(props: {
                     <Col {...colProps}>
                         <Form.Item name="isGifted" valuePropName="checked" label="是否是赠送单">
                             <Checkbox>赠送单勾选即可，无需修改实收金额</Checkbox>
+                        </Form.Item>
+                    </Col>
+
+                    <Col {...colProps}>
+                        <Form.Item name="userCouponId" label="优惠券（可选）">
+                            <Select
+                                placeholder="选择用户券后将按券规则计算"
+                                allowClear
+                                showSearch
+                                optionFilterProp="label"
+                                options={couponOptions}
+                                loading={couponLoading}
+                            />
                         </Form.Item>
                     </Col>
 
