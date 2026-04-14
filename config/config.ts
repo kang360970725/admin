@@ -30,6 +30,8 @@ const getEnv = (): keyof typeof envConfig => {
 
 const currentEnv = getEnv();
 const config = envConfig[currentEnv];
+const appVersion = process.env.APP_VERSION || '0.0.0';
+const appBuildId = process.env.APP_BUILD_ID || `${currentEnv}-${Date.now()}`;
 
 export default defineConfig({
   title: config.APP_NAME, // ✅ 浏览器 Tab 标题
@@ -40,6 +42,8 @@ export default defineConfig({
     'process.env.UMI_ENV': currentEnv,
     'process.env.API_BASE': config.API_BASE,
     'process.env.APP_NAME': config.APP_NAME,
+    'process.env.APP_VERSION': appVersion,
+    'process.env.APP_BUILD_ID': appBuildId,
   },
 
   hash: true,

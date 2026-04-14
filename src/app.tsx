@@ -31,7 +31,18 @@ interface CurrentUser {
     needResetPwd?: boolean;
 }
 
+interface VersionManifest {
+    version?: string;
+    buildId?: string;
+    releasedAt?: string;
+    forceRefresh?: boolean;
+    title?: string;
+    notes?: string[];
+}
+
 const loginPath = '/login';
+const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
+const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 
 function doLogout() {
     localStorage.removeItem('token');
@@ -107,7 +118,10 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     // 仅记录“本次进入已确认”的强制公告，刷新或重新登录后会再次弹出
     const [confirmedForceIds, setConfirmedForceIds] = React.useState<number[]>([]);
     const [loadingAnnouncements, setLoadingAnnouncements] = React.useState(false);
+    const [versionManifest, setVersionManifest] = React.useState<VersionManifest | null>(null);
+    const [versionModalOpen, setVersionModalOpen] = React.useState(false);
     const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
+    const versionPromptedRef = React.useRef<string>('');
     const forceQueue = React.useMemo(
         () => forceUnread.filter((item) => !confirmedForceIds.includes(Number(item?.id))),
         [forceUnread, confirmedForceIds],
@@ -241,6 +255,45 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         }, 15000);
         return () => window.clearInterval(timer);
     }, [loadRealtimeNotifications]);
+
+    React.useEffect(() => {
+        const token = String(localStorage.getItem('token') || '').trim();
+        const isDevEnv = String(process.env.UMI_ENV || '') === 'development';
+        if (!token || isDevEnv) return;
+
+        const checkVersionManifest = async () => {
+            try {
+                const res = await fetch(`/version-manifest.json?t=${Date.now()}`, {
+                    cache: 'no-store',
+                });
+                if (!res.ok) return;
+                const manifest = (await res.json()) as VersionManifest;
+                const remoteVersion = String(manifest?.version || '').trim();
+                const remoteBuildId = String(manifest?.buildId || '').trim();
+                const forceRefresh = Boolean(manifest?.forceRefresh);
+                if (!forceRefresh) return;
+
+                // 优先按 buildId 判定；若未配置 buildId，则退化到 version 判定
+                const mismatchByBuildId = Boolean(remoteBuildId && LOCAL_APP_BUILD_ID && remoteBuildId !== LOCAL_APP_BUILD_ID);
+                const mismatchByVersion = !remoteBuildId && Boolean(remoteVersion && LOCAL_APP_VERSION && remoteVersion !== LOCAL_APP_VERSION);
+                const needRefresh = mismatchByBuildId || mismatchByVersion;
+                if (!needRefresh) return;
+
+                const remoteKey = `${remoteVersion || 'unknown'}#${remoteBuildId || 'unknown'}`;
+                if (versionPromptedRef.current === remoteKey) return;
+                versionPromptedRef.current = remoteKey;
+
+                setVersionManifest(manifest);
+                setVersionModalOpen(true);
+            } catch (e: any) {
+                console.error('[version-manifest] check failed', e?.message || e);
+            }
+        };
+
+        checkVersionManifest();
+        const timer = window.setInterval(checkVersionManifest, 60000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     return {
         logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
@@ -508,6 +561,41 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                                 <div dangerouslySetInnerHTML={{ __html: forceQueue[0].content || '' }} />
                             </div>
                         ) : null}
+                    </Modal>
+
+                    <Modal
+                        title={versionManifest?.title || '版本更新说明'}
+                        open={versionModalOpen}
+                        closable={false}
+                        maskClosable={false}
+                        keyboard={false}
+                        cancelButtonProps={{ style: { display: 'none' } }}
+                        okText="立即刷新"
+                        onOk={() => {
+                            window.location.reload();
+                        }}
+                    >
+                        <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                            <Text>
+                                检测到系统已发布新版本，为避免功能异常，请立即刷新页面加载最新资源。
+                            </Text>
+                            <Text type="secondary">
+                                当前版本：{LOCAL_APP_VERSION || '-'}（{LOCAL_APP_BUILD_ID || '-'}）
+                            </Text>
+                            <Text type="secondary">
+                                最新版本：{versionManifest?.version || '-'}（{versionManifest?.buildId || '-'}）
+                            </Text>
+                            <Text type="secondary">
+                                发布时间：{versionManifest?.releasedAt || '-'}
+                            </Text>
+                            <List
+                                size="small"
+                                bordered
+                                dataSource={Array.isArray(versionManifest?.notes) ? versionManifest?.notes : []}
+                                locale={{ emptyText: '暂无更新说明' }}
+                                renderItem={(note) => <List.Item>{note}</List.Item>}
+                            />
+                        </Space>
                     </Modal>
                 </>
             );
