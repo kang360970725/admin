@@ -153,6 +153,20 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         }
     }, []);
 
+    const handleRealtimeJump = React.useCallback((item: RealtimeNotificationItem) => {
+        if (!item?.route) return;
+        const shouldOpenInNewTab =
+            Boolean((item as any)?.payload?.openInNewTab) ||
+            item.type === 'DISPATCH_ARCHIVED' ||
+            item.type === 'DISPATCH_COMPLETED';
+
+        if (shouldOpenInNewTab) {
+            window.open(item.route, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        history.push(item.route);
+    }, []);
+
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
         if (!token) return;
@@ -191,7 +205,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         // 弱提示保留更久，便于客服/打手在忙碌中注意到消息
                         duration: 180,
                         onClick: () => {
-                            if (item.route) history.push(item.route);
+                            handleRealtimeJump(item);
                         },
                     });
                     return;
@@ -315,7 +329,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                                             <a
                                                 key="goto"
                                                 onClick={() => {
-                                                    history.push(item.route!);
+                                                    handleRealtimeJump(item);
                                                     setRealtimeOpen(false);
                                                 }}
                                             >
