@@ -180,16 +180,17 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         eventSource.onmessage = (evt) => {
             try {
                 const payload = JSON.parse(evt.data || '{}');
-                if (payload?.type === 'snapshot') {
-                    const items = Array.isArray(payload?.items) ? payload.items : [];
+                const msg = payload?.data ?? payload;
+                if (msg?.type === 'snapshot') {
+                    const items = Array.isArray(msg?.items) ? msg.items : [];
                     setRealtimeList(items);
-                    setRealtimeUnreadCount(Number(payload?.unreadCount || items.length));
+                    setRealtimeUnreadCount(Number(msg?.unreadCount || items.length));
                     return;
                 }
-                if (payload?.type === 'message' && payload?.item) {
-                    const item = payload.item as RealtimeNotificationItem;
-                    setRealtimeList((prev) => [payload.item as RealtimeNotificationItem, ...prev].slice(0, 200));
-                    setRealtimeUnreadCount(Number(payload?.unreadCount || 0));
+                if (msg?.type === 'message' && msg?.item) {
+                    const item = msg.item as RealtimeNotificationItem;
+                    setRealtimeList((prev) => [msg.item as RealtimeNotificationItem, ...prev].slice(0, 200));
+                    setRealtimeUnreadCount(Number(msg?.unreadCount || 0));
                     // 弱提示：右上角实时弹出，可点击直接跳转
                     api.open({
                         key: item.id,
@@ -210,8 +211,8 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     });
                     return;
                 }
-                if (payload?.type === 'clear_one' || payload?.type === 'clear_all') {
-                    setRealtimeUnreadCount(Number(payload?.unreadCount || 0));
+                if (msg?.type === 'clear_one' || msg?.type === 'clear_all') {
+                    setRealtimeUnreadCount(Number(msg?.unreadCount || 0));
                 }
             } catch (e) {
                 console.error('[realtime-notification] parse failed', e);
@@ -221,12 +222,24 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         eventSource.onerror = () => {
             // 连接中断时静默重连（浏览器会自动重连）
             console.warn('[realtime-notification] stream disconnected, browser will retry');
+            // 兜底拉取，避免重连间隙错过提醒
+            loadRealtimeNotifications();
         };
 
         return () => {
             eventSource.close();
             realtimeEventSourceRef.current = null;
         };
+    }, [loadRealtimeNotifications, api, handleRealtimeJump]);
+
+    React.useEffect(() => {
+        const token = String(localStorage.getItem('token') || '').trim();
+        if (!token) return;
+        // SSE 兜底：低频轮询，防止偶发网络抖动导致完全无提醒
+        const timer = window.setInterval(() => {
+            loadRealtimeNotifications();
+        }, 15000);
+        return () => window.clearInterval(timer);
     }, [loadRealtimeNotifications]);
 
     return {
