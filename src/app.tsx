@@ -43,6 +43,13 @@ interface VersionManifest {
 const loginPath = '/login';
 const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
+const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
+
+function buildVersionKey(manifest?: VersionManifest | null) {
+    const version = String(manifest?.version || 'unknown').trim();
+    const buildId = String(manifest?.buildId || 'unknown').trim();
+    return `${version}#${buildId}`;
+}
 
 function doLogout() {
     localStorage.removeItem('token');
@@ -122,6 +129,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [versionModalOpen, setVersionModalOpen] = React.useState(false);
     const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
     const versionPromptedRef = React.useRef<string>('');
+    const isDevEnv = String(process.env.UMI_ENV || '') === 'development';
     const forceQueue = React.useMemo(
         () => forceUnread.filter((item) => !confirmedForceIds.includes(Number(item?.id))),
         [forceUnread, confirmedForceIds],
@@ -279,6 +287,11 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                 if (!needRefresh) return;
 
                 const remoteKey = `${remoteVersion || 'unknown'}#${remoteBuildId || 'unknown'}`;
+                if (isDevEnv) {
+                    // 开发环境避免循环弹窗：同一版本只提示一次，便于联调
+                    const ackKey = String(sessionStorage.getItem(DEV_VERSION_ACK_STORAGE_KEY) || '').trim();
+                    if (ackKey === remoteKey) return;
+                }
                 if (versionPromptedRef.current === remoteKey) return;
                 versionPromptedRef.current = remoteKey;
 
@@ -292,7 +305,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         checkVersionManifest();
         const timer = window.setInterval(checkVersionManifest, 60000);
         return () => window.clearInterval(timer);
-    }, []);
+    }, [isDevEnv]);
 
     return {
         logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
@@ -571,6 +584,9 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         cancelButtonProps={{ style: { display: 'none' } }}
                         okText="立即刷新"
                         onOk={() => {
+                            if (isDevEnv) {
+                                sessionStorage.setItem(DEV_VERSION_ACK_STORAGE_KEY, buildVersionKey(versionManifest));
+                            }
                             window.location.reload();
                         }}
                     >
