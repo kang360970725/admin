@@ -258,8 +258,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
-        const isDevEnv = String(process.env.UMI_ENV || '') === 'development';
-        if (!token || isDevEnv) return;
+        if (!token) return;
 
         const checkVersionManifest = async () => {
             try {
