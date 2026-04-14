@@ -1,5 +1,7 @@
 // config/config.ts
 import { defineConfig } from '@umijs/max';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // 环境配置映射
 const envConfig = {
@@ -30,8 +32,25 @@ const getEnv = (): keyof typeof envConfig => {
 
 const currentEnv = getEnv();
 const config = envConfig[currentEnv];
-const appVersion = process.env.APP_VERSION || '0.0.0';
-const appBuildId = process.env.APP_BUILD_ID || `${currentEnv}-${Date.now()}`;
+
+function readManifest(): { version?: string; buildId?: string } {
+  try {
+    const target = path.resolve(__dirname, '../public/version-manifest.json');
+    const raw = fs.readFileSync(target, 'utf8');
+    const json = JSON.parse(raw);
+    return {
+      version: String(json?.version || '').trim() || undefined,
+      buildId: String(json?.buildId || '').trim() || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+const manifest = readManifest();
+const appVersion = process.env.APP_VERSION || manifest.version || '0.0.0';
+// 关键：默认与 version-manifest 对齐，避免线上长期不一致导致强制刷新循环弹窗
+const appBuildId = process.env.APP_BUILD_ID || manifest.buildId || `${currentEnv}-${appVersion}`;
 
 export default defineConfig({
   title: config.APP_NAME, // ✅ 浏览器 Tab 标题

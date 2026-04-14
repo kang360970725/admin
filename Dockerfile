@@ -1,6 +1,8 @@
 # ---------- Build stage ----------
 FROM node:20-slim AS builder
 WORKDIR /app
+ARG APP_VERSION=0.0.0
+ARG APP_BUILD_ID=
 
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
 RUN npm install
@@ -11,6 +13,8 @@ RUN npx --yes max setup || npx --yes umi setup || true
 
 ENV UMI_ENV=production
 ENV API_BASE=http://api.welax-tech.com
+ENV APP_VERSION=${APP_VERSION}
+ENV APP_BUILD_ID=${APP_BUILD_ID}
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 RUN npm run build:prod || ( \
