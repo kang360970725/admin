@@ -19,6 +19,7 @@ import dayjs from 'dayjs';
 import {
   createCouponTemplate,
   getCouponTemplates,
+  getGameProjectOptions,
   getUserCoupons,
   grantUserCoupon,
   updateCouponTemplateStatus,
@@ -89,6 +90,28 @@ const CouponsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formCreate] = Form.useForm();
   const [formGrant] = Form.useForm();
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectOptions, setProjectOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const createScope = Form.useWatch('applicableScope', formCreate);
+
+  const loadProjects = async (keyword?: string) => {
+    setProjectLoading(true);
+    try {
+      const res: any = await getGameProjectOptions({ keyword: keyword || '' });
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setProjectOptions(
+        list.map((item: any) => ({
+          value: Number(item.id),
+          label: item?.price != null ? `${item.name}（¥${item.price}）` : `${item.name}`,
+        })),
+      );
+    } catch (e) {
+      console.error(e);
+      setProjectOptions([]);
+    } finally {
+      setProjectLoading(false);
+    }
+  };
 
   const loadData = async (nextPage = page, nextLimit = limit) => {
     setLoading(true);
@@ -273,10 +296,9 @@ const CouponsPage: React.FC = () => {
               ...v,
               startAt: v.startAt ? dayjs(v.startAt).toISOString() : undefined,
               endAt: v.endAt ? dayjs(v.endAt).toISOString() : undefined,
-              applicableProjectIds: String(v.applicableProjectIds || '')
-                .split(',')
-                .map((x: string) => Number(x.trim()))
-                .filter((x: number) => Number.isFinite(x) && x > 0),
+              applicableProjectIds: Array.isArray(v.applicableProjectIds)
+                ? v.applicableProjectIds.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x) && x > 0)
+                : [],
             });
             message.success('创建成功');
             setCreateOpen(false);
@@ -290,6 +312,9 @@ const CouponsPage: React.FC = () => {
         }}
         confirmLoading={submitting}
         width={720}
+        afterOpenChange={(open) => {
+          if (open) void loadProjects('');
+        }}
       >
         <Form form={formCreate} layout="vertical" initialValues={{ status: 'DRAFT', applicableScope: 'ALL', type: 'CASH' }}>
           <Form.Item name="name" label="模板名称" rules={[{ required: true, message: '请输入名称' }]}>
@@ -333,13 +358,26 @@ const CouponsPage: React.FC = () => {
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
           </Space>
-          <Form.Item
-            name="applicableProjectIds"
-            label="可用项目ID（仅PROJECT范围时使用）"
-            tooltip="多个项目用英文逗号分隔，例如 1,2,3"
-          >
-            <Input placeholder="1,2,3" />
-          </Form.Item>
+          {createScope === 'PROJECT' ? (
+            <Form.Item
+              name="applicableProjectIds"
+              label="可用项目"
+              rules={[{ required: true, message: '请选择可用项目' }]}
+            >
+              <Select
+                mode="multiple"
+                allowClear
+                showSearch
+                filterOption={false}
+                options={projectOptions}
+                loading={projectLoading}
+                placeholder="请选择可用项目（可多选）"
+                onSearch={(kw) => {
+                  void loadProjects(kw);
+                }}
+              />
+            </Form.Item>
+          ) : null}
         </Form>
       </Modal>
 
