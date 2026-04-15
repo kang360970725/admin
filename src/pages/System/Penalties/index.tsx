@@ -25,10 +25,10 @@ import {
   getPenaltyOverview,
   getPenaltyRanking,
   getPenaltyRules,
-  getPenaltyRuleStatsByUser,
   getPenaltyTicketContext,
   getPenaltyTicketDetail,
   getPenaltyTickets,
+  getUsers,
   postPenaltyReviewAppeal,
   postPenaltyRuleCreate,
   postPenaltyRuleUpdate,
@@ -83,6 +83,8 @@ const PenaltiesPage: React.FC = () => {
   const [ticketForm] = Form.useForm();
   const [ticketRuleOptions, setTicketRuleOptions] = useState<any[]>([]);
   const [ticketContext, setTicketContext] = useState<any>(null);
+  const [staffOptions, setStaffOptions] = useState<any[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewTicket, setReviewTicket] = useState<any>(null);
@@ -172,6 +174,29 @@ const PenaltiesPage: React.FC = () => {
     }
   };
 
+  const loadStaffOptions = async (search = '') => {
+    setStaffLoading(true);
+    try {
+      const res: any = await getUsers({
+        page: 1,
+        limit: 30,
+        userType: 'STAFF',
+        search: String(search || '').trim() || undefined,
+      });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setStaffOptions(
+        list.map((u: any) => ({
+          value: Number(u.id),
+          label: `${u?.name || u?.realName || '未命名'} (${u?.phone || '-'}) #${u?.id}`,
+        })),
+      );
+    } catch {
+      setStaffOptions([]);
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
   useEffect(() => {
     void (async () => {
       try {
@@ -230,7 +255,10 @@ const PenaltiesPage: React.FC = () => {
     ticketForm.resetFields();
     setTicketModalOpen(true);
     try {
-      const res: any = await getPenaltyRules({ page: 1, limit: 500, enabled: true });
+      const [res] = await Promise.all([
+        getPenaltyRules({ page: 1, limit: 500, enabled: true }),
+        loadStaffOptions(''),
+      ]);
       setTicketRuleOptions(Array.isArray(res?.data) ? res.data : []);
     } catch {
       setTicketRuleOptions([]);
@@ -607,8 +635,19 @@ const PenaltiesPage: React.FC = () => {
         destroyOnClose
       >
         <Form layout="vertical" form={ticketForm}>
-          <Form.Item name="userId" label="陪玩ID" rules={[{ required: true, message: '请输入陪玩ID' }]}>
-            <InputNumber min={1} style={{ width: '100%' }} onChange={() => onTicketRuleChange()} />
+          <Form.Item name="userId" label="陪玩账号" rules={[{ required: true, message: '请选择陪玩账号' }]}>
+            <Select
+              showSearch
+              allowClear
+              placeholder="请选择员工账号，支持按ID/姓名/手机号搜索"
+              options={staffOptions}
+              loading={staffLoading}
+              filterOption={false}
+              onSearch={(v) => {
+                void loadStaffOptions(v);
+              }}
+              onChange={() => onTicketRuleChange()}
+            />
           </Form.Item>
           <Form.Item name="ruleIds" label="处罚条例(可多选)" rules={[{ required: true, message: '请选择条例' }]}>
             <Select
