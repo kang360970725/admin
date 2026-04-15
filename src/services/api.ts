@@ -1612,3 +1612,32 @@ export async function getPenaltyRuleStatsByUser(data: { userId: number }) {
     data,
   });
 }
+
+// 打手端：我的罚单
+export async function getMyPenaltyTickets(data: any) {
+  return request(`${API_BASE}/penalties/my/tickets/list`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getMyPenaltyPendingStats() {
+  return request(`${API_BASE}/penalties/my/tickets/pending-stats`, {
+    method: 'POST',
+    data: {},
+  });
+}
+
+export async function confirmMyPenaltyTicket(data: { ticketId: number }) {
+  return request(`${API_BASE}/penalties/my/tickets/confirm`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function appealMyPenaltyTicket(data: { ticketId: number; content: string }) {
+  return request(`${API_BASE}/penalties/my/tickets/appeal`, {
+    method: 'POST',
+    data,
+  });
+}

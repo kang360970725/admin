@@ -21,10 +21,14 @@ import {useModel} from '@umijs/max';
 import dayjs from 'dayjs';
 import {
     acceptDispatch,
+    appealMyPenaltyTicket,
     archiveDispatch,
     completeDispatch,
+    confirmMyPenaltyTicket,
     dispatchRejectOrder,
     getEnumDicts,
+    getMyPenaltyPendingStats,
+    getMyPenaltyTickets,
     getMyDispatches,
     getOrderDetail,
     ordersMyStats,
@@ -79,6 +83,14 @@ const WorkbenchPage: React.FC = () => {
     const watchedDeductMinutesCustom = Form.useWatch('deductMinutesCustom', finishForm);
 
     const [guaranteedCompleteRemainingWan, setGuaranteedCompleteRemainingWan] = useState<number | null>(null);
+    const [penaltyOpen, setPenaltyOpen] = useState(false);
+    const [penaltyList, setPenaltyList] = useState<any[]>([]);
+    const [penaltyLoading, setPenaltyLoading] = useState(false);
+    const [penaltyPendingCount, setPenaltyPendingCount] = useState(0);
+    const [appealOpen, setAppealOpen] = useState(false);
+    const [appealSubmitting, setAppealSubmitting] = useState(false);
+    const [appealForm] = Form.useForm();
+    const [appealTicket, setAppealTicket] = useState<any>(null);
 
     // 小时单预览 tick
     const [tick, setTick] = useState(Date.now());
@@ -216,6 +228,22 @@ const WorkbenchPage: React.FC = () => {
         }
     };
 
+    const loadMyPenalties = async () => {
+        setPenaltyLoading(true);
+        try {
+            const [stats, res] = await Promise.all([
+                getMyPenaltyPendingStats(),
+                getMyPenaltyTickets({ page: 1, limit: 20 }),
+            ]);
+            setPenaltyPendingCount(Number((stats as any)?.forcePendingCount || 0));
+            setPenaltyList(Array.isArray((res as any)?.data) ? (res as any).data : []);
+        } catch (e: any) {
+            console.error(e);
+        } finally {
+            setPenaltyLoading(false);
+        }
+    };
+
     // ✅ 补全：把 dispatch 行补成带完整 order detail 的结构（详情失败也不阻断）
     const hydrateDispatchWithOrder = async (row: any) => {
         if (!row) return null;
@@ -307,6 +335,7 @@ const WorkbenchPage: React.FC = () => {
         void loadDictsOnce();
         void refreshStats();
         void refreshPool();
+        void loadMyPenalties();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -315,6 +344,42 @@ const WorkbenchPage: React.FC = () => {
         void refreshPool();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [workStatus]);
+
+    const submitPenaltyConfirm = async (ticket: any) => {
+        try {
+            await confirmMyPenaltyTicket({ ticketId: Number(ticket?.id) });
+            message.success('罚单已确认并处理');
+            await loadMyPenalties();
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || e?.data?.message || '确认失败');
+        }
+    };
+
+    const openPenaltyAppeal = (ticket: any) => {
+        setAppealTicket(ticket);
+        appealForm.resetFields();
+        setAppealOpen(true);
+    };
+
+    const submitPenaltyAppeal = async () => {
+        try {
+            const v = await appealForm.validateFields();
+            if (!appealTicket?.id) return;
+            setAppealSubmitting(true);
+            await appealMyPenaltyTicket({
+                ticketId: Number(appealTicket.id),
+                content: String(v.content || '').trim(),
+            });
+            message.success('申诉已提交，请等待审核');
+            setAppealOpen(false);
+            await loadMyPenalties();
+        } catch (e: any) {
+            if (e?.errorFields) return;
+            message.error(e?.response?.data?.message || e?.data?.message || '申诉失败');
+        } finally {
+            setAppealSubmitting(false);
+        }
+    };
 
     const updateMyWorkStatus = async (next: 'IDLE' | 'RESTING') => {
         try {
@@ -959,6 +1024,22 @@ const WorkbenchPage: React.FC = () => {
                     <Row gutter={[12, 12]} style={{marginTop: 12}}>
                         <Col xs={24} lg={8}>
                             {renderStatusCard()}
+                            <Card title="罚单中心" style={{ marginTop: 12 }} bodyStyle={{padding: isMobile ? 14 : 16}}>
+                                <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                                    <div style={{ color: 'rgba(0,0,0,.65)' }}>
+                                        当前待处理罚单：<Tag color={penaltyPendingCount > 0 ? 'red' : 'default'}>{penaltyPendingCount}</Tag>
+                                    </div>
+                                    <Space>
+                                        <Button type="primary" danger={penaltyPendingCount > 0} onClick={() => { setPenaltyOpen(true); void loadMyPenalties(); }}>
+                                            立即处理罚单
+                                        </Button>
+                                        <Button onClick={() => void loadMyPenalties()} loading={penaltyLoading}>刷新</Button>
+                                    </Space>
+                                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                                        罚单需优先处理：可确认或发起申诉（每张罚单仅一次申诉机会）。
+                                    </div>
+                                </Space>
+                            </Card>
                         </Col>
 
                         <Col xs={24} lg={16}>
@@ -1000,7 +1081,7 @@ const WorkbenchPage: React.FC = () => {
                         onOk={submitFinish}
                         confirmLoading={finishSubmitting}
                         destroyOnClose
-                        width={isMobile ? '96vw' : 720}x
+                        width={isMobile ? '96vw' : 720}
                     >
                         <Form form={finishForm} layout="vertical">
                             {poolDispatch && isHourly(poolDispatch) ? (
@@ -1137,6 +1218,78 @@ const WorkbenchPage: React.FC = () => {
 
                             <Form.Item name="remark" label="备注（可选）">
                                 <Input.TextArea rows={3} placeholder="异常说明/备注"/>
+                            </Form.Item>
+                        </Form>
+                    </Modal>
+
+                    <Modal
+                        open={penaltyOpen}
+                        title="我的罚单"
+                        onCancel={() => setPenaltyOpen(false)}
+                        footer={null}
+                        width={isMobile ? '96vw' : 900}
+                        destroyOnClose
+                    >
+                        <Table
+                            rowKey="id"
+                            loading={penaltyLoading}
+                            size="small"
+                            pagination={false}
+                            dataSource={penaltyList}
+                            columns={[
+                                { title: '罚单号', dataIndex: 'ticketNo', width: 170 },
+                                { title: '状态', dataIndex: 'statusLabel', width: 120 },
+                                { title: '申诉状态', dataIndex: 'appealStatusLabel', width: 120 },
+                                { title: '金额', dataIndex: 'finalAmount', width: 90 },
+                                { title: '创建时间', dataIndex: 'createdAt', width: 160, render: (v: any) => dayjs(v).format('YYYY-MM-DD HH:mm') },
+                                {
+                                    title: '操作',
+                                    width: 220,
+                                    render: (_: any, row: any) => {
+                                        const canHandle = String(row?.status) === 'PENDING_CONFIRM';
+                                        return (
+                                            <Space>
+                                                <Button
+                                                    type="primary"
+                                                    size="small"
+                                                    disabled={!canHandle}
+                                                    onClick={() => submitPenaltyConfirm(row)}
+                                                >
+                                                    确认并扣款
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    disabled={!canHandle || String(row?.appealStatus) !== 'NONE'}
+                                                    onClick={() => openPenaltyAppeal(row)}
+                                                >
+                                                    发起申诉
+                                                </Button>
+                                            </Space>
+                                        );
+                                    },
+                                },
+                            ] as any}
+                        />
+                    </Modal>
+
+                    <Modal
+                        open={appealOpen}
+                        title={`发起申诉${appealTicket?.ticketNo ? ` - ${appealTicket.ticketNo}` : ''}`}
+                        onCancel={() => setAppealOpen(false)}
+                        onOk={submitPenaltyAppeal}
+                        confirmLoading={appealSubmitting}
+                        destroyOnClose
+                    >
+                        <Form form={appealForm} layout="vertical">
+                            <Form.Item
+                                name="content"
+                                label="申诉说明"
+                                rules={[
+                                    { required: true, message: '请填写申诉说明' },
+                                    { max: 2000, message: '最多2000字' },
+                                ]}
+                            >
+                                <Input.TextArea rows={5} placeholder="请详细说明申诉理由与证据要点" />
                             </Form.Item>
                         </Form>
                     </Modal>

@@ -3,6 +3,8 @@ import React from 'react';
 import {Avatar, Badge, Button, Dropdown, List, message, Modal, Popover, Result, Space, Typography, notification} from 'antd';
 import { BellOutlined, InfoCircleFilled, UserOutlined } from '@ant-design/icons';
 import {
+    getMyPenaltyPendingStats,
+    getMyPenaltyTickets,
     clearAllRealtimeNotifications,
     clearOneRealtimeNotification,
     getCurrentUser,
@@ -121,6 +123,8 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [realtimeOpen, setRealtimeOpen] = React.useState(false);
     const [realtimeList, setRealtimeList] = React.useState<RealtimeNotificationItem[]>([]);
     const [realtimeUnreadCount, setRealtimeUnreadCount] = React.useState(0);
+    const [penaltyForceQueue, setPenaltyForceQueue] = React.useState<RealtimeNotificationItem[]>([]);
+    const [penaltyAckIds, setPenaltyAckIds] = React.useState<string[]>([]);
     const [api, contextHolder] = notification.useNotification();
     // 仅记录“本次进入已确认”的强制公告，刷新或重新登录后会再次弹出
     const [confirmedForceIds, setConfirmedForceIds] = React.useState<number[]>([]);
@@ -143,6 +147,18 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         }
     }, []);
     const isCustomerService = String(currentUser?.userType || '') === 'CUSTOMER_SERVICE';
+    const isStaffUser = String(currentUser?.userType || '') === 'STAFF';
+    const activePenaltyForceQueue = React.useMemo(
+        () => penaltyForceQueue.filter((item) => !penaltyAckIds.includes(String(item.id))),
+        [penaltyForceQueue, penaltyAckIds],
+    );
+
+    const isPenaltyForceItem = React.useCallback((item?: RealtimeNotificationItem | null) => {
+        if (!item) return false;
+        const force = Boolean((item as any)?.payload?.force);
+        if (!force) return false;
+        return ['PENALTY_TICKET', 'PENALTY_APPEAL_REVIEW'].includes(String(item.type || ''));
+    }, []);
 
     const loadAnnouncements = React.useCallback(async () => {
         try {
@@ -163,6 +179,43 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         setConfirmedForceIds([]);
         loadAnnouncements();
     }, [loadAnnouncements]);
+
+    React.useEffect(() => {
+        const token = String(localStorage.getItem('token') || '').trim();
+        if (!token || !isStaffUser) return;
+        (async () => {
+            try {
+                const stats: any = await getMyPenaltyPendingStats();
+                const pending = Number(stats?.forcePendingCount || 0);
+                if (pending <= 0) return;
+                const listRes: any = await getMyPenaltyTickets({
+                    page: 1,
+                    limit: 10,
+                    status: 'PENDING_CONFIRM',
+                });
+                const list = Array.isArray(listRes?.data) ? listRes.data : [];
+                const preload = list.map((x: any) => ({
+                    id: `preload-penalty-${x.id}`,
+                    type: 'PENALTY_TICKET',
+                    title: '【强提醒】你有新的罚单待处理',
+                    content: `罚单号 ${x.ticketNo}，请优先确认或申诉。`,
+                    route: '/staff/workbench',
+                    payload: { force: true, ticketId: x.id, ticketNo: x.ticketNo },
+                    createdAt: x?.createdAt || new Date().toISOString(),
+                }));
+                setPenaltyForceQueue((prev) => {
+                    const seen = new Set(prev.map((i) => String(i.id)));
+                    const merged = [...prev];
+                    for (const item of preload) {
+                        if (!seen.has(String(item.id))) merged.push(item as any);
+                    }
+                    return merged;
+                });
+            } catch (e: any) {
+                console.error('[penalty-force] preload failed', e?.message || e);
+            }
+        })();
+    }, [isStaffUser]);
 
     const loadRealtimeNotifications = React.useCallback(async () => {
         try {
@@ -213,6 +266,12 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     const item = msg.item as RealtimeNotificationItem;
                     setRealtimeList((prev) => [msg.item as RealtimeNotificationItem, ...prev].slice(0, 200));
                     setRealtimeUnreadCount(Number(msg?.unreadCount || 0));
+                    if (isPenaltyForceItem(item)) {
+                        setPenaltyForceQueue((prev) => {
+                            if (prev.some((x) => String(x.id) === String(item.id))) return prev;
+                            return [item, ...prev];
+                        });
+                    }
                     // 弱提示：右上角实时弹出，可点击直接跳转
                     api.open({
                         key: item.id,
@@ -252,7 +311,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             eventSource.close();
             realtimeEventSourceRef.current = null;
         };
-    }, [loadRealtimeNotifications, api, handleRealtimeJump]);
+    }, [loadRealtimeNotifications, api, handleRealtimeJump, isPenaltyForceItem]);
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
@@ -611,6 +670,35 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                                 renderItem={(note) => <List.Item>{note}</List.Item>}
                             />
                         </Space>
+                    </Modal>
+
+                    <Modal
+                        title="强提醒：罚单待处理"
+                        open={isStaffUser && activePenaltyForceQueue.length > 0}
+                        closable={false}
+                        maskClosable={false}
+                        cancelButtonProps={{ style: { display: 'none' } }}
+                        okText="去处理（下一条）"
+                        onOk={() => {
+                            const current = activePenaltyForceQueue[0];
+                            if (!current) return;
+                            setPenaltyAckIds((prev) => [...prev, String(current.id)]);
+                            history.push('/staff/workbench');
+                        }}
+                    >
+                        {activePenaltyForceQueue[0] ? (
+                            <div>
+                                <Typography.Title level={5}>
+                                    {activePenaltyForceQueue[0].title || '你有新的罚单待处理'}
+                                </Typography.Title>
+                                <div style={{ marginBottom: 8 }}>
+                                    {activePenaltyForceQueue[0].content || '请尽快在打手工作台完成确认或申诉。'}
+                                </div>
+                                <Text type="secondary">
+                                    将跳转至打手工作台处理，处理完成后该提醒会自动减少。
+                                </Text>
+                            </div>
+                        ) : null}
                     </Modal>
                 </>
             );
