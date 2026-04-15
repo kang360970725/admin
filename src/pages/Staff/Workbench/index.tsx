@@ -13,6 +13,7 @@ import {
     Row, Select,
     Space,
     Statistic,
+    Table,
     Tag,
     Watermark,
 } from 'antd';
