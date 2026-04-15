@@ -24,10 +24,54 @@ import {
   updateCouponTemplateStatus,
 } from '@/services/api';
 
-const templateStatusOptions = ['DRAFT', 'ACTIVE', 'DISABLED', 'EXPIRED'].map((x) => ({ label: x, value: x }));
-const templateTypeOptions = ['CASH', 'DISCOUNT', 'FULL_REDUCTION', 'FREE'].map((x) => ({ label: x, value: x }));
-const scopeOptions = ['ALL', 'PROJECT', 'CATEGORY', 'USER_LEVEL'].map((x) => ({ label: x, value: x }));
-const userCouponStatusOptions = ['UNUSED', 'USED', 'EXPIRED', 'LOCKED'].map((x) => ({ label: x, value: x }));
+const templateStatusDict: Record<string, string> = {
+  DRAFT: '草稿',
+  ACTIVE: '生效',
+  DISABLED: '停用',
+  EXPIRED: '已过期',
+};
+const templateTypeDict: Record<string, string> = {
+  CASH: '现金券',
+  DISCOUNT: '折扣券',
+  FULL_REDUCTION: '满减券',
+  FREE: '免单券',
+};
+const scopeDict: Record<string, string> = {
+  ALL: '全部项目',
+  PROJECT: '指定项目',
+  CATEGORY: '指定分类',
+  USER_LEVEL: '指定等级',
+};
+const userCouponStatusDict: Record<string, string> = {
+  UNUSED: '未使用',
+  USED: '已使用',
+  EXPIRED: '已过期',
+  LOCKED: '已锁定',
+};
+
+const templateStatusOptions = Object.keys(templateStatusDict).map((value) => ({
+  value,
+  label: templateStatusDict[value],
+}));
+const templateTypeOptions = Object.keys(templateTypeDict).map((value) => ({
+  value,
+  label: templateTypeDict[value],
+}));
+const scopeOptions = Object.keys(scopeDict).map((value) => ({
+  value,
+  label: scopeDict[value],
+}));
+const userCouponStatusOptions = Object.keys(userCouponStatusDict).map((value) => ({
+  value,
+  label: userCouponStatusDict[value],
+}));
+
+const formatTime = (v?: string | null) => {
+  if (!v) return '-';
+  const d = dayjs(v);
+  if (!d.isValid()) return '-';
+  return d.format('YYYY-MM-DD HH:mm:ss');
+};
 
 const CouponsPage: React.FC = () => {
   const [tab, setTab] = useState<'templates' | 'user-coupons'>('templates');
@@ -85,11 +129,16 @@ const CouponsPage: React.FC = () => {
     () => [
       { title: 'ID', dataIndex: 'id', width: 80 },
       { title: '名称', dataIndex: 'name' },
-      { title: '类型', dataIndex: 'type', width: 140 },
-      { title: '状态', dataIndex: 'status', width: 120, render: (v: string) => <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{v}</Tag> },
+      { title: '类型', dataIndex: 'type', width: 140, render: (v: string) => templateTypeDict[v] || '-' },
+      {
+        title: '状态',
+        dataIndex: 'status',
+        width: 120,
+        render: (v: string) => <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{templateStatusDict[v] || '-'}</Tag>,
+      },
       { title: '优惠值', dataIndex: 'discountValue', width: 120 },
       { title: '门槛', dataIndex: 'thresholdAmount', width: 120 },
-      { title: '作用域', dataIndex: 'applicableScope', width: 120 },
+      { title: '作用域', dataIndex: 'applicableScope', width: 120, render: (v: string) => scopeDict[v] || '-' },
       { title: '发放/已用', width: 140, render: (_: any, r: any) => `${r?.issuedCount || 0}/${r?.usedCount || 0}` },
       {
         title: '操作',
@@ -111,7 +160,7 @@ const CouponsPage: React.FC = () => {
                   }
                 }}
               >
-                {item.value}
+                {item.label}
               </Button>
             ))}
           </Space>
@@ -126,11 +175,11 @@ const CouponsPage: React.FC = () => {
       { title: '券ID', dataIndex: 'id', width: 90 },
       { title: '用户', width: 180, render: (_: any, r: any) => `${r?.user?.name || '-'}(${r?.user?.id || '-'})` },
       { title: '模板', width: 220, render: (_: any, r: any) => `${r?.template?.name || '-'}(#${r?.templateId || '-'})` },
-      { title: '状态', dataIndex: 'status', width: 120 },
+      { title: '状态', dataIndex: 'status', width: 120, render: (v: string) => userCouponStatusDict[v] || '-' },
       { title: '订单ID', dataIndex: 'orderId', width: 100 },
-      { title: '领取时间', dataIndex: 'receivedAt', width: 180 },
-      { title: '过期时间', dataIndex: 'expiresAt', width: 180 },
-      { title: '使用时间', dataIndex: 'usedAt', width: 180 },
+      { title: '领取时间', dataIndex: 'receivedAt', width: 180, render: (v: string) => formatTime(v) },
+      { title: '过期时间', dataIndex: 'expiresAt', width: 180, render: (v: string) => formatTime(v) },
+      { title: '使用时间', dataIndex: 'usedAt', width: 180, render: (v: string) => formatTime(v) },
     ],
     [],
   );
