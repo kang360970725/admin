@@ -181,6 +181,7 @@ const PenaltiesPage: React.FC = () => {
         page: 1,
         limit: 30,
         userType: 'STAFF',
+        status: 'ACTIVE',
         search: String(search || '').trim() || undefined,
       });
       const list = Array.isArray(res?.data) ? res.data : [];
