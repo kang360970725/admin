@@ -150,6 +150,7 @@ export default defineConfig({
         { path: '/system/announcements', name: '系统公告', component: '@/pages/System/Announcements', access: 'canViewAnnouncements' },
         { path: '/system/duty-cs', name: '当班客服配置', component: '@/pages/System/DutyCsSchedules', access: 'canViewDutyCsSchedules' },
         { path: '/system/coupons', name: '优惠券管理', component: '@/pages/System/Coupons', access: 'canViewCoupons' },
+        { path: '/system/penalties', name: '罚单管理', component: '@/pages/System/Penalties', access: 'canViewPenalties' },
         { path: '/system/notification-test-push', name: '测试推送中心', component: '@/pages/System/NotificationTestPush', access: 'canViewNotificationTestPush' },
       ],
     },

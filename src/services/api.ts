@@ -1501,3 +1501,114 @@ export async function postFinanceRecordList(data: any) {
         data,
     });
 }
+
+// ---------------------- Penalties API ----------------------
+
+export async function getPenaltyDict() {
+  return request(`${API_BASE}/penalties/dict`, {
+    method: 'POST',
+    data: {},
+  });
+}
+
+export async function getPenaltyOverview() {
+  return request(`${API_BASE}/penalties/stats/overview`, {
+    method: 'POST',
+    data: {},
+  });
+}
+
+export async function getPenaltyRules(data: any) {
+  return request(`${API_BASE}/penalties/rules/list`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function postPenaltyRuleCreate(data: any) {
+  return request(`${API_BASE}/penalties/rules/create`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function postPenaltyRuleUpdate(data: any) {
+  return request(`${API_BASE}/penalties/rules/update`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyTickets(data: any) {
+  return request(`${API_BASE}/penalties/tickets/list`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyTicketDetail(data: { ticketId: number }) {
+  return request(`${API_BASE}/penalties/tickets/detail`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyTicketContext(data: { userId: number; ruleIds: number[] }) {
+  return request(`${API_BASE}/penalties/tickets/context`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function postPenaltyTicketCreate(data: any) {
+  return request(`${API_BASE}/penalties/tickets/create`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function postPenaltyTicketRemind(data: { ticketId: number }) {
+  return request(`${API_BASE}/penalties/tickets/remind`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyAppeals(data: any) {
+  return request(`${API_BASE}/penalties/appeals/list`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function postPenaltyReviewAppeal(data: {
+  ticketId: number;
+  approved: boolean;
+  reviewRemark?: string;
+}) {
+  return request(`${API_BASE}/penalties/tickets/review-appeal`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyFundFlows(data: any) {
+  return request(`${API_BASE}/penalties/fund/flows`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyRanking(data: { top?: number }) {
+  return request(`${API_BASE}/penalties/ranking/list`, {
+    method: 'POST',
+    data,
+  });
+}
+
+export async function getPenaltyRuleStatsByUser(data: { userId: number }) {
+  return request(`${API_BASE}/penalties/stats/rule-categories`, {
+    method: 'POST',
+    data,
+  });
+}
