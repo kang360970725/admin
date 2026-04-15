@@ -1,8 +1,10 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import {Avatar, Badge, Button, Dropdown, List, message, Modal, Popover, Result, Space, Typography, notification} from 'antd';
+import {Avatar, Badge, Button, Dropdown, Input, List, message, Modal, Popover, Result, Space, Typography, notification} from 'antd';
 import { BellOutlined, InfoCircleFilled, UserOutlined } from '@ant-design/icons';
 import {
+    appealMyPenaltyTicket,
+    confirmMyPenaltyTicket,
     getMyPenaltyPendingStats,
     getMyPenaltyTickets,
     clearAllRealtimeNotifications,
@@ -123,8 +125,9 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [realtimeOpen, setRealtimeOpen] = React.useState(false);
     const [realtimeList, setRealtimeList] = React.useState<RealtimeNotificationItem[]>([]);
     const [realtimeUnreadCount, setRealtimeUnreadCount] = React.useState(0);
-    const [penaltyForceQueue, setPenaltyForceQueue] = React.useState<RealtimeNotificationItem[]>([]);
-    const [penaltyAckIds, setPenaltyAckIds] = React.useState<string[]>([]);
+    const [penaltyPendingTickets, setPenaltyPendingTickets] = React.useState<any[]>([]);
+    const [penaltyAppealContent, setPenaltyAppealContent] = React.useState('');
+    const [penaltyActionLoading, setPenaltyActionLoading] = React.useState(false);
     const [api, contextHolder] = notification.useNotification();
     // 仅记录“本次进入已确认”的强制公告，刷新或重新登录后会再次弹出
     const [confirmedForceIds, setConfirmedForceIds] = React.useState<number[]>([]);
@@ -148,10 +151,8 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     }, []);
     const isCustomerService = String(currentUser?.userType || '') === 'CUSTOMER_SERVICE';
     const isStaffUser = String(currentUser?.userType || '') === 'STAFF';
-    const activePenaltyForceQueue = React.useMemo(
-        () => penaltyForceQueue.filter((item) => !penaltyAckIds.includes(String(item.id))),
-        [penaltyForceQueue, penaltyAckIds],
-    );
+    const activePenaltyTicket = penaltyPendingTickets[0] || null;
+    const penaltyForceOpen = isStaffUser && penaltyPendingTickets.length > 0;
 
     const isPenaltyForceItem = React.useCallback((item?: RealtimeNotificationItem | null) => {
         if (!item) return false;
@@ -180,42 +181,27 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         loadAnnouncements();
     }, [loadAnnouncements]);
 
-    React.useEffect(() => {
+    const loadPenaltyPendingTickets = React.useCallback(async () => {
         const token = String(localStorage.getItem('token') || '').trim();
         if (!token || !isStaffUser) return;
-        (async () => {
-            try {
-                const stats: any = await getMyPenaltyPendingStats();
-                const pending = Number(stats?.forcePendingCount || 0);
-                if (pending <= 0) return;
-                const listRes: any = await getMyPenaltyTickets({
-                    page: 1,
-                    limit: 10,
-                    status: 'PENDING_CONFIRM',
-                });
-                const list = Array.isArray(listRes?.data) ? listRes.data : [];
-                const preload = list.map((x: any) => ({
-                    id: `preload-penalty-${x.id}`,
-                    type: 'PENALTY_TICKET',
-                    title: '【强提醒】你有新的罚单待处理',
-                    content: `罚单号 ${x.ticketNo}，请优先确认或申诉。`,
-                    route: '/staff/workbench',
-                    payload: { force: true, ticketId: x.id, ticketNo: x.ticketNo },
-                    createdAt: x?.createdAt || new Date().toISOString(),
-                }));
-                setPenaltyForceQueue((prev) => {
-                    const seen = new Set(prev.map((i) => String(i.id)));
-                    const merged = [...prev];
-                    for (const item of preload) {
-                        if (!seen.has(String(item.id))) merged.push(item as any);
-                    }
-                    return merged;
-                });
-            } catch (e: any) {
-                console.error('[penalty-force] preload failed', e?.message || e);
-            }
-        })();
+        try {
+            // 仅“待确认/待申诉”需要强制动作，不包含 APPEAL_PENDING
+            const listRes: any = await getMyPenaltyTickets({
+                page: 1,
+                limit: 20,
+                status: 'PENDING_CONFIRM',
+            });
+            const list = Array.isArray(listRes?.data) ? listRes.data : [];
+            setPenaltyPendingTickets(list);
+            if (!list.length) setPenaltyAppealContent('');
+        } catch (e: any) {
+            console.error('[penalty-force] load failed', e?.message || e);
+        }
     }, [isStaffUser]);
+
+    React.useEffect(() => {
+        void loadPenaltyPendingTickets();
+    }, [loadPenaltyPendingTickets]);
 
     const loadRealtimeNotifications = React.useCallback(async () => {
         try {
@@ -267,10 +253,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     setRealtimeList((prev) => [msg.item as RealtimeNotificationItem, ...prev].slice(0, 200));
                     setRealtimeUnreadCount(Number(msg?.unreadCount || 0));
                     if (isPenaltyForceItem(item)) {
-                        setPenaltyForceQueue((prev) => {
-                            if (prev.some((x) => String(x.id) === String(item.id))) return prev;
-                            return [item, ...prev];
-                        });
+                        void loadPenaltyPendingTickets();
                     }
                     // 弱提示：右上角实时弹出，可点击直接跳转
                     api.open({
@@ -311,7 +294,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             eventSource.close();
             realtimeEventSourceRef.current = null;
         };
-    }, [loadRealtimeNotifications, api, handleRealtimeJump, isPenaltyForceItem]);
+    }, [loadRealtimeNotifications, api, handleRealtimeJump, isPenaltyForceItem, loadPenaltyPendingTickets]);
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
@@ -322,6 +305,53 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         }, 15000);
         return () => window.clearInterval(timer);
     }, [loadRealtimeNotifications]);
+
+    React.useEffect(() => {
+        const token = String(localStorage.getItem('token') || '').trim();
+        if (!token || !isStaffUser) return;
+        const timer = window.setInterval(() => {
+            void loadPenaltyPendingTickets();
+        }, 10000);
+        return () => window.clearInterval(timer);
+    }, [isStaffUser, loadPenaltyPendingTickets]);
+
+    const submitPenaltyConfirmInModal = React.useCallback(async () => {
+        if (!activePenaltyTicket?.id) return;
+        try {
+            setPenaltyActionLoading(true);
+            await confirmMyPenaltyTicket({ ticketId: Number(activePenaltyTicket.id) });
+            message.success('处罚已确认');
+            setPenaltyAppealContent('');
+            await loadPenaltyPendingTickets();
+        } catch (e: any) {
+            message.error(e?.data?.message || e?.response?.data?.message || e?.message || '确认处罚失败');
+        } finally {
+            setPenaltyActionLoading(false);
+        }
+    }, [activePenaltyTicket, loadPenaltyPendingTickets]);
+
+    const submitPenaltyAppealInModal = React.useCallback(async () => {
+        if (!activePenaltyTicket?.id) return;
+        const content = String(penaltyAppealContent || '').trim();
+        if (!content) {
+            message.warning('请先填写申诉说明');
+            return;
+        }
+        try {
+            setPenaltyActionLoading(true);
+            await appealMyPenaltyTicket({
+                ticketId: Number(activePenaltyTicket.id),
+                content,
+            });
+            message.success('申诉已提交');
+            setPenaltyAppealContent('');
+            await loadPenaltyPendingTickets();
+        } catch (e: any) {
+            message.error(e?.data?.message || e?.response?.data?.message || e?.message || '提交申诉失败');
+        } finally {
+            setPenaltyActionLoading(false);
+        }
+    }, [activePenaltyTicket, penaltyAppealContent, loadPenaltyPendingTickets]);
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
@@ -674,29 +704,44 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
 
                     <Modal
                         title="强提醒：罚单待处理"
-                        open={isStaffUser && activePenaltyForceQueue.length > 0}
+                        open={penaltyForceOpen}
                         closable={false}
                         maskClosable={false}
-                        cancelButtonProps={{ style: { display: 'none' } }}
-                        okText="去处理（下一条）"
-                        onOk={() => {
-                            const current = activePenaltyForceQueue[0];
-                            if (!current) return;
-                            setPenaltyAckIds((prev) => [...prev, String(current.id)]);
-                            history.push('/staff/workbench');
-                        }}
+                        keyboard={false}
+                        footer={(
+                            <Space>
+                                <Button
+                                    loading={penaltyActionLoading}
+                                    onClick={submitPenaltyAppealInModal}
+                                >
+                                    提交申诉
+                                </Button>
+                                <Button
+                                    type="primary"
+                                    danger
+                                    loading={penaltyActionLoading}
+                                    onClick={submitPenaltyConfirmInModal}
+                                >
+                                    确认处罚
+                                </Button>
+                            </Space>
+                        )}
                     >
-                        {activePenaltyForceQueue[0] ? (
+                        {activePenaltyTicket ? (
                             <div>
                                 <Typography.Title level={5}>
-                                    {activePenaltyForceQueue[0].title || '你有新的罚单待处理'}
+                                    你有待处理罚单（必须确认处罚或提交申诉）
                                 </Typography.Title>
-                                <div style={{ marginBottom: 8 }}>
-                                    {activePenaltyForceQueue[0].content || '请尽快在打手工作台完成确认或申诉。'}
-                                </div>
-                                <Text type="secondary">
-                                    将跳转至打手工作台处理，处理完成后该提醒会自动减少。
-                                </Text>
+                                <div style={{ marginBottom: 8 }}>罚单号：{activePenaltyTicket.ticketNo || '-'}</div>
+                                <div style={{ marginBottom: 8 }}>处罚金额：{activePenaltyTicket.finalAmount ?? '-'}</div>
+                                <div style={{ marginBottom: 8 }}>当前剩余待处理：{penaltyPendingTickets.length}</div>
+                                <Input.TextArea
+                                    rows={4}
+                                    placeholder="如需申诉，请填写申诉说明（必填）"
+                                    value={penaltyAppealContent}
+                                    onChange={(e) => setPenaltyAppealContent(e.target.value)}
+                                    maxLength={2000}
+                                />
                             </div>
                         ) : null}
                     </Modal>
