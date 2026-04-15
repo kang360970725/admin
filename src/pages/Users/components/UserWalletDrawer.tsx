@@ -54,6 +54,14 @@ export default function UserWalletDrawer(props: any) {
         return dict?.[code] || code;
     };
 
+    const resolveBizTypeLabel = (row: any) => {
+        // 罚单扣款当前复用 DEPOSIT_DEDUCT 枚举，但展示应以业务来源优先
+        if (String(row?.sourceType || '') === 'PENALTY_TICKET') {
+            return '罚单扣款';
+        }
+        return getEnumText('WalletBizType', row?.bizType);
+    };
+
     const directionMetaMap: Record<string, { color: string; icon: React.ReactNode }> = {
         IN: { color: 'green', icon: <span style={{ fontWeight: 700 }}>↑</span> },
         OUT: { color: 'red', icon: <span style={{ fontWeight: 700 }}>↓</span> },
@@ -97,7 +105,7 @@ export default function UserWalletDrawer(props: any) {
             dataIndex: 'bizType',
             width: 160,
             render: (_: any, r: any) => {
-                const label = getEnumText('WalletBizType', r.bizType);
+                const label = resolveBizTypeLabel(r);
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
                 return <Tag color={color}>{label}</Tag>;
             },

@@ -21,6 +21,7 @@ type WalletTransactionRow = {
     frozenAfter?: number | null;
 
     createdAt?: string;
+    sourceType?: string;
 };
 
 export default function WalletTransactions() {
@@ -65,6 +66,14 @@ export default function WalletTransactions() {
         return dict?.[code] || code;
     };
 
+    const resolveBizTypeLabel = (row: WalletTransactionRow) => {
+        // 罚单扣款当前复用 DEPOSIT_DEDUCT 枚举，但展示应以业务来源优先
+        if (String((row as any)?.sourceType || '') === 'PENALTY_TICKET') {
+            return '罚单扣款';
+        }
+        return getEnumText('WalletBizType', row.bizType);
+    };
+
     const columns: any = [
         {
             title: '流向',
@@ -94,7 +103,7 @@ export default function WalletTransactions() {
                 ? Object.fromEntries(Object.entries(enums.WalletBizType).map(([k, v]) => [k, { text: v }]))
                 : undefined,
             render: (_: any, r: WalletTransactionRow) => {
-                const label = getEnumText('WalletBizType', r.bizType);
+                const label = resolveBizTypeLabel(r);
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
                 return <Tag color={color}>{label}</Tag>;
             },
