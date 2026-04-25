@@ -134,7 +134,9 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [loadingAnnouncements, setLoadingAnnouncements] = React.useState(false);
     const [versionManifest, setVersionManifest] = React.useState<VersionManifest | null>(null);
     const [versionModalOpen, setVersionModalOpen] = React.useState(false);
+    const [forceReadReachedBottom, setForceReadReachedBottom] = React.useState(false);
     const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
+    const forceReadContentRef = React.useRef<HTMLDivElement | null>(null);
     const versionPromptedRef = React.useRef<string>('');
     const isDevEnv = String(process.env.UMI_ENV || '') === 'development';
     const forceQueue = React.useMemo(
@@ -153,6 +155,14 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const isStaffUser = String(currentUser?.userType || '') === 'STAFF';
     const activePenaltyTicket = penaltyPendingTickets[0] || null;
     const penaltyForceOpen = isStaffUser && penaltyPendingTickets.length > 0;
+    const currentForceAnnouncement = forceQueue[0] || null;
+
+    const checkForceReadReachedBottom = React.useCallback(() => {
+        const el = forceReadContentRef.current;
+        if (!el) return;
+        const reached = el.scrollHeight - el.scrollTop - el.clientHeight <= 8;
+        setForceReadReachedBottom(reached);
+    }, []);
 
     const isPenaltyForceItem = React.useCallback((item?: RealtimeNotificationItem | null) => {
         if (!item) return false;
@@ -180,6 +190,12 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         setConfirmedForceIds([]);
         loadAnnouncements();
     }, [loadAnnouncements]);
+
+    React.useEffect(() => {
+        setForceReadReachedBottom(false);
+        const timer = window.setTimeout(() => checkForceReadReachedBottom(), 0);
+        return () => window.clearTimeout(timer);
+    }, [currentForceAnnouncement?.id, checkForceReadReachedBottom]);
 
     const loadPenaltyPendingTickets = React.useCallback(async () => {
         const token = String(localStorage.getItem('token') || '').trim();
@@ -595,7 +611,14 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                     <Modal
                         title="公告中心"
                         open={announcementOpen}
-                        width={760}
+                        width="min(960px, calc(100vw - 32px))"
+                        styles={{
+                            body: {
+                                maxHeight: 'calc(100vh - 220px)',
+                                overflowY: 'auto',
+                                overflowX: 'hidden',
+                            },
+                        }}
                         footer={null}
                         onCancel={() => setAnnouncementOpen(false)}
                     >
@@ -647,19 +670,45 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         open={!isCustomerService && forceQueue.length > 0}
                         closable={false}
                         maskClosable={false}
+                        width="min(960px, calc(100vw - 32px))"
+                        styles={{
+                            body: {
+                                paddingTop: 12,
+                                maxHeight: 'calc(100vh - 230px)',
+                                overflow: 'hidden',
+                            },
+                        }}
+                        okButtonProps={{ disabled: !forceReadReachedBottom }}
                         cancelButtonProps={{ style: { display: 'none' } }}
                         okText="已阅读，下一条"
                         onOk={async () => {
-                            const current = forceQueue[0];
+                            const current = currentForceAnnouncement;
                             if (!current) return;
                             await readAnnouncement({ announcementId: current.id });
                             setConfirmedForceIds((prev) => [...prev, Number(current.id)]);
+                            setForceReadReachedBottom(false);
                         }}
                     >
-                        {forceQueue[0] ? (
-                            <div>
-                                <Typography.Title level={5}>{forceQueue[0].title}</Typography.Title>
-                                <div dangerouslySetInnerHTML={{ __html: forceQueue[0].content || '' }} />
+                        {currentForceAnnouncement ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 290px)' }}>
+                                <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                                    {currentForceAnnouncement.title}
+                                </Typography.Title>
+                                <div
+                                    ref={forceReadContentRef}
+                                    onScroll={checkForceReadReachedBottom}
+                                    style={{
+                                        flex: 1,
+                                        minHeight: 160,
+                                        overflowY: 'auto',
+                                        overflowX: 'hidden',
+                                        paddingRight: 8,
+                                    }}
+                                    dangerouslySetInnerHTML={{ __html: currentForceAnnouncement.content || '' }}
+                                />
+                                <Typography.Text type="secondary" style={{ marginTop: 10 }}>
+                                    请先阅读到底，再点击“已阅读，下一条”
+                                </Typography.Text>
                             </div>
                         ) : null}
                     </Modal>

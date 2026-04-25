@@ -100,6 +100,10 @@ const OrderDetailPage: React.FC = () => {
     const [refundOpen, setRefundOpen] = useState(false);
     const [refundRemark, setRefundRemark] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
+    const [refundStaffLiable, setRefundStaffLiable] = useState(false);
+    const [refundLiableUserIds, setRefundLiableUserIds] = useState<number[]>([]);
+    const [refundHasCompensation, setRefundHasCompensation] = useState(false);
+    const [refundCompensationAmount, setRefundCompensationAmount] = useState<number | null>(null);
 
     // ✅ 修复工具（重新结算 / 钱包对齐）
     const [toolsOpen, setToolsOpen] = useState(false);
@@ -822,11 +826,29 @@ const OrderDetailPage: React.FC = () => {
 
     const submitRefund = async () => {
         try {
+            const liableUserIdsForSubmit = refundStaffLiable ? refundRequiredLiableUserIds : [];
+            if (refundStaffLiable && liableUserIdsForSubmit.length === 0) {
+                message.warning('请至少选择一名有责打手');
+                return;
+            }
+            if (refundHasCompensation && !(Number(refundCompensationAmount || 0) > 0)) {
+                message.warning('请输入大于 0 的赔付金额');
+                return;
+            }
             setRefundLoading(true);
-            await refundOrder({id: order?.id, remark: refundRemark});
+            await refundOrder({
+                id: Number(order?.id),
+                remark: refundRemark || undefined,
+                staffLiable: refundStaffLiable,
+                liableUserIds: refundStaffLiable ? liableUserIdsForSubmit : undefined,
+                hasCompensation: refundHasCompensation,
+                compensationAmount: refundHasCompensation ? Number(refundCompensationAmount) : undefined,
+            });
             message.success('退款成功');
             setRefundOpen(false);
-            loadDetail();
+            await loadDetail();
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || '退款失败');
         } finally {
             setRefundLoading(false);
         }
@@ -1321,6 +1343,39 @@ const OrderDetailPage: React.FC = () => {
         const list = Array.isArray(order?.dispatches) ? order?.dispatches : [];
         return list;
     }, [order]);
+
+    const refundStaffOptions = useMemo(() => {
+        const dispatches = Array.isArray(order?.dispatches) ? order.dispatches : [];
+        const map = new Map<number, { value: number; label: string }>();
+        for (const d of dispatches) {
+            const parts = Array.isArray(d?.participants) ? d.participants : [];
+            for (const p of parts) {
+                const userId = Number(p?.userId ?? p?.user?.id);
+                if (!Number.isFinite(userId) || userId <= 0) continue;
+                if (map.has(userId)) continue;
+                const name = p?.user?.name || p?.user?.realName || `打手#${userId}`;
+                const phone = p?.user?.phone ? `(${p.user.phone})` : '';
+                map.set(userId, {
+                    value: userId,
+                    label: `${name}${phone}`,
+                });
+            }
+        }
+        return Array.from(map.values());
+    }, [order]);
+    const refundRequiredLiableUserIds = useMemo(
+        () => refundStaffOptions.map((x) => Number(x.value)).filter((n) => Number.isFinite(n) && n > 0),
+        [refundStaffOptions],
+    );
+
+    const openRefundModal = () => {
+        setRefundRemark('');
+        setRefundStaffLiable(false);
+        setRefundLiableUserIds(refundRequiredLiableUserIds);
+        setRefundHasCompensation(false);
+        setRefundCompensationAmount(null);
+        setRefundOpen(true);
+    };
 
     const historyColumns = [
         {title: '轮次', dataIndex: 'round', width: 80},
@@ -2006,7 +2061,7 @@ const OrderDetailPage: React.FC = () => {
                                 确认收款
                             </Button>
                         ) : null}
-                        {order?.status !== 'REFUNDED' && <Button danger onClick={() => setRefundOpen(true)}>退款</Button>}
+                        {order?.status !== 'REFUNDED' && <Button danger onClick={openRefundModal}>退款</Button>}
                         <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button>
 
                         <Button onClick={openDispatchModal} disabled={!canDispatch || forbidEdit}>
@@ -2284,7 +2339,7 @@ const OrderDetailPage: React.FC = () => {
                                             </Button>
 
                                             {order?.status !== 'REFUNDED' ? (
-                                                <Button danger block onClick={() => setRefundOpen(true)}
+                                                <Button danger block onClick={openRefundModal}
                                                         style={{borderRadius: 14, height: 44}}>
                                                     退款
                                                 </Button>
@@ -2574,12 +2629,58 @@ const OrderDetailPage: React.FC = () => {
                 confirmLoading={refundLoading}
                 title="订单退款"
             >
-                <Input.TextArea
-                    rows={3}
-                    value={refundRemark}
-                    onChange={(e) => setRefundRemark(e.target.value)}
-                    placeholder="退款备注（可选）"
-                />
+                <Space direction="vertical" size={12} style={{width: '100%'}}>
+                    <Checkbox
+                        checked={refundStaffLiable}
+                        onChange={(e) => {
+                            const checked = Boolean(e.target.checked);
+                            setRefundStaffLiable(checked);
+                            if (checked) {
+                                setRefundLiableUserIds(refundRequiredLiableUserIds);
+                            }
+                        }}
+                    >
+                        打手有责（触发额外处罚）
+                    </Checkbox>
+
+                    {refundStaffLiable ? (
+                        <Space direction="vertical" size={8} style={{width: '100%'}}>
+                            <Typography.Text type="secondary">有责打手固定为本单全部打手（不可编辑）</Typography.Text>
+                            <Select
+                                mode="multiple"
+                                style={{width: '100%'}}
+                                options={refundStaffOptions}
+                                value={refundLiableUserIds}
+                                disabled
+                            />
+                        </Space>
+                    ) : null}
+
+                    <Checkbox
+                        checked={refundHasCompensation}
+                        onChange={(e) => setRefundHasCompensation(Boolean(e.target.checked))}
+                    >
+                        产生赔付（由本单打手共同承担）
+                    </Checkbox>
+
+                    {refundHasCompensation ? (
+                        <InputNumber
+                            style={{width: '100%'}}
+                            min={0.1}
+                            precision={2}
+                            placeholder="请输入赔付金额"
+                            value={refundCompensationAmount as any}
+                            onChange={(v) => setRefundCompensationAmount(v == null ? null : Number(v))}
+                        />
+                    ) : null}
+
+                    <Input.TextArea
+                        rows={3}
+                        value={refundRemark}
+                        onChange={(e) => setRefundRemark(e.target.value)}
+                        placeholder="退款备注（可选）"
+                    />
+                </Space>
             </Modal>
 
             {/* 编辑订单 */}

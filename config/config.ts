@@ -229,6 +229,7 @@ export default defineConfig({
         { path: '/wallet', redirect: '/wallet/overview' },
         { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview' },
         { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions' },
+        { path: '/wallet/replay-preview', name: '单用户预核算', component: '@/pages/Wallet/ReplayPreview', access: 'canViewWithdrawals' },
         { path: '/wallet/withdrawals', name: '提现审批', component: '@/pages/Wallet/Withdrawals', access: 'canViewWithdrawals' },
         { path: '/wallet/withdrawals/records', name: '提现记录', component: '@/pages/Wallet/Withdrawals/Records', access: 'canViewWithdrawals' },
       ],

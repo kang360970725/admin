@@ -500,22 +500,51 @@ export async function adjustSettlementFinalEarnings(data: { settlementId: number
  * 后端路由：POST /orders/refund
  */
 export async function refundOrder(
-    idOrDto: number | { id: number; remark?: string },
-    payload?: { remark?: string },
+    idOrDto:
+        | number
+        | {
+              id: number;
+              remark?: string;
+              staffLiable?: boolean;
+              liableUserIds?: number[];
+              hasCompensation?: boolean;
+              compensationAmount?: number;
+          },
+    payload?: {
+        remark?: string;
+        staffLiable?: boolean;
+        liableUserIds?: number[];
+        hasCompensation?: boolean;
+        compensationAmount?: number;
+    },
 ) {
     // 兼容：refundOrder(orderId, { remark })
     if (typeof idOrDto === 'number') {
         const id = Number(idOrDto);
         return request(`${API_BASE}/orders/refund`, {
             method: 'POST',
-            data: { id, remark: payload?.remark },
+            data: {
+                id,
+                remark: payload?.remark,
+                staffLiable: payload?.staffLiable,
+                liableUserIds: payload?.liableUserIds,
+                hasCompensation: payload?.hasCompensation,
+                compensationAmount: payload?.compensationAmount,
+            },
         });
     }
 
     // 兼容：refundOrder({ id, remark })
     return request(`${API_BASE}/orders/refund`, {
         method: 'POST',
-        data: { id: Number(idOrDto.id), remark: idOrDto.remark },
+        data: {
+            id: Number(idOrDto.id),
+            remark: idOrDto.remark,
+            staffLiable: idOrDto.staffLiable,
+            liableUserIds: idOrDto.liableUserIds,
+            hasCompensation: idOrDto.hasCompensation,
+            compensationAmount: idOrDto.compensationAmount,
+        },
     });
 }
 
@@ -617,6 +646,67 @@ export async function getWalletHolds(params: {
         `${API_BASE}/wallet/holds`,
         { method: 'GET', params },
     );
+}
+
+export interface WalletReplayPreview {
+    userId: number;
+    range: { startAt: string | null; endAt: string | null };
+    openingBalance: { available: number; frozen: number; total: number };
+    currentBalance: { available: number; frozen: number; total: number };
+    replayBalance: { available: number; frozen: number; total: number };
+    diff: { available: number; frozen: number; total: number };
+    settlementSummary: {
+        replayTotal: number;
+        historyTotal: number;
+        diff: number;
+        signRule: string;
+    };
+    withdrawalSummary: {
+        replayTotal: number;
+        historyTotal: number;
+        diff: number;
+        signRule: string;
+    };
+    stats: {
+        txCount: number;
+        ignoredCount: number;
+        mismatchCount: number;
+        negativeMoments: number;
+        ignoredBizBreakdown: Record<string, number>;
+        bizBreakdown: Record<string, number>;
+        noBalanceBizTypes: string[];
+    };
+    mismatchRows: Array<{
+        id: number;
+        createdAt: string;
+        bizType: string;
+        status: string;
+        direction: 'IN' | 'OUT';
+        amount: number;
+        sourceType?: string | null;
+        sourceId?: number | null;
+        orderId?: number | null;
+        settlementId?: number | null;
+        dispatchId?: number | null;
+        storedAvailableAfter: number;
+        storedFrozenAfter: number;
+        replayAvailableAfter: number;
+        replayFrozenAfter: number;
+        deltaAvailable: number;
+        deltaFrozen: number;
+    }>;
+}
+
+export async function getWalletReplayPreview(params: {
+    userId: number;
+    startAt?: string;
+    endAt?: string;
+    limitMismatches?: number;
+}) {
+    return request<WalletReplayPreview>(`${API_BASE}/wallet/replay-preview`, {
+        method: 'GET',
+        params,
+    });
 }
 
 // ---------------------- Dashboard API ----------------------
