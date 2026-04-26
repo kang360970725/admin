@@ -50,57 +50,27 @@ const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
 
-async function fetchStaticVersionManifest(): Promise<VersionManifest | null> {
-    const t = Date.now();
-    const pathCandidates = [
-        `/version-manifest.json?t=${t}`,
-    ];
-
-    // 兼容部署在子路径（如 /admin）时的版本清单读取
-    const segs = String(window.location.pathname || '')
-        .split('/')
-        .filter(Boolean);
-    if (segs.length > 0) {
-        pathCandidates.push(`/${segs[0]}/version-manifest.json?t=${t}`);
-    }
-
-    for (const url of pathCandidates) {
-        try {
-            const res = await fetch(url, { cache: 'no-store' });
-            if (!res.ok) {
-                continue;
-            }
-            const manifest = (await res.json()) as VersionManifest;
-            return manifest;
-        } catch {
-            // 继续尝试下一个候选地址
-        }
-    }
-
-    return null;
-}
-
 async function fetchVersionManifest(): Promise<VersionManifest | null> {
     try {
-        const remote = await getPublicLatestAppVersion();
-        if (remote === null) {
-            // 后台未初始化版本记录时，不触发强刷弹窗，先允许进入系统完成版本基线录入
+        const remote: any = await getPublicLatestAppVersion();
+        const version = String(remote?.version || '').trim();
+        const buildId = String(remote?.buildId || '').trim();
+        if (!version || !buildId) {
+            // 后台未初始化版本记录，或返回为空对象时，不触发强刷弹窗
             return null;
         }
-        if (remote?.version && remote?.buildId) {
-            return {
-                version: String(remote.version || '').trim(),
-                buildId: String(remote.buildId || '').trim(),
-                releasedAt: String(remote.releasedAt || '').trim(),
-                forceRefresh: Boolean(remote.forceRefresh),
-                title: String(remote.title || '').trim(),
-                notes: Array.isArray(remote.notes) ? remote.notes : [],
-            };
-        }
+        return {
+            version,
+            buildId,
+            releasedAt: String(remote.releasedAt || '').trim(),
+            forceRefresh: Boolean(remote.forceRefresh),
+            title: String(remote.title || '').trim(),
+            notes: Array.isArray(remote.notes) ? remote.notes : [],
+        };
     } catch (e: any) {
-        console.warn('[app-version] fallback to static manifest', e?.message || e);
+        console.warn('[app-version] load failed, skip popup', e?.message || e);
+        return null;
     }
-    return fetchStaticVersionManifest();
 }
 
 function buildVersionKey(manifest?: VersionManifest | null) {
@@ -454,7 +424,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             try {
                 const manifest = await fetchVersionManifest();
                 if (!manifest) {
-                    console.warn('[version-manifest] not found by all candidate paths');
+                    console.warn('[app-version] no active release record, skip popup');
                     return;
                 }
                 const remoteVersion = String(manifest?.version || '').trim();
