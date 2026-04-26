@@ -723,7 +723,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         title="强制阅读公告（每次进入需确认）"
                         // 客服不自动强弹，避免在订单详情/列表频繁跳转时影响效率；
                         // 客服仍可在“公告中心”查看并手动已读。
-                        open={!isCustomerService && forceQueue.length > 0}
+                        open={!versionModalOpen && !isCustomerService && forceQueue.length > 0}
                         closable={false}
                         maskClosable={false}
                         width="min(960px, calc(100vw - 32px))"
