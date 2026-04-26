@@ -49,6 +49,7 @@ const loginPath = '/login';
 const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
+const LOCAL_BUILD_PLACEHOLDER_REGEX = /^(development|test|pre|production)-0\.0\.0$/i;
 
 async function fetchVersionManifest(): Promise<VersionManifest | null> {
     try {
@@ -432,24 +433,33 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                 const forceRefresh = Boolean(manifest?.forceRefresh);
                 if (!forceRefresh) return;
 
+                const hasReliableLocalBuildId = Boolean(
+                    LOCAL_APP_BUILD_ID && !LOCAL_BUILD_PLACEHOLDER_REGEX.test(LOCAL_APP_BUILD_ID),
+                );
+                const hasReliableLocalVersion = Boolean(
+                    LOCAL_APP_VERSION && LOCAL_APP_VERSION !== '0.0.0',
+                );
+
                 // 优先按 buildId 判定；若本地 buildId 丢失，退化到 version 判定；
                 // 如远端有 buildId 但本地缺失，也按“需刷新”处理，避免漏弹窗。
                 const mismatchByBuildId = Boolean(
-                    remoteBuildId && LOCAL_APP_BUILD_ID && remoteBuildId !== LOCAL_APP_BUILD_ID,
+                    remoteBuildId && hasReliableLocalBuildId && remoteBuildId !== LOCAL_APP_BUILD_ID,
                 );
                 const mismatchByVersion = Boolean(
-                    remoteVersion && LOCAL_APP_VERSION && remoteVersion !== LOCAL_APP_VERSION,
+                    remoteVersion && hasReliableLocalVersion && remoteVersion !== LOCAL_APP_VERSION,
                 );
-                const mismatchByMissingLocalBuildId = Boolean(remoteBuildId && !LOCAL_APP_BUILD_ID);
+                // 本地版本信息是占位值时，不做强刷判定，先允许进入后台完成基线配置
+                const mismatchByMissingLocalBuildId = Boolean(
+                    remoteBuildId && !hasReliableLocalBuildId && hasReliableLocalVersion,
+                );
                 const needRefresh = mismatchByBuildId || mismatchByVersion || mismatchByMissingLocalBuildId;
                 if (!needRefresh) return;
 
                 const remoteKey = `${remoteVersion || 'unknown'}#${remoteBuildId || 'unknown'}`;
-                if (isDevEnv) {
-                    // 开发环境避免循环弹窗：同一版本只提示一次，便于联调
-                    const ackKey = String(sessionStorage.getItem(DEV_VERSION_ACK_STORAGE_KEY) || '').trim();
-                    if (ackKey === remoteKey) return;
-                }
+                const ackKey = String(sessionStorage.getItem(DEV_VERSION_ACK_STORAGE_KEY) || '').trim();
+                // 开发环境：同一版本只提示一次
+                // 非开发环境：仅当本地构建标识不可信（占位值）时，允许通过确认标记跳过循环弹窗
+                if (ackKey === remoteKey && (isDevEnv || !hasReliableLocalBuildId)) return;
                 if (versionPromptedRef.current === remoteKey) return;
                 versionPromptedRef.current = remoteKey;
 
@@ -773,7 +783,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         cancelButtonProps={{ style: { display: 'none' } }}
                         okText="立即刷新"
                         onOk={() => {
-                            if (isDevEnv) {
+                            if (isDevEnv || !LOCAL_APP_BUILD_ID || LOCAL_BUILD_PLACEHOLDER_REGEX.test(LOCAL_APP_BUILD_ID)) {
                                 sessionStorage.setItem(DEV_VERSION_ACK_STORAGE_KEY, buildVersionKey(versionManifest));
                             }
                             window.location.reload();
