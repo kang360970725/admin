@@ -955,6 +955,7 @@ export async function upsertAppVersion(data: {
     forceRefresh?: boolean;
     title?: string;
     notes?: string[];
+    mergePreviousNotes?: boolean;
     enabled?: boolean;
 }) {
     return request<AppVersionRecord>(`${API_BASE}/app-version/upsert`, {

@@ -13,6 +13,23 @@ const { Text } = Typography;
 
 type AppVersionRow = AppVersionRecord & { isActive?: boolean };
 
+function formatBeijingDateTime(input?: string) {
+  const raw = String(input || '').trim();
+  if (!raw) return '-';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
 const AppVersionsPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [activeBuildId, setActiveBuildId] = useState('');
@@ -31,6 +48,7 @@ const AppVersionsPage: React.FC = () => {
       forceRefresh: true,
       title: '版本更新说明',
       notesText: '',
+      mergePreviousNotes: true,
       enabled: true,
       releasedAt: '',
     });
@@ -46,6 +64,7 @@ const AppVersionsPage: React.FC = () => {
       forceRefresh: row.forceRefresh,
       title: row.title || '版本更新说明',
       notesText: Array.isArray(row.notes) ? row.notes.join('\n') : '',
+      mergePreviousNotes: true,
       enabled: row.enabled,
       releasedAt: row.releasedAt || '',
     });
@@ -77,9 +96,19 @@ const AppVersionsPage: React.FC = () => {
         width: 100,
         render: (_, row) => (row.enabled ? <Tag color="success">启用</Tag> : <Tag>停用</Tag>),
       },
-      { title: '发布时间', dataIndex: 'releasedAt', width: 190, valueType: 'dateTime' },
+      {
+        title: '发布时间(北京时间)',
+        dataIndex: 'releasedAt',
+        width: 200,
+        render: (_, row) => formatBeijingDateTime(row.releasedAt),
+      },
       { title: '标题', dataIndex: 'title', ellipsis: true },
-      { title: '创建时间', dataIndex: 'createdAt', width: 190, valueType: 'dateTime' },
+      {
+        title: '创建时间(北京时间)',
+        dataIndex: 'createdAt',
+        width: 200,
+        render: (_, row) => formatBeijingDateTime(row.createdAt),
+      },
       {
         title: '操作',
         valueType: 'option',
@@ -170,6 +199,7 @@ const AppVersionsPage: React.FC = () => {
               title: String(values.title || '版本更新说明').trim() || '版本更新说明',
               forceRefresh: Boolean(values.forceRefresh),
               enabled: Boolean(values.enabled),
+              mergePreviousNotes: Boolean(values.mergePreviousNotes ?? true),
               notes,
               releasedAt: String(values.releasedAt || '').trim() || undefined,
             });
@@ -215,6 +245,10 @@ const AppVersionsPage: React.FC = () => {
 
           <Form.Item label="更新说明（每行一条）" name="notesText">
             <Input.TextArea rows={6} placeholder="支持多行，保存后会按条展示" />
+          </Form.Item>
+
+          <Form.Item label="合并上一版说明" name="mergePreviousNotes" valuePropName="checked">
+            <Switch />
           </Form.Item>
 
           <Form.Item label="强制刷新" name="forceRefresh" valuePropName="checked">

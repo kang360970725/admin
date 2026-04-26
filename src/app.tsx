@@ -105,6 +105,29 @@ function buildVersionKey(manifest?: VersionManifest | null) {
     return `${version}#${buildId}`;
 }
 
+function formatBeijingDateTime(input?: string) {
+    const raw = String(input || '').trim();
+    if (!raw) return '-';
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return raw;
+    return d.toLocaleString('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+}
+
+function stripNoteTrailingTime(input?: string) {
+    return String(input || '')
+        .replace(/\s*[（(]?\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?[)）]?\s*$/g, '')
+        .trim();
+}
+
 function doLogout() {
     localStorage.removeItem('token');
     localStorage.removeItem('currentUser');
@@ -464,8 +487,6 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         };
 
         checkVersionManifest();
-        const timer = window.setInterval(checkVersionManifest, 60000);
-        return () => window.clearInterval(timer);
     }, [isDevEnv]);
 
     return {
@@ -795,12 +816,14 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                                 最新版本：{versionManifest?.version || '-'}（{versionManifest?.buildId || '-'}）
                             </Text>
                             <Text type="secondary">
-                                发布时间：{versionManifest?.releasedAt || '-'}
+                                发布时间：{formatBeijingDateTime(versionManifest?.releasedAt)}
                             </Text>
                             <List
                                 size="small"
                                 bordered
-                                dataSource={Array.isArray(versionManifest?.notes) ? versionManifest?.notes : []}
+                                dataSource={(Array.isArray(versionManifest?.notes) ? versionManifest?.notes : [])
+                                    .map((x) => stripNoteTrailingTime(String(x || '')))
+                                    .filter(Boolean)}
                                 locale={{ emptyText: '暂无更新说明' }}
                                 renderItem={(note) => <List.Item>{note}</List.Item>}
                             />
@@ -919,5 +942,13 @@ export const request: RuntimeConfig['request'] = {
             return { url, options: { ...options, headers } };
         },
     ],
-    responseInterceptors: [(response: any) => response],
+    responseInterceptors: [
+        (response: any) => {
+            const refreshedToken = String(response?.headers?.get?.('x-access-token') || '').trim();
+            if (refreshedToken) {
+                localStorage.setItem('token', refreshedToken);
+            }
+            return response;
+        },
+    ],
 };
