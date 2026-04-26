@@ -83,6 +83,10 @@ async function fetchStaticVersionManifest(): Promise<VersionManifest | null> {
 async function fetchVersionManifest(): Promise<VersionManifest | null> {
     try {
         const remote = await getPublicLatestAppVersion();
+        if (remote === null) {
+            // 后台未初始化版本记录时，不触发强刷弹窗，先允许进入系统完成版本基线录入
+            return null;
+        }
         if (remote?.version && remote?.buildId) {
             return {
                 version: String(remote.version || '').trim(),
