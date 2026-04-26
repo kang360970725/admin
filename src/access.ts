@@ -11,6 +11,7 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewPermissionManagement: has('system:permission:page'),
     canViewGameProjectManagement: has('system:game-project:page'),
     canViewSystemConfigs: has('system:role:page'),
+    canViewAppVersions: has('system:role:page'),
     canViewAnnouncements: has('system:role:page'),
     canViewDutyCsSchedules: has('system:role:page'),
     canViewNotificationTestPush: has('system:role:page'),

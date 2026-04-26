@@ -10,6 +10,7 @@ import {
     clearAllRealtimeNotifications,
     clearOneRealtimeNotification,
     getCurrentUser,
+    getPublicLatestAppVersion,
     getRealtimeStreamUrl,
     myAnnouncements,
     myPendingForceAnnouncements,
@@ -48,6 +49,55 @@ const loginPath = '/login';
 const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
+
+async function fetchStaticVersionManifest(): Promise<VersionManifest | null> {
+    const t = Date.now();
+    const pathCandidates = [
+        `/version-manifest.json?t=${t}`,
+    ];
+
+    // 兼容部署在子路径（如 /admin）时的版本清单读取
+    const segs = String(window.location.pathname || '')
+        .split('/')
+        .filter(Boolean);
+    if (segs.length > 0) {
+        pathCandidates.push(`/${segs[0]}/version-manifest.json?t=${t}`);
+    }
+
+    for (const url of pathCandidates) {
+        try {
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) {
+                continue;
+            }
+            const manifest = (await res.json()) as VersionManifest;
+            return manifest;
+        } catch {
+            // 继续尝试下一个候选地址
+        }
+    }
+
+    return null;
+}
+
+async function fetchVersionManifest(): Promise<VersionManifest | null> {
+    try {
+        const remote = await getPublicLatestAppVersion();
+        if (remote?.version && remote?.buildId) {
+            return {
+                version: String(remote.version || '').trim(),
+                buildId: String(remote.buildId || '').trim(),
+                releasedAt: String(remote.releasedAt || '').trim(),
+                forceRefresh: Boolean(remote.forceRefresh),
+                title: String(remote.title || '').trim(),
+                notes: Array.isArray(remote.notes) ? remote.notes : [],
+            };
+        }
+    } catch (e: any) {
+        console.warn('[app-version] fallback to static manifest', e?.message || e);
+    }
+    return fetchStaticVersionManifest();
+}
 
 function buildVersionKey(manifest?: VersionManifest | null) {
     const version = String(manifest?.version || 'unknown').trim();
@@ -375,20 +425,26 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
 
         const checkVersionManifest = async () => {
             try {
-                const res = await fetch(`/version-manifest.json?t=${Date.now()}`, {
-                    cache: 'no-store',
-                });
-                if (!res.ok) return;
-                const manifest = (await res.json()) as VersionManifest;
+                const manifest = await fetchVersionManifest();
+                if (!manifest) {
+                    console.warn('[version-manifest] not found by all candidate paths');
+                    return;
+                }
                 const remoteVersion = String(manifest?.version || '').trim();
                 const remoteBuildId = String(manifest?.buildId || '').trim();
                 const forceRefresh = Boolean(manifest?.forceRefresh);
                 if (!forceRefresh) return;
 
-                // 优先按 buildId 判定；若未配置 buildId，则退化到 version 判定
-                const mismatchByBuildId = Boolean(remoteBuildId && LOCAL_APP_BUILD_ID && remoteBuildId !== LOCAL_APP_BUILD_ID);
-                const mismatchByVersion = !remoteBuildId && Boolean(remoteVersion && LOCAL_APP_VERSION && remoteVersion !== LOCAL_APP_VERSION);
-                const needRefresh = mismatchByBuildId || mismatchByVersion;
+                // 优先按 buildId 判定；若本地 buildId 丢失，退化到 version 判定；
+                // 如远端有 buildId 但本地缺失，也按“需刷新”处理，避免漏弹窗。
+                const mismatchByBuildId = Boolean(
+                    remoteBuildId && LOCAL_APP_BUILD_ID && remoteBuildId !== LOCAL_APP_BUILD_ID,
+                );
+                const mismatchByVersion = Boolean(
+                    remoteVersion && LOCAL_APP_VERSION && remoteVersion !== LOCAL_APP_VERSION,
+                );
+                const mismatchByMissingLocalBuildId = Boolean(remoteBuildId && !LOCAL_APP_BUILD_ID);
+                const needRefresh = mismatchByBuildId || mismatchByVersion || mismatchByMissingLocalBuildId;
                 if (!needRefresh) return;
 
                 const remoteKey = `${remoteVersion || 'unknown'}#${remoteBuildId || 'unknown'}`;

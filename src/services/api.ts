@@ -898,6 +898,19 @@ export interface SystemConfigItem {
     updatedAt: string;
 }
 
+export interface AppVersionRecord {
+    id: number;
+    version: string;
+    buildId: string;
+    releasedAt: string;
+    forceRefresh: boolean;
+    title: string;
+    notes: string[];
+    enabled: boolean;
+    createdAt: string;
+    createdBy?: number | null;
+}
+
 export async function listSystemConfigs() {
     return request<SystemConfigItem[]>(`${API_BASE}/system-configs/list`, {
         method: 'POST',
@@ -913,6 +926,45 @@ export async function upsertSystemConfig(data: {
     enabled?: boolean;
 }) {
     return request<SystemConfigItem>(`${API_BASE}/system-configs/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---------------------- App Version API ----------------------
+
+export async function getPublicLatestAppVersion() {
+    return request<AppVersionRecord | null>(`${API_BASE}/app-version/public/latest`, {
+        method: 'GET',
+        skipErrorHandler: true,
+    });
+}
+
+export async function listAppVersions() {
+    return request<{ list: AppVersionRecord[]; activeBuildId: string }>(`${API_BASE}/app-version/list`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertAppVersion(data: {
+    version?: string;
+    buildId?: string;
+    releaseType?: 'SMALL' | 'MAJOR';
+    releasedAt?: string;
+    forceRefresh?: boolean;
+    title?: string;
+    notes?: string[];
+    enabled?: boolean;
+}) {
+    return request<AppVersionRecord>(`${API_BASE}/app-version/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function activateAppVersion(data: { buildId: string }) {
+    return request<{ success: boolean; activeBuildId: string }>(`${API_BASE}/app-version/activate`, {
         method: 'POST',
         data,
     });
