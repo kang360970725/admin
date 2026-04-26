@@ -49,6 +49,7 @@ const loginPath = '/login';
 const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
+const VERSION_ACK_STORAGE_KEY = 'VERSION_REFRESH_ACK_KEY';
 const LOCAL_BUILD_PLACEHOLDER_REGEX = /^(development|test|pre|production)-0\.0\.0$/i;
 
 async function fetchVersionManifest(): Promise<VersionManifest | null> {
@@ -101,6 +102,35 @@ function stripNoteTrailingTime(input?: string) {
     return String(input || '')
         .replace(/\s*[（(]?\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?[)）]?\s*$/g, '')
         .trim();
+}
+
+function getVersionAckKey() {
+    try {
+        const localAck = String(localStorage.getItem(VERSION_ACK_STORAGE_KEY) || '').trim();
+        if (localAck) return localAck;
+    } catch {
+        // ignore
+    }
+    try {
+        return String(sessionStorage.getItem(DEV_VERSION_ACK_STORAGE_KEY) || '').trim();
+    } catch {
+        return '';
+    }
+}
+
+function setVersionAckKey(value: string) {
+    const val = String(value || '').trim();
+    if (!val) return;
+    try {
+        localStorage.setItem(VERSION_ACK_STORAGE_KEY, val);
+    } catch {
+        // ignore
+    }
+    try {
+        sessionStorage.setItem(DEV_VERSION_ACK_STORAGE_KEY, val);
+    } catch {
+        // ignore
+    }
 }
 
 function doLogout() {
@@ -456,10 +486,9 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                 if (!needRefresh) return;
 
                 const remoteKey = `${remoteVersion || 'unknown'}#${remoteBuildId || 'unknown'}`;
-                const ackKey = String(sessionStorage.getItem(DEV_VERSION_ACK_STORAGE_KEY) || '').trim();
-                // 开发环境：同一版本只提示一次
-                // 非开发环境：仅当本地构建标识不可信（占位值）时，允许通过确认标记跳过循环弹窗
-                if (ackKey === remoteKey && (isDevEnv || !hasReliableLocalBuildId)) return;
+                const ackKey = getVersionAckKey();
+                // 同一 version/build 已确认过刷新，则不再重复弹窗
+                if (ackKey === remoteKey) return;
                 if (versionPromptedRef.current === remoteKey) return;
                 versionPromptedRef.current = remoteKey;
 
@@ -783,9 +812,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                         cancelButtonProps={{ style: { display: 'none' } }}
                         okText="立即刷新"
                         onOk={() => {
-                            if (isDevEnv || !LOCAL_APP_BUILD_ID || LOCAL_BUILD_PLACEHOLDER_REGEX.test(LOCAL_APP_BUILD_ID)) {
-                                sessionStorage.setItem(DEV_VERSION_ACK_STORAGE_KEY, buildVersionKey(versionManifest));
-                            }
+                            setVersionAckKey(buildVersionKey(versionManifest));
                             window.location.reload();
                         }}
                     >
