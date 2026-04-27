@@ -16,7 +16,7 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewDutyCsSchedules: has('system:role:page'),
     canViewNotificationTestPush: has('system:role:page'),
     canViewCoupons: has('coupons:user-coupons:list') || has('system:role:page'),
-    canViewPenalties: has('penalties:page') || has('system:role:page'),
+    canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || has('system:role:page'),
 
     // 用户/评级
     canViewUsers: has('users:page'),

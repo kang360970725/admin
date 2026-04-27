@@ -37,7 +37,18 @@ import {
 } from '@/services/api';
 
 const PenaltiesPage: React.FC = () => {
-  const [tab, setTab] = useState<string>('overview');
+  const currentUser = React.useMemo(() => {
+    try {
+      const raw = localStorage.getItem('currentUser');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+  const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
+  const canFullPenaltyManage = permissions.includes('penalties:page') || permissions.includes('system:role:page');
+  const canPenaltyIssue = canFullPenaltyManage || permissions.includes('penalties:ticket:create');
+  const [tab, setTab] = useState<string>(canFullPenaltyManage ? 'overview' : 'tickets');
   const [loading, setLoading] = useState(false);
 
   const [dict, setDict] = useState<any>({
@@ -162,11 +173,11 @@ const PenaltiesPage: React.FC = () => {
   const loadByTab = async (targetTab = tab) => {
     setLoading(true);
     try {
-      if (targetTab === 'overview') await loadOverview();
+      if (targetTab === 'overview' && canFullPenaltyManage) await loadOverview();
       if (targetTab === 'rules') await loadRules(1, ruleLimit);
       if (targetTab === 'tickets') await loadTickets(1, ticketLimit);
-      if (targetTab === 'appeals') await loadAppeals(1, appealLimit);
-      if (targetTab === 'fund') await loadFlows(1, flowLimit);
+      if (targetTab === 'appeals' && canFullPenaltyManage) await loadAppeals(1, appealLimit);
+      if (targetTab === 'fund' && canFullPenaltyManage) await loadFlows(1, flowLimit);
     } catch (e: any) {
       message.error(e?.data?.message || e?.message || '加载失败');
     } finally {
@@ -201,14 +212,18 @@ const PenaltiesPage: React.FC = () => {
   useEffect(() => {
     void (async () => {
       try {
+        if (!canPenaltyIssue) {
+          message.error('无权限访问罚单管理');
+          return;
+        }
         await loadDict();
-        await loadByTab('overview');
+        await loadByTab(canFullPenaltyManage ? 'overview' : 'tickets');
       } catch (e: any) {
         message.error(e?.data?.message || e?.message || '初始化失败');
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canFullPenaltyManage, canPenaltyIssue]);
 
   const openRuleCreate = () => {
     setEditingRule(null);
@@ -370,14 +385,14 @@ const PenaltiesPage: React.FC = () => {
     { title: '申诉状态', dataIndex: 'appealStatusLabel', width: 140 },
     { title: '创建时间', dataIndex: 'createdAt', width: 170, render: (v: string) => fmt(v) },
     {
-      title: '操作',
-      width: 260,
-      render: (_: any, row: any) => (
-        <Space>
-          <Button size="small" onClick={() => openDetail(row)}>详情</Button>
-          <Button size="small" onClick={() => remindTicket(row)}>催办</Button>
-        </Space>
-      ),
+          title: '操作',
+          width: 260,
+          render: (_: any, row: any) => (
+            <Space>
+              <Button size="small" onClick={() => openDetail(row)}>详情</Button>
+              {canFullPenaltyManage ? <Button size="small" onClick={() => remindTicket(row)}>催办</Button> : null}
+            </Space>
+          ),
     },
   ];
 
@@ -589,7 +604,7 @@ const PenaltiesPage: React.FC = () => {
                 </>
               ),
             },
-          ]}
+          ].filter((x) => (canFullPenaltyManage ? true : x.key === 'tickets' || x.key === 'rules'))}
         />
       </Card>
 
