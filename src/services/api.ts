@@ -752,6 +752,7 @@ export interface WalletWithdrawalRequest {
 
     reviewedBy?: number | null;
     reviewedAt?: string | null;
+    reviewTime?: string | null;
     reviewRemark?: string | null;
 
     reserveTxId: number;
@@ -816,6 +817,43 @@ export async function postWithdrawalsList(data: {
         `${API_BASE}/wallet/withdrawals/list`,
         { method: 'POST', data },
     );
+}
+
+export interface WithdrawalReconcileUserRow {
+    userId: number;
+    name?: string | null;
+    realName?: string | null;
+    phone?: string | null;
+    approvedAmount: number;
+    approvedCount: number;
+    paidAmount: number;
+    paidCount: number;
+    transferGap: number;
+}
+
+export async function postWithdrawalsReconcileSummary(data: {
+    status?: string;
+    channel?: string;
+    userId?: number;
+    requestNo?: string;
+    createdAtFrom?: string;
+    createdAtTo?: string;
+}) {
+    return request<{
+        range: { reviewedAtFrom?: string | null; reviewedAtTo?: string | null };
+        total: {
+            approvedAmount: number;
+            approvedCount: number;
+            paidAmount: number;
+            paidCount: number;
+            transferGap: number;
+            userCount: number;
+        };
+        byUser: WithdrawalReconcileUserRow[];
+    }>(`${API_BASE}/wallet/withdrawals/reconcile-summary`, {
+        method: 'POST',
+        data,
+    });
 }
 
 /**

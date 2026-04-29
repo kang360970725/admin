@@ -1,8 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Tag, Space, Typography, Card, Statistic, Row, Col } from 'antd';
+import { Tag, Space, Typography, Card, Statistic, Row, Col, Table } from 'antd';
 import type { ActionType, ProFormInstance } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { postWithdrawalsList, type WalletWithdrawalRequest } from '@/services/api';
+import {
+    postWithdrawalsList,
+    postWithdrawalsReconcileSummary,
+    type WalletWithdrawalRequest,
+    type WithdrawalReconcileUserRow,
+} from '@/services/api';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
@@ -87,6 +92,15 @@ const WithdrawalRecords: React.FC = () => {
         paidAmount: 0,
         paidCount: 0,
     });
+    const [reconcileRows, setReconcileRows] = useState<WithdrawalReconcileUserRow[]>([]);
+    const [reconcileTotal, setReconcileTotal] = useState<any>({
+        approvedAmount: 0,
+        approvedCount: 0,
+        paidAmount: 0,
+        paidCount: 0,
+        transferGap: 0,
+        userCount: 0,
+    });
 
     // ✅ 默认本月（dayjs）
     const defaultRange = useMemo(() => getMonthRange({ offsetMonthsStart: 0, monthsCount: 1 }), []);
@@ -163,6 +177,13 @@ const WithdrawalRecords: React.FC = () => {
             valueType: 'dateTime',
             search: false,
         },
+        {
+            title: '审核时间',
+            dataIndex: 'reviewTime',
+            width: 180,
+            search: false,
+            render: (_: any, row: any) => row?.reviewTime || row?.reviewedAt || '-',
+        },
 
         // ✅ 快捷筛选：选中后直接覆盖“审批时间范围”，并 submit
         {
@@ -230,7 +251,63 @@ const WithdrawalRecords: React.FC = () => {
                             笔数：{summary.paidCount}
                         </Text>
                     </Col>
+                    <Col>
+                        <Statistic
+                            title="对账差额（审批通过-已打款）"
+                            value={reconcileTotal.transferGap}
+                            precision={2}
+                            prefix="¥"
+                            valueStyle={{ color: Number(reconcileTotal.transferGap || 0) === 0 ? '#389e0d' : '#cf1322' }}
+                        />
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            统计人数：{reconcileTotal.userCount}
+                        </Text>
+                    </Col>
                 </Row>
+            </Card>
+
+            <Card title="按人对账汇总（审批时间范围）" style={{ marginBottom: 16 }}>
+                <Table<WithdrawalReconcileUserRow>
+                    rowKey={(row) => String(row.userId)}
+                    size="small"
+                    pagination={false}
+                    dataSource={reconcileRows}
+                    columns={[
+                        {
+                            title: '用户',
+                            render: (_: any, row: WithdrawalReconcileUserRow) => (
+                                <Space direction="vertical" size={0}>
+                                    <Text strong>{row.name || row.realName || '-'}</Text>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        ID：{row.userId} {row.phone ? `| ${row.phone}` : ''}
+                                    </Text>
+                                </Space>
+                            ),
+                        },
+                        {
+                            title: '审批通过金额',
+                            dataIndex: 'approvedAmount',
+                            width: 140,
+                            render: (v: number) => `¥${Number(v || 0).toFixed(2)}`,
+                        },
+                        { title: '审批通过笔数', dataIndex: 'approvedCount', width: 120 },
+                        {
+                            title: '已打款金额',
+                            dataIndex: 'paidAmount',
+                            width: 140,
+                            render: (v: number) => `¥${Number(v || 0).toFixed(2)}`,
+                        },
+                        { title: '已打款笔数', dataIndex: 'paidCount', width: 120 },
+                        {
+                            title: '差额',
+                            dataIndex: 'transferGap',
+                            width: 130,
+                            render: (v: number) => (
+                                <Text type={Number(v || 0) === 0 ? 'success' : 'danger'}>¥{Number(v || 0).toFixed(2)}</Text>
+                            ),
+                        },
+                    ]}
+                />
             </Card>
 
             <ProTable<WalletWithdrawalRequest & any>
@@ -292,7 +369,7 @@ const WithdrawalRecords: React.FC = () => {
                     const createdAtFrom = fd0.toISOString();
                     const createdAtTo = fd1.toISOString();
 
-                    const resp = await postWithdrawalsList({
+                    const payload = {
                         page,
                         pageSize,
                         status: params.status as any,
@@ -301,9 +378,16 @@ const WithdrawalRecords: React.FC = () => {
                         requestNo: params.requestNo ? String(params.requestNo) : undefined,
                         createdAtFrom,
                         createdAtTo,
-                    });
+                    };
+
+                    const [resp, reconcile] = await Promise.all([
+                        postWithdrawalsList(payload),
+                        postWithdrawalsReconcileSummary(payload),
+                    ]);
 
                     if (resp?.summary) setSummary(resp.summary);
+                    setReconcileRows(Array.isArray(reconcile?.byUser) ? reconcile.byUser : []);
+                    if (reconcile?.total) setReconcileTotal(reconcile.total);
 
                     return {
                         data: resp?.list || [],
