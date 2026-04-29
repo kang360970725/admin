@@ -182,7 +182,10 @@ const WithdrawalRecords: React.FC = () => {
             dataIndex: 'reviewTime',
             width: 180,
             search: false,
-            render: (_: any, row: any) => row?.reviewTime || row?.reviewedAt || '-',
+            render: (_: any, row: any) => {
+                const v = row?.reviewTime || row?.reviewedAt;
+                return v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-';
+            },
         },
 
         // ✅ 快捷筛选：选中后直接覆盖“审批时间范围”，并 submit
