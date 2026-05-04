@@ -46,6 +46,10 @@ interface VersionManifest {
 }
 
 const loginPath = '/login';
+const API_BASE =
+    process.env.NODE_ENV === 'production'
+        ? 'http://api.welax-tech.com'
+        : '/api';
 const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
@@ -137,6 +141,60 @@ function doLogout() {
     localStorage.removeItem('token');
     localStorage.removeItem('currentUser');
     window.location.href = loginPath;
+}
+
+function decodeJwtExp(token?: string | null): number {
+    const raw = String(token || '').trim();
+    if (!raw) return 0;
+    try {
+        const body = raw.split('.')[1] || '';
+        const normalized = body.replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(window.atob(normalized));
+        return Number(payload?.exp || 0);
+    } catch {
+        return 0;
+    }
+}
+
+const REFRESH_AHEAD_SECONDS = 30 * 60;
+let refreshingTokenPromise: Promise<string | null> | null = null;
+
+async function ensureFreshTokenBeforeRequest(currentToken?: string | null): Promise<string | null> {
+    const token = String(currentToken || '').trim();
+    if (!token) return null;
+
+    const exp = decodeJwtExp(token);
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!exp || exp - nowSec > REFRESH_AHEAD_SECONDS) {
+        return token;
+    }
+
+    if (!refreshingTokenPromise) {
+        refreshingTokenPromise = (async () => {
+            try {
+                const res = await fetch(`${API_BASE}/auth/refresh`, {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+                if (!res.ok) return null;
+                const data: any = await res.json().catch(() => null);
+                const next = String(data?.access_token || '').trim();
+                if (next) {
+                    localStorage.setItem('token', next);
+                    return next;
+                }
+                return null;
+            } catch {
+                return null;
+            } finally {
+                refreshingTokenPromise = null;
+            }
+        })();
+    }
+    return refreshingTokenPromise;
 }
 
 function getDisplayName(u?: Partial<CurrentUser>) {
@@ -943,8 +1001,13 @@ export const request: RuntimeConfig['request'] = {
         },
     },
     requestInterceptors: [
-        (url: string, options: any) => {
-            const token = localStorage.getItem('token');
+        async (url: string, options: any) => {
+            let token = localStorage.getItem('token');
+            const isAuthLogin = String(url || '').includes('/auth/login');
+            const isAuthRefresh = String(url || '').includes('/auth/refresh');
+            if (token && !isAuthLogin && !isAuthRefresh) {
+                token = await ensureFreshTokenBeforeRequest(token);
+            }
             const headers = { ...(options?.headers || {}) };
 
             if (token) headers.Authorization = `Bearer ${token}`;

@@ -79,6 +79,8 @@ export default defineConfig({
     // ===========
     // Auth / Public
     // ===========
+    { path: '/menu', component: '@/pages/PublicMenu/List', layout: false },
+    { path: '/menu/:id', component: '@/pages/PublicMenu/Detail', layout: false },
     { path: '/login', component: '@/pages/Login', layout: false },
     { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
     { path: '/403', component: '@/pages/403'},

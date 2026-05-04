@@ -1,0 +1,29 @@
+# 微信云托管流水线示例（按你实际平台语法微调）
+# 目标：每次发布都生成新 buildId，并强制前端弹出刷新提示
+
+version: 1.0
+
+stages:
+  - name: build-and-push
+    jobs:
+      - name: build-image
+        steps:
+          - run: |
+              docker build \
+                --build-arg APP_VERSION=${CI_COMMIT_TAG:-$(date +%F)} \
+                --build-arg APP_BUILD_ID=prod-${CI_PIPELINE_ID:-local}-$(date +%Y%m%d%H%M%S) \
+                --build-arg FORCE_REFRESH=true \
+                --build-arg RELEASE_TITLE="版本更新说明" \
+                --build-arg RELEASE_NOTES="自动发布 ${CI_COMMIT_SHORT_SHA:-local}" \
+                -t ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA:-latest} .
+
+          # 按实际仓库地址改
+          - run: docker push ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA:-latest}
+
+  - name: deploy
+    jobs:
+      - name: deploy-cloudbase
+        steps:
+          # 按微信云托管实际命令替换
+          - run: echo "deploy ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA:-latest} to cloudbase"
+

@@ -337,6 +337,54 @@ export async function getGameProjectOptions(data: { keyword?: string }) {
     });
 }
 
+export interface PublicMenuItem {
+    id: number;
+    name: string;
+    price: number;
+    type: string;
+    billingMode: string;
+    baseAmount?: number | null;
+    clubRate?: number | null;
+    coverImage?: string | null;
+    description?: string | null;
+    gameType?: string | null;
+    projectType?: string | null;
+    category?: string | null;
+}
+
+export interface PublicMenuDetail extends PublicMenuItem {
+    richContent?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export async function postPublicMenuList(data: {
+    keyword?: string;
+    gameType?: string;
+    projectType?: string;
+    category?: string;
+}) {
+    return request<{
+        list: PublicMenuItem[];
+        filters: {
+            gameTypes: string[];
+            projectTypes: string[];
+            categories: string[];
+        };
+    }>(`${API_BASE}/game-project/public/menu/list`, {
+        method: 'POST',
+        data,
+        skipErrorHandler: true,
+    });
+}
+
+export async function getPublicMenuDetail(id: number) {
+    return request<PublicMenuDetail>(`${API_BASE}/game-project/public/menu/${id}`, {
+        method: 'GET',
+        skipErrorHandler: true,
+    });
+}
+
 // 空闲打手下拉（支持 keyword；默认 onlyIdle=true）
 export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean }) {
     return request(`${API_BASE}/users/players/options`, {
