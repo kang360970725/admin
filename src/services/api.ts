@@ -1870,3 +1870,97 @@ export async function appealMyPenaltyTicket(data: { ticketId: number; content: s
     data,
   });
 }
+
+// ---------------------- Chest Demo (宝箱活动) ----------------------
+export async function getChestAdminConfig() {
+  return request(`${API_BASE}/chest/admin/config`, { method: 'GET' });
+}
+
+export async function postChestAdminConfig(data: { enabled?: boolean; title?: string; defaultKeyCount?: number }) {
+  return request(`${API_BASE}/chest/admin/config`, { method: 'POST', data });
+}
+
+export async function postChestGenerateCodes(data: {
+  count: number;
+  keyCount?: number;
+  prefix?: string;
+  expireAt?: string | null;
+}) {
+  return request(`${API_BASE}/chest/admin/codes/generate`, { method: 'POST', data });
+}
+
+export async function postChestCodeList(data: { page?: number; pageSize?: number; status?: 'UNUSED' | 'USED' | 'ALL'; code?: string; phone?: string }) {
+  return request(`${API_BASE}/chest/admin/codes/list`, { method: 'POST', data });
+}
+
+export async function postChestCodeRedeemByAdmin(data: { code: string; userId?: number; phone?: string }) {
+  return request(`${API_BASE}/chest/admin/codes/redeem`, { method: 'POST', data });
+}
+
+export async function postChestCodeHistory(data: { code: string; page?: number; pageSize?: number }) {
+  return request(`${API_BASE}/chest/admin/codes/history`, { method: 'POST', data });
+}
+
+export async function postChestCodeHistoryVerify(data: { recordId: number; verified: boolean; remark?: string }) {
+  return request(`${API_BASE}/chest/admin/codes/history/verify`, { method: 'POST', data });
+}
+
+export async function getChestRewardItems() {
+  return request(`${API_BASE}/chest/admin/rewards`, { method: 'GET' });
+}
+
+export async function postChestRewardSave(data: {
+  id?: number;
+  name: string;
+  type: string;
+  quantity?: number;
+  weight?: number;
+  stock?: number | null;
+  enabled?: boolean;
+  sortOrder?: number;
+  minDrawCount?: number;
+  blockBeforeDays?: number | null;
+  rampEveryDays?: number | null;
+  rampStep?: number | null;
+  rampMaxExtra?: number | null;
+  dynamicMode?: string | null;
+  publicRuleText?: string;
+}) {
+  return request(`${API_BASE}/chest/admin/rewards/save`, { method: 'POST', data });
+}
+
+export async function postChestRewardDelete(data: { id: number }) {
+  return request(`${API_BASE}/chest/admin/rewards/delete`, { method: 'POST', data });
+}
+
+export async function getChestMyStatus() {
+  return request(`${API_BASE}/chest/my/status`, { method: 'GET' });
+}
+
+export async function postChestRedeem(data: { code: string }) {
+  return request(`${API_BASE}/chest/my/redeem`, { method: 'POST', data });
+}
+
+export async function postChestOpen(data?: { costKeys?: number }) {
+  return request(`${API_BASE}/chest/my/open`, { method: 'POST', data: data || {} });
+}
+
+export async function postChestPublicStatus(data: { deviceId: string; phone?: string; code?: string }) {
+  return request(`${API_BASE}/chest/public/status`, { method: 'POST', data, skipErrorHandler: true });
+}
+
+export async function postChestPublicRedeem(data: { deviceId: string; code: string; phone?: string }) {
+  return request(`${API_BASE}/chest/public/redeem`, { method: 'POST', data, skipErrorHandler: true });
+}
+
+export async function postChestPublicOpen(data: { deviceId: string; costKeys?: number; phone?: string; code?: string }) {
+  return request(`${API_BASE}/chest/public/open`, { method: 'POST', data, skipErrorHandler: true });
+}
+
+export async function postChestPublicHistory(data: { deviceId: string; page?: number; pageSize?: number; phone?: string; code?: string }) {
+  return request(`${API_BASE}/chest/public/history`, { method: 'POST', data, skipErrorHandler: true });
+}
+
+export async function getChestPublicRewardPool() {
+  return request(`${API_BASE}/chest/public/reward-pool`, { method: 'GET', skipErrorHandler: true });
+}

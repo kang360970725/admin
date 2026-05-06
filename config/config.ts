@@ -81,6 +81,7 @@ export default defineConfig({
     // ===========
     { path: '/menu', component: '@/pages/PublicMenu/List', layout: false },
     { path: '/menu/:id', component: '@/pages/PublicMenu/Detail', layout: false },
+    { path: '/chest-event', component: '@/pages/PublicChest/index', layout: false },
     { path: '/login', component: '@/pages/Login', layout: false },
     { name: '重置密码', path: '/reset-password', component: '@/pages/ResetPassword', layout: false },
     { path: '/403', component: '@/pages/403'},
@@ -106,6 +107,7 @@ export default defineConfig({
 
         // ✅ 移动端钱包：先复用概览页（后续可以做轻量钱包页再替换组件）
         { path: '/m/wallet', component: '@/pages/Wallet/Overview' },
+        { path: '/m/chest', component: '@/pages/Mobile/Chest', access: 'canViewOrdersList' },
 
         // ✅ 兜底 404（移动端）
         { path: '*', component: '@/pages/404', layout: false },
@@ -154,6 +156,14 @@ export default defineConfig({
         { path: '/system/duty-cs', name: '当班客服配置', component: '@/pages/System/DutyCsSchedules', access: 'canViewDutyCsSchedules' },
         { path: '/system/coupons', name: '优惠券管理', component: '@/pages/System/Coupons', access: 'canViewCoupons' },
         { path: '/system/notification-test-push', name: '测试推送中心', component: '@/pages/System/NotificationTestPush', access: 'canViewNotificationTestPush' },
+      ],
+    },
+    {
+      path: '/ops',
+      name: '推广运营',
+      icon: 'GiftOutlined',
+      routes: [
+        { path: '/ops/chest-demo', name: '宝盒活动', component: '@/pages/System/ChestDemo', access: 'canViewChestDemo' },
       ],
     },
     { path: '/system/penalties', redirect: '/penalties', hideInMenu: true },
