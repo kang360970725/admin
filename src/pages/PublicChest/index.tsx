@@ -193,6 +193,10 @@ export default function PublicChestPage() {
   };
 
   useEffect(() => {
+    document.title = '蓝猫爽打宝盒活动';
+  }, []);
+
+  useEffect(() => {
     const raw = localStorage.getItem(statusCacheKey);
     if (raw) {
       try {
@@ -466,7 +470,9 @@ export default function PublicChestPage() {
           {rewards.map((r, idx) => (
             <div key={`${idx}-${r?.name}`} className="reward-item">
               <div className="reward-name">{r?.name || '-'}</div>
-              <div className="reward-type">{r?.type || '-'}</div>
+              <div className="reward-type">
+                {`${formatRewardType(r?.type)} *1`}
+              </div>
             </div>
           ))}
         </div>
