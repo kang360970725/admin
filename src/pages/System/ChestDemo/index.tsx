@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import type { ActionType } from '@ant-design/pro-components';
-import { Button, Card, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, message } from 'antd';
+import { useModel } from '@umijs/max';
+import { Button, Card, Form, Input, InputNumber, Modal, QRCode, Select, Space, Switch, Tabs, message } from 'antd';
 import {
   getChestRewardItems,
   getChestAdminConfig,
@@ -13,9 +14,19 @@ import {
   postChestRewardDelete,
   postChestRewardSave,
   postChestGenerateCodes,
+  postChestGeneratePromotion,
+  postChestPromotionList,
 } from '@/services/api';
 
 export default function ChestDemoPage() {
+  const { initialState } = useModel('@@initialState');
+  const currentUser: any = initialState?.currentUser;
+  const canViewRewardConfig = useMemo(() => {
+    if (String(currentUser?.userType || '') === 'SUPER_ADMIN') return true;
+    const roleName = String(currentUser?.role?.name || currentUser?.roleName || '').trim();
+    return roleName.includes('超级管理员');
+  }, [currentUser]);
+
   const formatBjt = (raw: any) => {
     if (!raw) return '-';
     const d = new Date(raw);
@@ -47,6 +58,7 @@ export default function ChestDemoPage() {
   const [redeemForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const actionRef = useRef<ActionType>();
+  const promoActionRef = useRef<ActionType>();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyCode, setHistoryCode] = useState('');
   const [historyList, setHistoryList] = useState<any[]>([]);
@@ -117,6 +129,29 @@ export default function ChestDemoPage() {
     }
   };
 
+  const generatePromotion = async () => {
+    const values = await form.validateFields(['promoCodeCount', 'promoTotalKeys', 'promoCodePrefix', 'promoPrefix']);
+    const codeCount = Number(values.promoCodeCount || 0);
+    const totalKeys = Number(values.promoTotalKeys || 0);
+    if (totalKeys < codeCount) {
+      message.warning('总钥匙数不能小于抽奖码数量');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res: any = await postChestGeneratePromotion({
+        codeCount,
+        totalKeys,
+        prefix: values.promoCodePrefix || 'BX',
+        promoPrefix: values.promoPrefix || 'TG',
+      });
+      message.success(`推广码已生成：${res?.promoCode || '-'}`);
+      promoActionRef.current?.reload();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openHistory = async (code: string) => {
     setHistoryCode(code);
     setHistoryOpen(true);
@@ -159,6 +194,14 @@ export default function ChestDemoPage() {
     const origin = window.location.origin;
     const link = `${origin}/chest-event?code=${encodeURIComponent(String(code || '').trim())}`;
     setQrCode(code);
+    setQrLink(link);
+    setQrOpen(true);
+  };
+
+  const openPromoQr = (promoCode: string) => {
+    const origin = window.location.origin;
+    const link = `${origin}/chest-event?promoCode=${encodeURIComponent(String(promoCode || '').trim())}`;
+    setQrCode(promoCode);
     setQrLink(link);
     setQrOpen(true);
   };
@@ -217,124 +260,202 @@ export default function ChestDemoPage() {
         </Form>
       </Card>
 
-      <Card title="生成抽奖码" style={{ marginBottom: 16 }}>
-        <Form form={form} layout="inline">
-          <Form.Item label="生成数量">
-            <InputNumber value={1} disabled />
-          </Form.Item>
-          <Form.Item name="genKeyCount" label="每码钥匙" rules={[{ required: true }]}>
-            <InputNumber min={1} max={999} />
-          </Form.Item>
-          <Form.Item name="genPrefix" label="前缀">
-            <Input style={{ width: 100 }} maxLength={6} />
-          </Form.Item>
-          <Form.Item>
-            <Button loading={loading} type="primary" onClick={generateCodes}>生成</Button>
-          </Form.Item>
-          <Form.Item>
-            <Button loading={loading} onClick={generateSingleCode}>生成单次码(1次)</Button>
-          </Form.Item>
-        </Form>
-      </Card>
-
-      <Card title="抽奖码列表">
-        <ProTable<any>
-          actionRef={actionRef}
-          rowKey="id"
-          scroll={{ x: 1700 }}
-          search={{
-            labelWidth: 90,
-          }}
-          columns={[
-            { title: '抽奖码', dataIndex: 'code', copyable: true, width: 220, fixed: 'left' },
-            { title: '搜索抽奖码', dataIndex: 'searchCode', hideInTable: true },
-            { title: '搜索手机号', dataIndex: 'searchPhone', hideInTable: true },
-            { title: '钥匙数', dataIndex: 'keyCount', width: 100 },
+      <Card>
+        <Tabs
+          defaultActiveKey="promotions"
+          items={[
             {
-              title: '状态',
-              dataIndex: 'usageStatus',
-              width: 120,
-              render: (_: any, row: any) => {
-                if (row?.usageStatus === 'USED') return '已使用';
-                if (row?.usageStatus === 'IN_USE') return '使用中';
-                return '未使用';
-              },
+              key: 'promotions',
+              label: '推广码列表',
+              children: (
+                <>
+                  <Card title="生成推广码（聚合抽奖码）" style={{ marginBottom: 16 }}>
+                    <Form form={form} layout="inline" initialValues={{ promoCodeCount: 10, promoTotalKeys: 10, promoCodePrefix: 'BX', promoPrefix: 'TG' }}>
+                      <Form.Item name="promoCodeCount" label="抽奖码数量" rules={[{ required: true }]}>
+                        <InputNumber min={1} max={1000} />
+                      </Form.Item>
+                      <Form.Item name="promoTotalKeys" label="总钥匙数" rules={[{ required: true }]}>
+                        <InputNumber min={1} max={200000} />
+                      </Form.Item>
+                      <Form.Item name="promoCodePrefix" label="抽奖码前缀">
+                        <Input style={{ width: 110 }} maxLength={6} />
+                      </Form.Item>
+                      <Form.Item name="promoPrefix" label="推广码前缀">
+                        <Input style={{ width: 110 }} maxLength={6} />
+                      </Form.Item>
+                      <Form.Item>
+                        <Button loading={loading} type="primary" onClick={generatePromotion}>生成推广码</Button>
+                      </Form.Item>
+                      <Form.Item>
+                        <span style={{ color: '#666' }}>默认当日23:59:59过期，每个内层码至少1把钥匙</span>
+                      </Form.Item>
+                    </Form>
+                  </Card>
+                  <ProTable<any>
+                    actionRef={promoActionRef}
+                    rowKey="id"
+                    search={{ labelWidth: 90 }}
+                    columns={[
+                      { title: '推广码', dataIndex: 'promoCode', copyable: true, width: 240 },
+                      { title: '搜索推广码', dataIndex: 'searchPromoCode', hideInTable: true },
+                      { title: '抽奖码总数', dataIndex: 'codeCount', width: 110 },
+                      { title: '已分配', dataIndex: 'assignedCount', width: 90 },
+                      { title: '剩余', dataIndex: 'leftCodes', width: 90 },
+                      { title: '总钥匙', dataIndex: 'totalKeys', width: 90 },
+                      { title: '状态', dataIndex: 'statusText', width: 100, render: (_: any, row: any) => (row?.isExpired || row?.active === false ? '已结束' : '进行中') },
+                      { title: '过期时间', dataIndex: 'expireAt', width: 180, render: (_: any, row: any) => formatBjt(row?.expireAt) },
+                      { title: '创建时间', dataIndex: 'createdAt', width: 180, render: (_: any, row: any) => formatBjt(row?.createdAt) },
+                      {
+                        title: '操作',
+                        valueType: 'option',
+                        width: 220,
+                        render: (_: any, row: any) => [
+                          <a key="qr" onClick={() => openPromoQr(String(row?.promoCode || ''))}>生成二维码</a>,
+                        ],
+                      },
+                    ]}
+                    request={async (params) => {
+                      const resp: any = await postChestPromotionList({
+                        page: Number(params.current || 1),
+                        pageSize: Number(params.pageSize || 20),
+                        promoCode: String(params.searchPromoCode || '').trim() || undefined,
+                      });
+                      return {
+                        data: resp?.list || [],
+                        success: true,
+                        total: Number(resp?.total || 0),
+                      };
+                    }}
+                  />
+                </>
+              ),
             },
-            { title: '已用次数', dataIndex: 'usedKeys', width: 100 },
-            { title: '剩余次数', dataIndex: 'remainingKeys', width: 100 },
-            { title: '用户', dataIndex: ['redeemedUser', 'name'], width: 140, render: (_: any, row: any) => row?.redeemedUser?.name || '-' },
-            { title: '手机号', dataIndex: ['redeemedUser', 'phone'], width: 140, render: (_: any, row: any) => row?.redeemedUser?.phone || '-' },
-            { title: '抽奖时间', dataIndex: 'redeemedAt', width: 180, render: (_: any, row: any) => formatBjt(row?.redeemedAt) },
-            { title: '创建时间', dataIndex: 'createdAt', width: 180, render: (_: any, row: any) => formatBjt(row?.createdAt) },
             {
-              title: '操作',
-              valueType: 'option',
-              width: 220,
-              fixed: 'right',
-              render: (_: any, row: any) => [
-                <a key="history" onClick={() => openHistory(String(row?.code || ''))}>抽奖记录</a>,
-                row?.usageStatus === 'USED' ? (
-                  <span key="qr-disabled" style={{ color: '#999', cursor: 'not-allowed' }}>已使用不可生成</span>
-                ) : (
-                  <a key="qr" onClick={() => openQr(String(row?.code || ''))}>生成二维码</a>
+              key: 'codes',
+              label: '抽奖码列表',
+              children: (
+                <>
+                  <Card title="生成抽奖码" style={{ marginBottom: 16 }}>
+                    <Form form={form} layout="inline">
+                      <Form.Item label="生成数量">
+                        <InputNumber value={1} disabled />
+                      </Form.Item>
+                      <Form.Item name="genKeyCount" label="每码钥匙" rules={[{ required: true }]}>
+                        <InputNumber min={1} max={999} />
+                      </Form.Item>
+                      <Form.Item name="genPrefix" label="前缀">
+                        <Input style={{ width: 100 }} maxLength={6} />
+                      </Form.Item>
+                      <Form.Item>
+                        <Button loading={loading} type="primary" onClick={generateCodes}>生成</Button>
+                      </Form.Item>
+                      <Form.Item>
+                        <Button loading={loading} onClick={generateSingleCode}>生成单次码(1次)</Button>
+                      </Form.Item>
+                    </Form>
+                  </Card>
+                  <ProTable<any>
+                    actionRef={actionRef}
+                    rowKey="id"
+                    scroll={{ x: 1700 }}
+                    search={{ labelWidth: 90 }}
+                    columns={[
+                      { title: '抽奖码', dataIndex: 'code', copyable: true, width: 220, fixed: 'left' },
+                      { title: '搜索抽奖码', dataIndex: 'searchCode', hideInTable: true },
+                      { title: '搜索手机号', dataIndex: 'searchPhone', hideInTable: true },
+                      { title: '钥匙数', dataIndex: 'keyCount', width: 100 },
+                      {
+                        title: '状态',
+                        dataIndex: 'usageStatus',
+                        width: 120,
+                        render: (_: any, row: any) => {
+                          if (row?.usageStatus === 'USED') return '已使用';
+                          if (row?.usageStatus === 'IN_USE') return '使用中';
+                          return '未使用';
+                        },
+                      },
+                      { title: '已用次数', dataIndex: 'usedKeys', width: 100 },
+                      { title: '剩余次数', dataIndex: 'remainingKeys', width: 100 },
+                      { title: '用户', dataIndex: ['redeemedUser', 'name'], width: 140, render: (_: any, row: any) => row?.redeemedUser?.name || '-' },
+                      { title: '手机号', dataIndex: ['redeemedUser', 'phone'], width: 140, render: (_: any, row: any) => row?.redeemedUser?.phone || '-' },
+                      { title: '抽奖时间', dataIndex: 'redeemedAt', width: 180, render: (_: any, row: any) => formatBjt(row?.redeemedAt) },
+                      { title: '创建时间', dataIndex: 'createdAt', width: 180, render: (_: any, row: any) => formatBjt(row?.createdAt) },
+                      {
+                        title: '操作',
+                        valueType: 'option',
+                        width: 220,
+                        fixed: 'right',
+                        render: (_: any, row: any) => [
+                          <a key="history" onClick={() => openHistory(String(row?.code || ''))}>抽奖记录</a>,
+                          row?.usageStatus === 'USED' ? (
+                            <span key="qr-disabled" style={{ color: '#999', cursor: 'not-allowed' }}>已使用不可生成</span>
+                          ) : (
+                            <a key="qr" onClick={() => openQr(String(row?.code || ''))}>生成二维码</a>
+                          ),
+                        ],
+                      },
+                    ]}
+                    request={async (params) => {
+                      const resp: any = await postChestCodeList({
+                        page: Number(params.current || 1),
+                        pageSize: Number(params.pageSize || 20),
+                        status: 'ALL',
+                        code: String(params.searchCode || '').trim() || undefined,
+                        phone: String(params.searchPhone || '').trim() || undefined,
+                      });
+                      return {
+                        data: resp?.list || [],
+                        success: true,
+                        total: Number(resp?.total || 0),
+                      };
+                    }}
+                  />
+                </>
+              ),
+            },
+            ...(canViewRewardConfig
+              ? [{
+                key: 'rewards',
+                label: '奖池配置',
+                children: (
+                  <>
+                    <Space style={{ marginBottom: 12 }}>
+                      <Button type="primary" onClick={() => openRewardEditor()}>新增奖品</Button>
+                      <Button onClick={() => void loadRewards()}>刷新</Button>
+                    </Space>
+                    <ProTable<any>
+                      rowKey="id"
+                      search={false}
+                      options={false}
+                      pagination={false}
+                      dataSource={rewardList}
+                      columns={[
+                        { title: '排序', dataIndex: 'sortOrder', width: 80 },
+                        { title: '奖品', dataIndex: 'name', width: 160 },
+                        { title: '类型', dataIndex: 'type', width: 100 },
+                        { title: '数量', dataIndex: 'quantity', width: 80 },
+                        { title: '权重', dataIndex: 'weight', width: 80 },
+                        { title: '概率', dataIndex: 'probability', width: 120, render: (_: any, row: any) => formatPercent(row?.probability) },
+                        { title: '命中比', dataIndex: 'oddsText', width: 110, render: (_: any, row: any) => row?.oddsText || '-' },
+                        { title: '库存', dataIndex: 'stock', width: 80, render: (_: any, row: any) => (row?.stock === null ? '不限' : row?.stock) },
+                        { title: '最低抽次', dataIndex: 'minDrawCount', width: 90 },
+                        { title: '规则说明', dataIndex: 'publicRuleText', width: 220, ellipsis: true },
+                        { title: '启用', dataIndex: 'enabled', width: 80, render: (_: any, row: any) => (row?.enabled ? '是' : '否') },
+                        {
+                          title: '操作',
+                          valueType: 'option',
+                          width: 140,
+                          render: (_: any, row: any) => [
+                            <a key="edit" onClick={() => openRewardEditor(row)}>编辑</a>,
+                            <a key="del" onClick={() => void deleteReward(row)}>删除</a>,
+                          ],
+                        },
+                      ]}
+                    />
+                  </>
                 ),
-              ],
-            },
-          ]}
-          request={async (params) => {
-            const resp: any = await postChestCodeList({
-              page: Number(params.current || 1),
-              pageSize: Number(params.pageSize || 20),
-              status: 'ALL',
-              code: String(params.searchCode || '').trim() || undefined,
-              phone: String(params.searchPhone || '').trim() || undefined,
-            });
-            return {
-              data: resp?.list || [],
-              success: true,
-              total: Number(resp?.total || 0),
-            };
-          }}
-        />
-      </Card>
-
-      <Card title="奖池配置" style={{ marginTop: 16 }}>
-        <Space style={{ marginBottom: 12 }}>
-          <Button type="primary" onClick={() => openRewardEditor()}>新增奖品</Button>
-          <Button onClick={() => void loadRewards()}>刷新</Button>
-        </Space>
-        <ProTable<any>
-          rowKey="id"
-          search={false}
-          options={false}
-          pagination={false}
-          dataSource={rewardList}
-          columns={[
-            { title: '排序', dataIndex: 'sortOrder', width: 80 },
-            { title: '奖品', dataIndex: 'name', width: 160 },
-            { title: '类型', dataIndex: 'type', width: 100 },
-            { title: '数量', dataIndex: 'quantity', width: 80 },
-            { title: '权重', dataIndex: 'weight', width: 80 },
-            {
-              title: '概率',
-              dataIndex: 'probability',
-              width: 120,
-              render: (_: any, row: any) => formatPercent(row?.probability),
-            },
-            { title: '命中比', dataIndex: 'oddsText', width: 110, render: (_: any, row: any) => row?.oddsText || '-' },
-            { title: '库存', dataIndex: 'stock', width: 80, render: (_: any, row: any) => (row?.stock === null ? '不限' : row?.stock) },
-            { title: '最低抽次', dataIndex: 'minDrawCount', width: 90 },
-            { title: '规则说明', dataIndex: 'publicRuleText', width: 220, ellipsis: true },
-            { title: '启用', dataIndex: 'enabled', width: 80, render: (_: any, row: any) => (row?.enabled ? '是' : '否') },
-            {
-              title: '操作',
-              valueType: 'option',
-              width: 140,
-              render: (_: any, row: any) => [
-                <a key="edit" onClick={() => openRewardEditor(row)}>编辑</a>,
-                <a key="del" onClick={() => void deleteReward(row)}>删除</a>,
-              ],
-            },
+              }]
+              : []),
           ]}
         />
       </Card>

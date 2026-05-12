@@ -272,8 +272,11 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const [versionModalOpen, setVersionModalOpen] = React.useState(false);
     const [forceReadReachedBottom, setForceReadReachedBottom] = React.useState(false);
     const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
+    const realtimeLeaderTimerRef = React.useRef<number | null>(null);
+    const realtimeTabIdRef = React.useRef(`tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
     const forceReadContentRef = React.useRef<HTMLDivElement | null>(null);
     const versionPromptedRef = React.useRef<string>('');
+    const [isRealtimeLeader, setIsRealtimeLeader] = React.useState(false);
     const isDevEnv = String(process.env.UMI_ENV || '') === 'development';
     const forceQueue = React.useMemo(
         () => forceUnread.filter((item) => !confirmedForceIds.includes(Number(item?.id))),
@@ -366,6 +369,72 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         }
     }, []);
 
+    React.useEffect(() => {
+        const token = String(localStorage.getItem('token') || '').trim();
+        if (!token) return;
+        const leaderKey = 'bc_realtime_leader';
+        const myTabId = realtimeTabIdRef.current;
+
+        const electLeader = () => {
+            if (document.hidden) {
+                setIsRealtimeLeader(false);
+                return;
+            }
+            const now = Date.now();
+            let owner = '';
+            let ts = 0;
+            try {
+                const raw = localStorage.getItem(leaderKey);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    owner = String(parsed?.tabId || '');
+                    ts = Number(parsed?.ts || 0);
+                }
+            } catch {
+                // ignore
+            }
+            const stale = now - ts > 12000;
+            if (!owner || owner === myTabId || stale) {
+                try {
+                    localStorage.setItem(leaderKey, JSON.stringify({ tabId: myTabId, ts: now }));
+                } catch {
+                    // ignore
+                }
+                setIsRealtimeLeader(true);
+            } else {
+                setIsRealtimeLeader(false);
+            }
+        };
+
+        const onStorage = (evt: StorageEvent) => {
+            if (evt.key === leaderKey || evt.key === null) electLeader();
+        };
+        const onVisibilityChange = () => electLeader();
+        electLeader();
+        realtimeLeaderTimerRef.current = window.setInterval(electLeader, 5000);
+        window.addEventListener('storage', onStorage);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        return () => {
+            if (realtimeLeaderTimerRef.current) {
+                window.clearInterval(realtimeLeaderTimerRef.current);
+                realtimeLeaderTimerRef.current = null;
+            }
+            window.removeEventListener('storage', onStorage);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            if (isRealtimeLeader) {
+                try {
+                    const raw = localStorage.getItem(leaderKey);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (String(parsed?.tabId || '') === myTabId) localStorage.removeItem(leaderKey);
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        };
+    }, [isRealtimeLeader]);
+
     const handleRealtimeJump = React.useCallback((item: RealtimeNotificationItem) => {
         if (!item?.route) return;
         const shouldOpenInNewTab =
@@ -382,7 +451,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
-        if (!token) return;
+        if (!token || !isRealtimeLeader || document.hidden) return;
 
         loadRealtimeNotifications();
 
@@ -446,17 +515,17 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
             eventSource.close();
             realtimeEventSourceRef.current = null;
         };
-    }, [loadRealtimeNotifications, api, handleRealtimeJump, isPenaltyForceItem, loadPenaltyPendingTickets]);
+    }, [loadRealtimeNotifications, api, handleRealtimeJump, isPenaltyForceItem, loadPenaltyPendingTickets, isRealtimeLeader]);
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
-        if (!token) return;
+        if (!token || !isRealtimeLeader || document.hidden) return;
         // SSE 兜底：低频轮询，防止偶发网络抖动导致完全无提醒
         const timer = window.setInterval(() => {
             loadRealtimeNotifications();
         }, 15000);
         return () => window.clearInterval(timer);
-    }, [loadRealtimeNotifications]);
+    }, [loadRealtimeNotifications, isRealtimeLeader]);
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();

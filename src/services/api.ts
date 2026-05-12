@@ -1889,6 +1889,20 @@ export async function postChestGenerateCodes(data: {
   return request(`${API_BASE}/chest/admin/codes/generate`, { method: 'POST', data });
 }
 
+export async function postChestGeneratePromotion(data: {
+  codeCount: number;
+  totalKeys: number;
+  prefix?: string;
+  promoPrefix?: string;
+  expireAt?: string | null;
+}) {
+  return request(`${API_BASE}/chest/admin/promotions/generate`, { method: 'POST', data });
+}
+
+export async function postChestPromotionList(data: { page?: number; pageSize?: number; promoCode?: string }) {
+  return request(`${API_BASE}/chest/admin/promotions/list`, { method: 'POST', data });
+}
+
 export async function postChestCodeList(data: { page?: number; pageSize?: number; status?: 'UNUSED' | 'USED' | 'ALL'; code?: string; phone?: string }) {
   return request(`${API_BASE}/chest/admin/codes/list`, { method: 'POST', data });
 }
@@ -1963,4 +1977,12 @@ export async function postChestPublicHistory(data: { deviceId: string; page?: nu
 
 export async function getChestPublicRewardPool() {
   return request(`${API_BASE}/chest/public/reward-pool`, { method: 'GET', skipErrorHandler: true });
+}
+
+export async function postChestPublicPromoStatus(data: { deviceId: string; promoCode: string; phone?: string }) {
+  return request(`${API_BASE}/chest/public/promo/status`, { method: 'POST', data, skipErrorHandler: true });
+}
+
+export async function postChestPublicPromoClaim(data: { deviceId: string; promoCode: string; phone?: string }) {
+  return request(`${API_BASE}/chest/public/promo/claim`, { method: 'POST', data, skipErrorHandler: true });
 }

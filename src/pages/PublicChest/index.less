@@ -644,6 +644,50 @@
   }
 }
 
+.chest-soldout-modal {
+  .ant-modal-content {
+    background:
+      radial-gradient(circle at 18% 8%, rgba(255, 193, 79, 0.2), transparent 56%),
+      radial-gradient(circle at 88% 90%, rgba(255, 140, 40, 0.14), transparent 52%),
+      linear-gradient(180deg, #1f1610 0%, #110d09 100%);
+  }
+
+  .ant-modal-title {
+    letter-spacing: 1px;
+  }
+}
+
+.soldout-body {
+  text-align: center;
+  display: grid;
+  gap: 10px;
+  padding: 2px 2px 4px;
+}
+
+.soldout-icon {
+  font-size: 38px;
+  line-height: 1;
+  filter: drop-shadow(0 0 10px rgba(255, 196, 84, 0.45));
+}
+
+.soldout-title {
+  color: #ffe2a3;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.soldout-desc {
+  color: #e9c98f;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.soldout-tip {
+  color: #caa86f;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 @media (max-width: 480px) {
   .h5-container {
     width: 94%;

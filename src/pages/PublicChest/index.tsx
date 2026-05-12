@@ -1,7 +1,13 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Input, Modal, message } from 'antd';
 import { GiftFilled, LockFilled, UnlockFilled } from '@ant-design/icons';
-import { getChestPublicRewardPool, postChestPublicHistory, postChestPublicOpen, postChestPublicStatus } from '@/services/api';
+import {
+  getChestPublicRewardPool,
+  postChestPublicHistory,
+  postChestPublicOpen,
+  postChestPublicPromoClaim,
+  postChestPublicStatus,
+} from '@/services/api';
 import './index.less';
 
 function ensureDeviceId() {
@@ -112,7 +118,7 @@ export default function PublicChestPage() {
   const STAR_LEVELS = [7, 6, 5, 4];
 
   const deviceId = useMemo(() => ensureDeviceId(), []);
-  const currentCode = useMemo(() => {
+  const queryCode = useMemo(() => {
     const qp = new URLSearchParams(window.location.search);
     const single = String(qp.get('code') || qp.get('redeemCode') || qp.get('lotteryCode') || '').trim();
     if (single) return single.toUpperCase();
@@ -122,6 +128,11 @@ export default function PublicChestPage() {
       .filter(Boolean)[0];
     return String(firstFromCodes || '').toUpperCase();
   }, []);
+  const promoCode = useMemo(() => {
+    const qp = new URLSearchParams(window.location.search);
+    return String(qp.get('promoCode') || qp.get('promotionCode') || '').trim().toUpperCase();
+  }, []);
+  const [currentCode, setCurrentCode] = useState(queryCode);
   const statusCacheKey = useMemo(() => `chest_status_cache_v2_${deviceId}_${currentCode || 'NO_CODE'}`, [deviceId, currentCode]);
   const phoneCacheKey = useMemo(() => `chest_phone_v1_${deviceId}`, [deviceId]);
   const [status, setStatus] = useState<any>({ enabled: false, title: '开宝盒活动', keyCount: 0 });
@@ -136,6 +147,8 @@ export default function PublicChestPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [phoneDraft, setPhoneDraft] = useState('');
+  const [showSoldOutModal, setShowSoldOutModal] = useState(false);
+  const [soldOutText, setSoldOutText] = useState('手慢一步，本轮钥匙已经发放完毕。感谢关注，下一轮活动开启后欢迎第一时间参与。');
   const [publicRewardPool, setPublicRewardPool] = useState<any[]>([]);
   const statusReqRef = React.useRef<{ inFlight: boolean; lastAt: number; lastKey: string }>({
     inFlight: false,
@@ -144,6 +157,13 @@ export default function PublicChestPage() {
   });
   const canOpen = !opening && /^1\d{10}$/.test(String(phone || '').trim()) && Number(status?.keyCount || 0) > 0;
   const showRareTip = rewards.length > 0;
+  const openSoldOutModal = (text?: string) => {
+    setSoldOutText(
+      String(text || '').trim()
+      || '手慢一步，本轮钥匙已经发放完毕。感谢关注，下一轮活动开启后欢迎第一时间参与。',
+    );
+    setShowSoldOutModal(true);
+  };
 
   const topGrandItems = useMemo(() => {
     const list = Array.isArray(publicRewardPool) ? publicRewardPool : [];
@@ -208,12 +228,12 @@ export default function PublicChestPage() {
     if (p && /^1\d{10}$/.test(p)) {
       setPhone(p);
       setPhoneDraft(p);
-    } else {
+    } else if (!promoCode) {
       setShowPhoneModal(true);
     }
     void loadStatus(true, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceId]);
+  }, [deviceId, promoCode]);
 
   useEffect(() => {
     if (!topGrandItems.length) return;
@@ -243,6 +263,38 @@ export default function PublicChestPage() {
     void loadStatus(true, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentCode, statusCacheKey]);
+
+  useEffect(() => {
+    if (!promoCode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const claimResp: any = await postChestPublicPromoClaim({
+          deviceId,
+          promoCode,
+          phone: phone || undefined,
+        });
+        if (Number(claimResp?.code || 0) !== 0) throw new Error(claimResp?.message || '来晚了，没抢到');
+        const data = claimResp?.data || claimResp || {};
+        const redeemCode = String(data?.redeemCode || '').trim().toUpperCase();
+        if (!redeemCode) throw new Error('抽奖码分配失败');
+        if (!cancelled) {
+          setCurrentCode(redeemCode);
+          void loadStatus(true, true);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          openSoldOutModal(e?.message || '来晚了，没抢到');
+          setStatus((prev: any) => ({ ...(prev || {}), keyCount: 0 }));
+          setShowPhoneModal(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promoCode, deviceId, phone]);
 
   const loadHistory = async () => {
     try {
@@ -344,7 +396,12 @@ export default function PublicChestPage() {
       );
       setTimeout(() => setBursting(false), 1000);
     } catch (e: any) {
-      message.warning(e?.message || '开启失败，请稍后再试');
+      const txt = String(e?.message || '');
+      if (txt.includes('来晚了') || txt.includes('没抢到') || txt.includes('钥匙不足')) {
+        openSoldOutModal(txt);
+      } else {
+        message.warning(txt || '开启失败，请稍后再试');
+      }
     } finally {
       setOpening(false);
     }
@@ -530,6 +587,27 @@ export default function PublicChestPage() {
             placeholder="请输入11位手机号"
             className="phone-modal-input"
           />
+        </div>
+      </Modal>
+
+      <Modal
+        title="本轮名额已满"
+        open={showSoldOutModal}
+        onCancel={() => setShowSoldOutModal(false)}
+        centered
+        width={360}
+        className="chest-mobile-modal chest-soldout-modal"
+        footer={(
+          <button className="modal-ok-btn" onClick={() => setShowSoldOutModal(false)}>
+            我知道了
+          </button>
+        )}
+      >
+        <div className="soldout-body">
+          <div className="soldout-icon">🎁</div>
+          <div className="soldout-title">这波手气很旺，人气也很旺</div>
+          <div className="soldout-desc">{soldOutText}</div>
+          <div className="soldout-tip">建议提前关注活动，准时扫码进入更容易抢到钥匙。</div>
         </div>
       </Modal>
     </div>
