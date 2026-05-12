@@ -22,9 +22,35 @@ export default function ChestDemoPage() {
   const { initialState } = useModel('@@initialState');
   const currentUser: any = initialState?.currentUser;
   const canViewRewardConfig = useMemo(() => {
-    if (String(currentUser?.userType || '') === 'SUPER_ADMIN') return true;
-    const roleName = String(currentUser?.role?.name || currentUser?.roleName || '').trim();
-    return roleName.includes('超级管理员');
+    const userType = String(currentUser?.userType || '').trim().toUpperCase();
+    if (userType === 'SUPER_ADMIN' || userType === 'FINANCE_ADMIN') return true;
+
+    const roleName = String(
+      currentUser?.role?.name
+      || currentUser?.Role?.name
+      || currentUser?.roleName
+      || '',
+    ).trim().toUpperCase();
+    if (
+      roleName.includes('SUPER_ADMIN')
+      || roleName.includes('FINANCE_ADMIN')
+      || roleName.includes('超级管理员')
+    ) return true;
+
+    const roleCode = String(
+      currentUser?.role?.code
+      || currentUser?.Role?.code
+      || currentUser?.roleCode
+      || currentUser?.roleKey
+      || '',
+    ).trim().toUpperCase();
+    if (roleCode === 'SUPER_ADMIN' || roleCode === 'FINANCE_ADMIN') return true;
+
+    const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
+    // 兼容历史账号模型：若拥有系统最高管理权限，也放开奖池配置可见
+    if (permissions.includes('system:role:page')) return true;
+
+    return false;
   }, [currentUser]);
 
   const formatBjt = (raw: any) => {
