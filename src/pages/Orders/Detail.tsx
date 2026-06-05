@@ -168,6 +168,11 @@ const OrderDetailPage: React.FC = () => {
         responsibleUserIds: number[];
     };
 
+    type OrderTipState = {
+        enabled: boolean;
+        tippedUserIds: number[];
+    };
+
     const [modePlayAlloc, setModePlayAlloc] = useState<any>(null);
     const [playerEvalRows, setPlayerEvalRows] = useState<PlayerEvalRow[]>([]);
     const [orderAfterSale, setOrderAfterSale] = useState<OrderAfterSaleState>({
@@ -175,36 +180,61 @@ const OrderDetailPage: React.FC = () => {
         action: undefined,
         responsibleUserIds: [],
     });
+    const [orderTip, setOrderTip] = useState<OrderTipState>({
+        enabled: false,
+        tippedUserIds: [],
+    });
     const hasBadRound = useMemo(() => playerEvalRows.some((row) => row.score <= 2), [playerEvalRows]);
     const playerEvalUserOptions = useMemo(
         () => {
+            const badParticipantIds = new Set<number>();
             const map = new Map<number, string>();
+
             playerEvalRows
-                .filter((row) => row.score >= 3)
+                .filter((row) => row.score <= 2)
                 .forEach((row) => {
-                    row.participantIds.forEach((pid, idx) => {
-                        const name = row.participantNames[idx] || `#${pid}`;
-                        if (!map.has(pid)) map.set(pid, name);
+                    row.participantIds.forEach((pid) => {
+                        if (Number.isFinite(pid) && pid > 0) badParticipantIds.add(Number(pid));
                     });
                 });
+
+            playerEvalRows
+                .filter((row) => row.score >= 4)
+                .forEach((row) => {
+                    row.participantIds.forEach((pid, idx) => {
+                        const pidNum = Number(pid);
+                        if (!Number.isFinite(pidNum) || pidNum <= 0) return;
+                        if (badParticipantIds.has(pidNum)) return;
+                        const name = row.participantNames[idx] || `#${pidNum}`;
+                        if (!map.has(pidNum)) map.set(pidNum, name);
+                    });
+                });
+
             return Array.from(map.entries()).map(([value, label]) => ({label, value}));
         },
         [playerEvalRows],
     );
+    useEffect(() => {
+        setOrderTip((prev) => ({
+            ...prev,
+            enabled: playerEvalUserOptions.length > 0 ? prev.enabled : false,
+            tippedUserIds: prev.tippedUserIds.filter((id) => playerEvalUserOptions.some((opt) => Number(opt.value) === Number(id))),
+        }));
+    }, [playerEvalUserOptions]);
     const playerEvalFormValid = useMemo(() => {
         if (!playerEvalRows.length) return false;
         const baseOk = playerEvalRows.every((row) => {
-            if (row.score >= 4 && row.tipEnabled && row.tippedUserIds.length === 0) return false;
             return true;
         });
         if (!baseOk) return false;
+        if (orderTip.enabled && orderTip.tippedUserIds.length === 0) return false;
         if (!hasBadRound) return true;
         if (!orderAfterSale.enabled) return false;
         const action = String(orderAfterSale.action || '');
         if (!action) return false;
         if (action === 'NO_ACTION') return true;
         return orderAfterSale.responsibleUserIds.length > 0;
-    }, [playerEvalRows, hasBadRound, orderAfterSale]);
+    }, [playerEvalRows, hasBadRound, orderAfterSale, orderTip]);
 
 
     const [editOpen, setEditOpen] = useState(false);
@@ -794,6 +824,7 @@ const OrderDetailPage: React.FC = () => {
 
         setPlayerEvalRows(buildConfirmPlayerEvalRowsFromOrder(order));
         setOrderAfterSale({ enabled: false, action: undefined, responsibleUserIds: [] });
+        setOrderTip({ enabled: false, tippedUserIds: [] });
 
         setConfirmCompleteOpen(true);
     };
@@ -906,10 +937,11 @@ const OrderDetailPage: React.FC = () => {
                     afterSaleHandled: isBad ? Boolean(orderAfterSale.enabled) : false,
                     afterSaleAction: isBad && orderAfterSale.enabled ? (orderAfterSale.action || undefined) : undefined,
                     responsibleUserIds: isBad && orderAfterSale.enabled ? orderAfterSale.responsibleUserIds : [],
-                    tippedUserIds: isGood && row.tipEnabled ? row.tippedUserIds : [],
                 }));
             });
             payload.playerEvaluations = expandedEvaluations;
+            payload.orderTipEnabled = Boolean(orderTip.enabled);
+            payload.orderTipUserIds = orderTip.enabled ? orderTip.tippedUserIds : [];
 
             await confirmCompleteOrder(payload);
 
@@ -3316,9 +3348,13 @@ const OrderDetailPage: React.FC = () => {
                                 </Typography.Text>
                             </div>
                             <Space wrap>
-                                <Button size="small" onClick={() => setPlayerEvalRows((prev) => prev.map((row) => ({...row, score: 5, tipEnabled: false, tippedUserIds: []})))}>一键全员好评</Button>
+                                <Button size="small" onClick={() => {
+                                    setPlayerEvalRows((prev) => prev.map((row) => ({...row, score: 5, tipEnabled: false, tippedUserIds: []})));
+                                    setOrderTip({ enabled: false, tippedUserIds: [] });
+                                }}>一键全员好评</Button>
                                 <Button size="small" danger onClick={() => {
                                     setPlayerEvalRows((prev) => prev.map((row) => ({...row, score: 1, tipEnabled: false, tippedUserIds: []})));
+                                    setOrderTip({ enabled: false, tippedUserIds: [] });
                                     setOrderAfterSale({ enabled: true, action: orderAfterSale.action, responsibleUserIds: orderAfterSale.responsibleUserIds });
                                 }}>一键全员差评</Button>
                             </Space>
@@ -3346,21 +3382,19 @@ const OrderDetailPage: React.FC = () => {
                                 },
                                 {
                                     title: '评分',
-                                    width: 220,
+                                    width: 260,
                                     render: (_: any, row: PlayerEvalRow) => (
                                         <Radio.Group
                                             value={row.score}
                                             onChange={(e) => {
                                                 const nextScore = Number(e.target.value);
-                                                const nextPatch: Partial<PlayerEvalRow> = {score: nextScore};
-                                                if (nextScore >= 4) {
-                                                    nextPatch.tipEnabled = false;
-                                                    nextPatch.tippedUserIds = [];
-                                                } else {
-                                                    nextPatch.tipEnabled = false;
-                                                    nextPatch.tippedUserIds = [];
+                                                patchPlayerEvalRow(row.key, {score: nextScore, tipEnabled: false, tippedUserIds: []});
+                                                if (nextScore <= 2) {
+                                                    setOrderTip((prev) => ({
+                                                        ...prev,
+                                                        tippedUserIds: prev.tippedUserIds.filter((id) => !row.participantIds.includes(id)),
+                                                    }));
                                                 }
-                                                patchPlayerEvalRow(row.key, nextPatch);
                                             }}
                                         >
                                             <Space direction="vertical" size={2}>
@@ -3371,50 +3405,50 @@ const OrderDetailPage: React.FC = () => {
                                         </Radio.Group>
                                     ),
                                 },
-                                {
-                                    title: '打赏',
-                                    width: 300,
-                                    render: (_: any, row: PlayerEvalRow) => {
-                                        if (row.score <= 2) return <Typography.Text type="secondary">差评轮不参与打赏</Typography.Text>;
-                                        const tipOptions = playerEvalUserOptions.filter((o) => !row.participantIds.includes(Number(o.value)));
-                                        return (
-                                            <Space direction="vertical" size={6} style={{width: '100%'}}>
-                                                <Space size={8} align="center">
-                                                    <Switch
-                                                        checked={row.tipEnabled}
-                                                        onChange={(checked) => {
-                                                            patchPlayerEvalRow(row.key, {
-                                                                tipEnabled: checked,
-                                                                tippedUserIds: checked ? row.tippedUserIds : [],
-                                                            });
-                                                        }}
-                                                    />
-                                                    <Typography.Text>是否打赏</Typography.Text>
-                                                </Space>
-                                                {row.tipEnabled ? (
-                                                    <Select
-                                                        mode="multiple"
-                                                        allowClear
-                                                        placeholder={tipOptions.length ? '选择被打赏选手' : '暂无可打赏选手'}
-                                                        style={{width: '100%'}}
-                                                        options={tipOptions}
-                                                        value={row.tippedUserIds}
-                                                        disabled={!tipOptions.length}
-                                                        onChange={(vals) => patchPlayerEvalRow(row.key, {
-                                                            tippedUserIds: Array.isArray(vals)
-                                                                ? vals.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
-                                                                : [],
-                                                        })}
-                                                    />
-                                                ) : (
-                                                    <Typography.Text type="secondary">未开启打赏</Typography.Text>
-                                                )}
-                                            </Space>
-                                        );
-                                    },
-                                },
                             ]}
                         />
+
+                        <div style={{marginTop: 12, borderTop: '1px dashed #d9d9d9', paddingTop: 12}}>
+                            <div style={{fontWeight: 600, marginBottom: 8}}>打赏</div>
+                            <Typography.Text type="secondary" style={{display: 'block', marginBottom: 10, fontSize: 12}}>
+                                仅好评轮参与者可进入候选；差评轮参与者不进入打赏列表。
+                            </Typography.Text>
+                            {playerEvalUserOptions.length ? (
+                                <Space direction="vertical" size={8} style={{width: '100%'}}>
+                                    <Space size={8} align="center">
+                                        <Switch
+                                            checked={orderTip.enabled}
+                                            onChange={(checked) => setOrderTip((prev) => ({
+                                                ...prev,
+                                                enabled: checked,
+                                                tippedUserIds: checked ? prev.tippedUserIds : [],
+                                            }))}
+                                        />
+                                        <Typography.Text>是否打赏</Typography.Text>
+                                    </Space>
+                                    {orderTip.enabled ? (
+                                        <Select
+                                            mode="multiple"
+                                            allowClear
+                                            placeholder="选择被打赏打手"
+                                            style={{width: '100%'}}
+                                            options={playerEvalUserOptions}
+                                            value={orderTip.tippedUserIds}
+                                            onChange={(vals) => setOrderTip((prev) => ({
+                                                ...prev,
+                                                tippedUserIds: Array.isArray(vals)
+                                                    ? vals.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+                                                    : [],
+                                            }))}
+                                        />
+                                    ) : (
+                                        <Typography.Text type="secondary">未开启打赏</Typography.Text>
+                                    )}
+                                </Space>
+                            ) : (
+                                <Typography.Text type="secondary">暂无可打赏打手。</Typography.Text>
+                            )}
+                        </div>
 
                         {hasBadRound ? (
                             <div style={{marginTop: 12, borderTop: '1px dashed #d9d9d9', paddingTop: 12}}>

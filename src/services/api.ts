@@ -1340,6 +1340,14 @@ export async function getPublicMiniappProtocol(key: string) {
     });
 }
 
+export async function listPublicMiniappProtocolsByCategory(category: string) {
+    return request<MiniappProtocolItem[]>(`${API_BASE}/miniapp-protocols/public/list-by-category`, {
+        method: 'GET',
+        params: { category: String(category || '').trim() },
+        skipErrorHandler: true,
+    });
+}
+
 export async function listMiniappHomeStaffCandidates(keyword?: string) {
     return request<any[]>(`${API_BASE}/system-configs/miniapp/home-staff-candidates`, {
         method: 'POST',

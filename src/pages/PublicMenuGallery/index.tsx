@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Carousel, Empty, Image, Modal, Skeleton, Space, Tag, Typography, message } from 'antd';
+import { Button, Carousel, Empty, Image, Skeleton, Space, Tag, Typography, message } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
-import { getPublicMenuDetail, getPublicMiniappHomeConfig, postPublicMenuList, type PublicMenuDetail, type PublicMenuItem, type MiniappHomeConfig } from '@/services/api';
+import { getPublicMenuDetail, listPublicMiniappProtocolsByCategory, postPublicMenuList, type MiniappProtocolItem, type PublicMenuDetail, type PublicMenuItem } from '@/services/api';
 import './index.less';
 
 const { Text, Title, Paragraph } = Typography;
@@ -15,6 +15,40 @@ function normalizeText(value: unknown) {
 function labelOrDefault(value: unknown, fallback: string) {
   const text = normalizeText(value);
   return text || fallback;
+}
+
+function extractFirstImageSrc(html: unknown) {
+  const text = String(html ?? '');
+  if (!text) return '';
+  const match = text.match(/<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/i);
+  if (match?.[1]) return match[1].trim();
+  const hrefMatch = text.match(/data-href=["']([^"']+)["']/i);
+  return hrefMatch?.[1]?.trim() || '';
+}
+
+function extractAllImageSrcs(html: unknown) {
+  const text = String(html ?? '');
+  if (!text) return [];
+  const list = Array.from(text.matchAll(/<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi))
+    .map((match) => String(match?.[1] || '').trim())
+    .filter(Boolean);
+  if (list.length) return Array.from(new Set(list));
+  const href = Array.from(text.matchAll(/data-href=["']([^"']+)["']/gi))
+    .map((match) => String(match?.[1] || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(href));
+}
+
+function stripHtml(html: unknown) {
+  return String(html ?? '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function FilterTuneIcon() {
@@ -47,8 +81,9 @@ export default function PublicMenuGalleryPage() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [sortMode, setSortMode] = useState<'default' | 'new' | 'price-asc' | 'price-desc'>('default');
   const [priceRange, setPriceRange] = useState<'all' | '0-50' | '50-100' | '100+'>('all');
-  const [homeConfigLoading, setHomeConfigLoading] = useState(true);
-  const [homeConfig, setHomeConfig] = useState<MiniappHomeConfig | null>(null);
+  const [bannerLoading, setBannerLoading] = useState(true);
+  const [bannerLoadFailed, setBannerLoadFailed] = useState(false);
+  const [bannerProtocols, setBannerProtocols] = useState<MiniappProtocolItem[]>([]);
   const [filters, setFilters] = useState<{
     gameTypes: string[];
     projectTypes: string[];
@@ -60,21 +95,33 @@ export default function PublicMenuGalleryPage() {
     categories: [],
     categoryOptions: [],
   });
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewKind, setPreviewKind] = useState<'product' | 'protocol'>('product');
   const [previewItem, setPreviewItem] = useState<PublicMenuDetail | PublicMenuItem | null>(null);
+  const [productPreviewVisible, setProductPreviewVisible] = useState(false);
+  const [productPreviewCurrent, setProductPreviewCurrent] = useState(0);
+  const [protocolPreviewVisible, setProtocolPreviewVisible] = useState(false);
+  const [protocolPreviewCurrent, setProtocolPreviewCurrent] = useState(0);
+  const [bannerPreviewVisible, setBannerPreviewVisible] = useState(false);
+  const [bannerPreviewSrc, setBannerPreviewSrc] = useState('');
+  const [inlinePreview, setInlinePreview] = useState<{
+    title: string;
+    text: string;
+    kind: 'product' | 'protocol';
+  } | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const loadHomeConfig = useCallback(async () => {
-    setHomeConfigLoading(true);
+  const loadBannerProtocols = useCallback(async () => {
+    setBannerLoading(true);
+    setBannerLoadFailed(false);
     try {
-      const res: any = await getPublicMiniappHomeConfig();
-      const next = (res && typeof res === 'object' && 'data' in res ? (res as any).data : res) || {};
-      setHomeConfig(next as MiniappHomeConfig);
+      const res: any = await listPublicMiniappProtocolsByCategory('C 端客户权益');
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setBannerProtocols(list as MiniappProtocolItem[]);
     } catch {
-      setHomeConfig(null);
+      setBannerProtocols([]);
+      setBannerLoadFailed(true);
     } finally {
-      setHomeConfigLoading(false);
+      setBannerLoading(false);
     }
   }, []);
 
@@ -82,21 +129,93 @@ export default function PublicMenuGalleryPage() {
     const targetId = Number(productId || item?.id || 0);
     if (!Number.isFinite(targetId) || targetId <= 0) return;
 
+    setPreviewKind('product');
     setPreviewItem(item || null);
-    setPreviewOpen(true);
-    setPreviewLoading(true);
+    setInlinePreview(null);
 
     try {
       const detail = await getPublicMenuDetail(targetId);
       if (detail) {
         setPreviewItem(detail);
       }
+      const nextDetail = detail || item;
+      const imageList = extractAllImageSrcs((nextDetail as any)?.richContent);
+      if (imageList.length) {
+        setProductPreviewCurrent(0);
+        setProductPreviewVisible(true);
+      } else {
+        const text = stripHtml((nextDetail as any)?.richContent) || normalizeText((nextDetail as any)?.description);
+        setInlinePreview({
+          title: normalizeText((nextDetail as any)?.name) || '商品详情',
+          text: text || '商品详情暂无图片内容',
+          kind: 'product',
+        });
+      }
     } catch {
-      if (item) setPreviewItem(item);
-    } finally {
-      setPreviewLoading(false);
+      if (item) {
+        setPreviewItem(item);
+        const imageList = extractAllImageSrcs((item as any)?.richContent);
+        if (imageList.length) {
+          setProductPreviewCurrent(0);
+          setProductPreviewVisible(true);
+        } else {
+          setInlinePreview({
+            title: normalizeText(item.name) || '商品详情',
+            text: stripHtml((item as any)?.richContent) || normalizeText(item.description) || '商品详情暂无图片内容',
+            kind: 'product',
+          });
+        }
+      }
     }
   }, []);
+
+  const openProtocolPreview = useCallback((item: MiniappProtocolItem | null | undefined) => {
+    if (!item || !Number.isFinite(Number(item.id)) || Number(item.id) <= 0) return;
+    const imageSrc = extractFirstImageSrc((item as any)?.content);
+    if (imageSrc) {
+      setBannerPreviewSrc(imageSrc);
+      setBannerPreviewVisible(true);
+      return;
+    }
+    const imageList = extractAllImageSrcs((item as any)?.content);
+    if (imageList.length) {
+      setPreviewKind('protocol');
+      setPreviewItem(item as any);
+      setProtocolPreviewCurrent(0);
+      setProtocolPreviewVisible(true);
+      setInlinePreview(null);
+      return;
+    }
+    setPreviewKind('protocol');
+    setPreviewItem(item as any);
+    setInlinePreview({
+      title: normalizeText((item as any)?.title) || '协议详情',
+      text: stripHtml((item as any)?.content) || '协议内容暂无图片',
+      kind: 'protocol',
+    });
+  }, []);
+
+  const productPreviewImages = useMemo(() => {
+    if (previewKind !== 'product' || !previewItem) return [];
+    return extractAllImageSrcs((previewItem as any)?.richContent);
+  }, [previewItem, previewKind]);
+
+  const productPreviewText = useMemo(() => {
+    if (previewKind !== 'product' || !previewItem) return '';
+    const richText = stripHtml((previewItem as any)?.richContent);
+    const descText = normalizeText(previewItem.description);
+    return richText || descText;
+  }, [previewItem, previewKind]);
+
+  const protocolPreviewImages = useMemo(() => {
+    if (previewKind !== 'protocol' || !previewItem) return [];
+    return extractAllImageSrcs((previewItem as any)?.content);
+  }, [previewItem, previewKind]);
+
+  const protocolPreviewText = useMemo(() => {
+    if (previewKind !== 'protocol' || !previewItem) return '';
+    return stripHtml((previewItem as any)?.content);
+  }, [previewItem, previewKind]);
 
   const loadPage = useCallback(async (targetPage: number, reset = false) => {
     try {
@@ -131,16 +250,16 @@ export default function PublicMenuGalleryPage() {
   }, [selectedCategory]);
 
   useEffect(() => {
-    document.title = '蓝猫爽打-服务图层';
+    document.title = '蓝猫爽打-服务列表';
   }, []);
 
   useEffect(() => {
-    void loadHomeConfig();
+    void loadBannerProtocols();
     setItems([]);
     setPage(1);
     setHasMore(false);
     void loadPage(1, true);
-  }, [loadHomeConfig, loadPage, selectedCategory]);
+  }, [loadBannerProtocols, loadPage, selectedCategory]);
 
   const categoryGroups = useMemo(
     () => [{ key: 'ALL', label: '全部' }, ...filters.categoryOptions],
@@ -186,17 +305,16 @@ export default function PublicMenuGalleryPage() {
   const hasActiveFilter = selectedCategory !== 'ALL' || sortMode !== 'default' || priceRange !== 'all';
 
   const bannerItem = useMemo(() => {
-    const banners = Array.isArray(homeConfig?.banners) ? homeConfig.banners : [];
-    const normalized = banners
-      .map((banner: any) => ({
-        ...banner,
-        targetType: String(banner?.targetType || '').trim(),
-        targetValue: String(banner?.targetValue || '').trim(),
-        coverImage: String(banner?.coverImage || '').trim(),
+    return bannerProtocols
+      .map((banner) => ({
+        id: Number(banner.id || 0),
+        title: normalizeText(banner.title) || '必看说明',
+        coverImage: normalizeText(banner.coverImage) || PLACEHOLDER_IMAGE,
+        content: normalizeText(banner.content),
+        targetValue: String(banner.key || banner.id || '').trim(),
       }))
-      .filter((banner: any) => banner.coverImage);
-    return normalized.filter((banner: any) => ['product', 'project'].includes(banner.targetType) && banner.targetValue);
-  }, [homeConfig]);
+      .filter((banner) => banner.id > 0 && banner.coverImage);
+  }, [bannerProtocols]);
 
   useEffect(() => {
     if (!hasMore || loadingMore) return undefined;
@@ -219,6 +337,12 @@ export default function PublicMenuGalleryPage() {
     observer.observe(target);
     return () => observer.disconnect();
   }, [hasMore, loadPage, loading, loadingMore, page]);
+
+  const closeInlinePreview = useCallback(() => {
+    setInlinePreview(null);
+    setPreviewItem(null);
+    setPreviewKind('product');
+  }, []);
 
   const getItemHeight = (id?: number) => {
     const heights = [220, 240, 205, 250, 225, 235, 215, 245, 260, 200, 230, 210];
@@ -255,9 +379,14 @@ export default function PublicMenuGalleryPage() {
               </div>
             </div>
 
-            {homeConfigLoading && !bannerItem.length ? <div className="gallery-notice-banner-skeleton" /> : null}
+            {bannerLoading && !bannerItem.length ? <div className="gallery-notice-banner-skeleton" /> : null}
+            {!bannerLoading && bannerLoadFailed ? (
+              <div className="gallery-notice-banner-empty">
+                <span>Banner 暂无可展示内容</span>
+              </div>
+            ) : null}
 
-            {bannerItem.length ? (
+            {!bannerLoadFailed && bannerItem.length ? (
               <div className="gallery-notice-banner">
                 <Carousel
                   dots={false}
@@ -269,17 +398,22 @@ export default function PublicMenuGalleryPage() {
                   className="gallery-notice-carousel"
                 >
                   {bannerItem.map((banner: any, index: number) => (
-                    <div key={`${banner.targetType}-${banner.targetValue}-${index}`}>
+                    <div key={`${banner.id}-${index}`}>
                       <button
                         type="button"
                         className="gallery-notice-banner-slide"
-                        onClick={() => void openProductPreview({
-                          id: Number(banner.targetValue),
-                          name: banner.title || '下单须知',
-                          price: 0,
+                        onClick={() => openProtocolPreview({
+                          id: Number(banner.id),
+                          categoryId: Number((banner as any)?.categoryId || 0),
+                          category: (banner as any)?.category || null,
+                          key: String((banner as any)?.key || ''),
+                          title: banner.title || '必看说明',
                           coverImage: banner.coverImage,
-                          description: banner.subtitle || '',
-                        } as PublicMenuItem, Number(banner.targetValue))}
+                          content: banner.content || '',
+                          enabled: true,
+                          remark: undefined,
+                          sort: 0,
+                        } as MiniappProtocolItem)}
                       >
                         <img
                           className="gallery-notice-banner-image"
@@ -407,20 +541,23 @@ export default function PublicMenuGalleryPage() {
               </div>
             ) : null}
 
-            {!loading && hasMore ? (
+            {!loading && visibleItems.length > 0 ? (
               <div className="gallery-load-more" ref={loadMoreRef}>
-                <div className="gallery-load-more-spinner" />
-                <span>继续加载更多</span>
+                {loadingMore || hasMore ? <div className="gallery-load-more-spinner" /> : null}
+                <span>{loadingMore ? '加载中...' : hasMore ? '继续加载更多' : '已加载全部商品'}</span>
               </div>
             ) : null}
-            {!loading && loadingMore ? (
-              <div className="gallery-load-more">
-                <div className="gallery-load-more-spinner" />
-                <span>加载中...</span>
+
+            {inlinePreview ? (
+              <div className="gallery-inline-preview">
+                <div className="gallery-inline-preview-head">
+                  <div className="gallery-inline-preview-title">{inlinePreview.title}</div>
+                  <button type="button" className="gallery-inline-preview-close" onClick={closeInlinePreview}>
+                    <CloseOutlined />
+                  </button>
+                </div>
+                <div className="gallery-inline-preview-text">{inlinePreview.text}</div>
               </div>
-            ) : null}
-            {!loading && !loadingMore && !hasMore && visibleItems.length > 0 ? (
-              <div className="gallery-load-done">已加载全部商品</div>
             ) : null}
           </main>
         </div>
@@ -511,66 +648,74 @@ export default function PublicMenuGalleryPage() {
         </div>
       </div>
 
-      <Modal
-        open={previewOpen}
-        onCancel={() => {
-          setPreviewOpen(false);
-          setPreviewItem(null);
-          setPreviewLoading(false);
-        }}
-        footer={null}
-        centered
-        width={960}
-        className="gallery-preview-modal"
-        destroyOnClose
-      >
-        {previewLoading || previewItem ? (
-          <div className="gallery-preview">
-            {previewLoading && !previewItem ? (
-              <div className="gallery-preview-loading">
-                <Skeleton active paragraph={{ rows: 4 }} />
-              </div>
-            ) : previewItem ? (
-              <>
-                <div className="gallery-preview-head">
-                  <div>
-                    <Title level={4} style={{ margin: 0 }}>
-                      {previewItem.name || '未命名商品'}
-                    </Title>
-                    <Space size={8} wrap style={{ marginTop: 8 }}>
-                      <Tag color="blue">{labelOrDefault(previewItem.gameTypeName || previewItem.gameType, '游戏分类')}</Tag>
-                      <Tag color="cyan">{labelOrDefault(previewItem.categoryName || previewItem.category, '商品类别')}</Tag>
-                      {normalizeText(previewItem.projectTypeNames?.join(' / ') || previewItem.projectType) ? (
-                        <Tag color="geekblue">{previewItem.projectTypeNames?.join(' / ') || previewItem.projectType}</Tag>
-                      ) : null}
-                    </Space>
-                  </div>
-                  <Text className="gallery-preview-price">¥{Number(previewItem.price || 0).toFixed(0)}</Text>
-                </div>
-                <Image
-                  src={normalizeText(previewItem.coverImage) || PLACEHOLDER_IMAGE}
-                  alt={previewItem.name}
-                  preview={false}
-                  className="gallery-preview-image"
-                  onError={(event) => {
-                    const target = event.currentTarget as HTMLImageElement;
-                    if (target.src !== PLACEHOLDER_IMAGE) target.src = PLACEHOLDER_IMAGE;
-                  }}
-                />
-                {normalizeText(previewItem.description) ? (
-                  <Paragraph className="gallery-preview-desc">{previewItem.description}</Paragraph>
-                ) : null}
-                {normalizeText((previewItem as any)?.richContent) ? (
-                  <div
-                    className="gallery-preview-rich"
-                    dangerouslySetInnerHTML={{ __html: String((previewItem as any).richContent || '') }}
-                  />
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </Modal>
+      <div style={{ display: 'none' }}>
+        <Image.PreviewGroup
+          preview={{
+            visible: productPreviewVisible,
+            current: productPreviewCurrent,
+            onVisibleChange: (visible) => {
+              setProductPreviewVisible(visible);
+              if (!visible) {
+                setProductPreviewCurrent(0);
+                setPreviewItem(null);
+                setPreviewKind('product');
+              }
+            },
+          }}
+        >
+          {productPreviewImages.map((src, index) => (
+            <Image
+              key={`product-${index}-${src}`}
+              src={src || PLACEHOLDER_IMAGE}
+              alt={`商品详情-${index + 1}`}
+              onError={(event) => {
+                const target = event.currentTarget as HTMLImageElement;
+                if (target.src !== PLACEHOLDER_IMAGE) target.src = PLACEHOLDER_IMAGE;
+              }}
+            />
+          ))}
+        </Image.PreviewGroup>
+        <Image.PreviewGroup
+          preview={{
+            visible: protocolPreviewVisible,
+            current: protocolPreviewCurrent,
+            onVisibleChange: (visible) => {
+              setProtocolPreviewVisible(visible);
+              if (!visible) {
+                setProtocolPreviewCurrent(0);
+                setPreviewItem(null);
+                setPreviewKind('product');
+              }
+            },
+          }}
+        >
+          {protocolPreviewImages.map((src, index) => (
+            <Image
+              key={`protocol-${index}-${src}`}
+              src={src || PLACEHOLDER_IMAGE}
+              alt={`协议内容-${index + 1}`}
+              onError={(event) => {
+                const target = event.currentTarget as HTMLImageElement;
+                if (target.src !== PLACEHOLDER_IMAGE) target.src = PLACEHOLDER_IMAGE;
+              }}
+            />
+          ))}
+        </Image.PreviewGroup>
+      </div>
+      {bannerPreviewSrc ? (
+        <Image
+          style={{ display: 'none' }}
+          src={bannerPreviewSrc}
+          preview={{
+            visible: bannerPreviewVisible,
+            src: bannerPreviewSrc,
+            onVisibleChange: (visible) => {
+              setBannerPreviewVisible(visible);
+              if (!visible) setBannerPreviewSrc('');
+            },
+          }}
+        />
+      ) : null}
     </div>
   );
 }
