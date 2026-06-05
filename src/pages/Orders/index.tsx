@@ -1,7 +1,7 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {useModel, useNavigate} from '@umijs/max';
 import {Button, Checkbox, Form, Input, InputNumber, message, Modal, Space, Tag, Tooltip} from 'antd';
-import {assignDispatch, createOrder, getOrders, markOrderPaid} from '@/services/api';
+import {assignDispatch, createOrder, deleteOrder, getOrderSourceOptions, getOrders, markOrderPaid} from '@/services/api';
 import OrderUpsertModal from './components/OrderForm';
 import {PageContainer, ProTable, type ActionType} from '@ant-design/pro-components';
 
@@ -86,6 +86,32 @@ const OrdersPage: React.FC = () => {
     const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false);
     const [markPaidOrder, setMarkPaidOrder] = useState<any>(null);
     const [markPaidForm] = Form.useForm();
+    const [orderSourceOptions, setOrderSourceOptions] = useState<Array<{ label: string; value: string }>>([]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res: any = await getOrderSourceOptions();
+                const list = Array.isArray(res) ? res : (res?.data ?? []);
+                setOrderSourceOptions(
+                    list
+                        .map((item: any) => ({
+                            value: String(item?.value || '').trim(),
+                            label: String(item?.label || item?.value || '').trim(),
+                        }))
+                        .filter((item: any) => item.value && item.label),
+                );
+            } catch (e) {
+                console.error(e);
+                setOrderSourceOptions([]);
+            }
+        })();
+    }, []);
+
+    const orderSourceValueEnum = useMemo(
+        () => Object.fromEntries(orderSourceOptions.map((item) => [item.value, { text: item.label }])),
+        [orderSourceOptions],
+    );
 
     const openMarkPaidModal = (row: any) => {
         setMarkPaidOrder(row);
@@ -99,6 +125,25 @@ const OrdersPage: React.FC = () => {
         });
 
         setMarkPaidOpen(true);
+    };
+
+    const confirmDeleteOrder = (row: any) => {
+        Modal.confirm({
+            title: '删除订单',
+            content: '该操作将删除当前订单记录。已存在强外键关联的数据会按数据库规则自动处理，操作不可撤销。',
+            okText: '确认删除',
+            okButtonProps: { danger: true },
+            cancelText: '取消',
+            onOk: async () => {
+                try {
+                    await deleteOrder({ id: Number(row?.id), remark: '后台列表页手动删除订单' });
+                    message.success('订单已删除');
+                    actionRef.current?.reload?.();
+                } catch (e: any) {
+                    message.error(e?.response?.data?.message || '删除订单失败');
+                }
+            },
+        });
     };
 
     const submitMarkPaid = async () => {
@@ -149,6 +194,14 @@ const OrdersPage: React.FC = () => {
             title: '项目',
             dataIndex: ['project', 'name'],
             ellipsis: true,
+        },
+        {
+            title: '渠道来源',
+            dataIndex: 'orderSource',
+            width: 150,
+            valueType: 'select',
+            valueEnum: orderSourceValueEnum,
+            render: (_: any, row: any) => row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : '-',
         },
         {
             title: '状态',
@@ -270,6 +323,13 @@ const OrdersPage: React.FC = () => {
                     >
                         详情
                     </a>,
+                    <a
+                        key="delete"
+                        style={{ color: '#ff4d4f' }}
+                        onClick={() => confirmDeleteOrder(row)}
+                    >
+                        删除
+                    </a>,
 
 
                     // canQuickMarkPaid ? (
@@ -335,6 +395,7 @@ const OrdersPage: React.FC = () => {
                         keyword: params.keyword,
                         // ✅ 收款筛选
                         isPaid: isPaidParam,
+                        orderSource: params.orderSource,
 
                         // projectId/playerId/dispatcherId 你后续加筛选控件后再传
                     });
@@ -359,6 +420,7 @@ const OrdersPage: React.FC = () => {
                         paidAmount: payload?.paidAmount,
                         baseAmountWan: payload?.baseAmountWan ?? undefined,
                         customerGameId: payload?.customerGameId,
+                        orderSource: payload?.orderSource,
                         orderTime: payload?.orderTime,
                         paymentTime: payload?.paymentTime,
                         csRate: payload?.csRate,

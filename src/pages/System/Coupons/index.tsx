@@ -13,6 +13,8 @@ import {
   Table,
   Tabs,
   Tag,
+  Transfer,
+  Tree,
 } from 'antd';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -20,6 +22,7 @@ import {
   createCouponTemplate,
   getCouponTemplates,
   getGameProjectOptions,
+  getGoodsCategoryTree,
   getUserCoupons,
   grantUserCoupon,
   updateCouponTemplateStatus,
@@ -39,8 +42,8 @@ const templateTypeDict: Record<string, string> = {
 };
 const scopeDict: Record<string, string> = {
   ALL: '全部项目',
-  PROJECT: '指定项目',
-  CATEGORY: '指定分类',
+  PROJECT: '指定商品',
+  CATEGORY: '商品类别',
   USER_LEVEL: '指定等级',
 };
 const userCouponStatusDict: Record<string, string> = {
@@ -61,6 +64,7 @@ const templateTypeOptions = Object.keys(templateTypeDict).map((value) => ({
 const scopeOptions = Object.keys(scopeDict).map((value) => ({
   value,
   label: scopeDict[value],
+  disabled: value === 'USER_LEVEL',
 }));
 const userCouponStatusOptions = Object.keys(userCouponStatusDict).map((value) => ({
   value,
@@ -92,12 +96,18 @@ const CouponsPage: React.FC = () => {
   const [formGrant] = Form.useForm();
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectOptions, setProjectOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const [categoryTreeOptions, setCategoryTreeOptions] = useState<Array<{ title: string; value: string; key: string; children?: any[] }>>([]);
+  const [projectTargetKeys, setProjectTargetKeys] = useState<string[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<Record<string, { label: string; value: number }>>({});
+  const [checkedCategoryKeys, setCheckedCategoryKeys] = useState<React.Key[]>([]);
   const createScope = Form.useWatch('applicableScope', formCreate);
+  const createType = Form.useWatch('type', formCreate);
 
   const loadProjects = async (keyword?: string) => {
     setProjectLoading(true);
     try {
-      const res: any = await getGameProjectOptions({ keyword: keyword || '' });
+      const kw = String(keyword || '').trim();
+      const res: any = await getGameProjectOptions({ keyword: kw || undefined });
       const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
       setProjectOptions(
         list.map((item: any) => ({
@@ -112,6 +122,40 @@ const CouponsPage: React.FC = () => {
       setProjectLoading(false);
     }
   };
+
+  const loadLevel2Categories = async () => {
+    try {
+      const tree: any[] = await getGoodsCategoryTree();
+      const mapNode = (n: any): any => {
+        const lv = Number(n?.level || 0);
+        if (lv > 2) return null;
+        const children = Array.isArray(n?.children)
+          ? n.children.map(mapNode).filter((x: any) => !!x)
+          : undefined;
+        return {
+          title: String(n?.name || n?.id || ''),
+          value: String(n?.id || ''),
+          key: String(n?.id || ''),
+          children,
+        };
+      };
+      const nodes = (Array.isArray(tree) ? tree : [])
+        .map(mapNode)
+        .filter((x: any) => !!x.value);
+      setCategoryTreeOptions(nodes);
+    } catch (e) {
+      console.error(e);
+      setCategoryTreeOptions([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!createOpen) return;
+    formCreate.setFieldValue('applicableTargetIds', []);
+    setProjectTargetKeys([]);
+    setCheckedCategoryKeys([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createScope]);
 
   const loadData = async (nextPage = page, nextLimit = limit) => {
     setLoading(true);
@@ -296,9 +340,14 @@ const CouponsPage: React.FC = () => {
               ...v,
               startAt: v.startAt ? dayjs(v.startAt).toISOString() : undefined,
               endAt: v.endAt ? dayjs(v.endAt).toISOString() : undefined,
-              applicableProjectIds: Array.isArray(v.applicableProjectIds)
-                ? v.applicableProjectIds.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x) && x > 0)
-                : [],
+              applicableProjectIds:
+                createScope === 'CATEGORY'
+                  ? (Array.isArray(v.applicableTargetIds)
+                    ? v.applicableTargetIds.map((x: any) => String(x)).filter((x: string) => !!x)
+                    : [])
+                  : (Array.isArray(v.applicableTargetIds)
+                    ? v.applicableTargetIds.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x) && x > 0)
+                    : []),
             });
             message.success('创建成功');
             setCreateOpen(false);
@@ -313,7 +362,10 @@ const CouponsPage: React.FC = () => {
         confirmLoading={submitting}
         width={720}
         afterOpenChange={(open) => {
-          if (open) void loadProjects('');
+          if (open) {
+            void loadLevel2Categories();
+            void loadProjects();
+          }
         }}
       >
         <Form form={formCreate} layout="vertical" initialValues={{ status: 'DRAFT', applicableScope: 'ALL', type: 'CASH' }}>
@@ -332,12 +384,29 @@ const CouponsPage: React.FC = () => {
             </Form.Item>
           </Space>
           <Space style={{ width: '100%' }} align="start">
-            <Form.Item name="discountValue" label="优惠值" style={{ width: 160 }}>
-              <InputNumber min={0} style={{ width: '100%' }} />
+            <Form.Item
+              name="discountValue"
+              label={createType === 'DISCOUNT' ? '优惠值（折扣）' : '优惠值'}
+              tooltip={createType === 'DISCOUNT' ? '按“几折”填写，如 8.5 表示 8.5 折' : undefined}
+              rules={[{ required: createType !== 'FREE', message: '请输入优惠值' }]}
+              style={{ width: 220 }}
+            >
+              {createType === 'DISCOUNT' ? (
+                <InputNumber min={0.1} max={9.9} step={0.1} precision={1} style={{ width: '100%' }} addonAfter="折" />
+              ) : (
+                <InputNumber min={0} style={{ width: '100%' }} />
+              )}
             </Form.Item>
-            <Form.Item name="thresholdAmount" label="满减门槛" style={{ width: 160 }}>
-              <InputNumber min={0} style={{ width: '100%' }} />
-            </Form.Item>
+            {createType === 'FULL_REDUCTION' ? (
+              <Form.Item
+                name="thresholdAmount"
+                label="满减门槛"
+                rules={[{ required: true, message: '请输入满减门槛' }]}
+                style={{ width: 200 }}
+              >
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            ) : null}
             <Form.Item name="maxDiscountAmount" label="封顶优惠" style={{ width: 160 }}>
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
@@ -360,22 +429,77 @@ const CouponsPage: React.FC = () => {
           </Space>
           {createScope === 'PROJECT' ? (
             <Form.Item
-              name="applicableProjectIds"
-              label="可用项目"
-              rules={[{ required: true, message: '请选择可用项目' }]}
+              name="applicableTargetIds"
+              label="可用商品"
+              rules={[{ required: true, message: '请选择可用商品' }]}
             >
-              <Select
-                mode="multiple"
-                allowClear
+              <Transfer
                 showSearch
-                filterOption={false}
-                options={projectOptions}
-                loading={projectLoading}
-                placeholder="请选择可用项目（可多选）"
-                onSearch={(kw) => {
-                  void loadProjects(kw);
+                titles={['商品列表', '已选商品']}
+                targetKeys={projectTargetKeys}
+                onChange={(nextTargetKeys) => {
+                  setProjectTargetKeys(nextTargetKeys);
+                  const merged: Record<string, { label: string; value: number }> = { ...selectedProjects };
+                  projectOptions.forEach((x) => {
+                    merged[String(x.value)] = x;
+                  });
+                  setSelectedProjects(merged);
+                  formCreate.setFieldValue(
+                    'applicableTargetIds',
+                    nextTargetKeys.map((k) => Number(k)).filter((x) => Number.isFinite(x) && x > 0),
+                  );
                 }}
+                onSearch={(direction, value) => {
+                  if (direction === 'left') {
+                    void loadProjects(value);
+                  }
+                }}
+                dataSource={Array.from(
+                  new Map(
+                    [...projectOptions, ...Object.values(selectedProjects)].map((x) => [String(x.value), x]),
+                  ).values(),
+                ).map((x) => ({
+                  key: String(x.value),
+                  title: x.label,
+                  description: x.label,
+                }))}
+                render={(item) => item.title}
+                loading={projectLoading}
+                listStyle={{ width: 280, height: 320 }}
               />
+            </Form.Item>
+          ) : null}
+          {createScope === 'CATEGORY' ? (
+            <Form.Item
+              name="applicableTargetIds"
+              label="选择游戏及类别"
+              rules={[{ required: true, message: '请选择分类' }]}
+            >
+              <>
+                <Tree
+                  checkable
+                  selectable={false}
+                  defaultExpandAll
+                  treeData={categoryTreeOptions}
+                  checkedKeys={checkedCategoryKeys}
+                  onCheck={(nextChecked) => {
+                    const keys = Array.isArray(nextChecked) ? nextChecked : nextChecked?.checked || [];
+                    setCheckedCategoryKeys(keys);
+                    formCreate.setFieldValue(
+                      'applicableTargetIds',
+                      keys.map((k) => String(k)).filter((x) => !!x),
+                    );
+                  }}
+                />
+                <Form.Item name="applicableTargetIds" noStyle>
+                  <Input type="hidden" />
+                </Form.Item>
+              </>
+            </Form.Item>
+          ) : null}
+          {createScope === 'USER_LEVEL' ? (
+            <Form.Item label="可用等级（预留）">
+              <Input disabled value="指定等级功能后续迭代开发" />
             </Form.Item>
           ) : null}
         </Form>

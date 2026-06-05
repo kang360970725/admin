@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
 import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal} from 'antd';
-import {useAccess} from 'umi';
+import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {deleteUser, getAvailableRatings, getUsers, getWalletStatistics, updateUser} from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
@@ -28,7 +28,7 @@ const userTypeMap = {
     CUSTOMER_SERVICE: { text: '客服', color: 'green' },
     OPERATION: { text: '运营', color: 'purple' },
     FINANCE: { text: '财务', color: 'cyan' },
-    REGISTERED_USER: { text: '注册用户', color: 'default' },
+    REGISTERED_USER: { text: '会员', color: 'default' },
 };
 
 const userStatusMap = {
@@ -39,6 +39,7 @@ const userStatusMap = {
 
 export default function UsersPage() {
     const access = useAccess();
+    const location = useLocation();
     const [createModalVisible, setCreateModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [changeLevelModalVisible, setChangeLevelModalVisible] = useState(false);
@@ -50,6 +51,15 @@ export default function UsersPage() {
     const [walletVisible, setWalletVisible] = useState(false);
     const [walletUser, setWalletUser] = useState<any>(null);
     const [walletStats, setWalletStats] = useState<any>(null);
+
+    const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean }> = {
+        '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
+        '/users/staff': { key: 'STAFF', title: '打手管理', defaultUserType: 'STAFF', showStaffRating: true, showWorkMetrics: true },
+        '/users/internal': { key: 'INTERNAL', title: '后台人员管理', showStaffRating: false, showWorkMetrics: false },
+        '/users/all': { key: 'ALL', title: '全部用户', showStaffRating: true, showWorkMetrics: true },
+    };
+
+    const sceneConfig = sceneMap[location.pathname] || sceneMap['/users/members'];
 
     // 加载可用的员工评级
     useEffect(() => {
@@ -159,12 +169,11 @@ export default function UsersPage() {
             key: 'name',
             width: 100,
         },
-        {
+        sceneConfig.key === 'ALL' ? {
             title: '用户类型',
             dataIndex: 'userType',
             key: 'userType',
             width: 100,
-            // ✅ 搜索栏改成下拉
             valueType: 'select',
             valueEnum: {
                 STAFF: { text: '员工' },
@@ -183,7 +192,7 @@ export default function UsersPage() {
                     {userTypeMap[record.userType as keyof typeof userTypeMap]?.text}
                 </Tag>
             )
-        },
+        } : null,
         {
             title: '角色',
             dataIndex: 'Role',
@@ -198,7 +207,7 @@ export default function UsersPage() {
                 )
             ),
         },
-        {
+        sceneConfig.showStaffRating ? {
             title: '员工评级',
             dataIndex: 'staffRating',
             key: 'rating',
@@ -213,13 +222,60 @@ export default function UsersPage() {
                     <Tag>未设置</Tag>
                 )
             ),
-        },
+        } : null,
         {
             title: '等级',
             dataIndex: 'level',
             key: 'level',
             search: false,
             width: 80,
+        },
+        {
+            title: '微信绑定',
+            dataIndex: 'wechatBindings',
+            key: 'wechatBindings',
+            width: 180,
+            search: false,
+            render: (bindings: any[]) => {
+                const first = Array.isArray(bindings) ? bindings[0] : null;
+                if (!first) return <Tag>未绑定</Tag>;
+                return (
+                    <div style={{ lineHeight: '18px' }}>
+                        <div>
+                            <Tag color="green">已绑定微信</Tag>
+                        </div>
+                        <div style={{ color: '#666', fontSize: 12 }}>
+                            openId: {String(first.openId || '').slice(0, 8)}...
+                        </div>
+                        <div style={{ color: '#999', fontSize: 12 }}>
+                            unionId: {first.unionId ? `${String(first.unionId).slice(0, 8)}...` : '无'}
+                        </div>
+                    </div>
+                );
+            },
+        },
+        {
+            title: '会员资产',
+            key: 'memberAssets',
+            width: 180,
+            search: false,
+            render: (_, record) => {
+                const profile = record?.memberProfile || {};
+                const points = Number(record?.memberPointAccount?.availablePoints ?? 0);
+                return (
+                    <div style={{ lineHeight: '18px' }}>
+                        <div style={{ color: '#1677ff', fontSize: 12 }}>
+                            {profile?.levelCode || 'NONE'} / {profile?.memberCode || '-'}
+                        </div>
+                        <div style={{ color: '#666', fontSize: 12 }}>
+                            积分 {points}
+                        </div>
+                        <div style={{ color: '#999', fontSize: 12 }}>
+                            累充 ¥{Number(profile?.totalRechargeAmount ?? 0).toFixed(2)}
+                        </div>
+                    </div>
+                );
+            },
         },
         // {
         //     title: '钱包',
@@ -333,7 +389,7 @@ export default function UsersPage() {
                 );
             },
         },
-        {
+        sceneConfig.showWorkMetrics ? {
             title: '最后接单',
             dataIndex: 'lastAcceptOrderAt',
             width: 120,
@@ -348,7 +404,7 @@ export default function UsersPage() {
                     </Tooltip>
                 );
             },
-        },
+        } : null,
         {
             title: '未登录天数',
             dataIndex: 'loginInactiveDays',
@@ -363,7 +419,7 @@ export default function UsersPage() {
                 ],
             },
         },
-        {
+        sceneConfig.showWorkMetrics ? {
             title: '未接单天数',
             dataIndex: 'acceptInactiveDays',
             hideInTable: true,
@@ -376,7 +432,7 @@ export default function UsersPage() {
                     { label: '30天未接单', value: 30 },
                 ],
             },
-        },
+        } : null,
         {
             title: '操作',
             key: 'action',
@@ -411,7 +467,7 @@ export default function UsersPage() {
                 </Space>
             ),
         },
-    ];
+    ].filter(Boolean);
 
     const handleToggleWithdraw = async (record: any, checked: boolean) => {
         try {
@@ -427,7 +483,7 @@ export default function UsersPage() {
     };
 
     return (
-        <PageContainer>
+        <PageContainer title={sceneConfig.title}>
             <Row gutter={16} style={{ marginBottom: 20 }}>
 
                 <Col span={8}>
@@ -472,6 +528,7 @@ export default function UsersPage() {
                         const query = {
                             page: current ?? 1,
                             limit: pageSize ?? 10,
+                            scene: sceneConfig.key,
                             ...rest, // search 表单字段会在这里（例如 search/userType/status）
                         };
 

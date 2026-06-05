@@ -2,8 +2,13 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
   const { currentUser } = initialState ?? {};
 
   const permissions = currentUser?.permissions || [];
-
+  const userType = String(currentUser?.userType || '').trim().toUpperCase();
+  const isAdmin = userType === 'ADMIN' || userType === 'SUPER_ADMIN';
   const has = (key: string) => permissions.includes(key);
+  const canViewMemberUsers = isAdmin || has('users:member:page');
+  const canViewStaffUsers = isAdmin || has('users:staff:page');
+  const canViewInternalUsers = isAdmin || has('users:internal:page');
+  const canViewAllUsers = canViewInternalUsers && isAdmin;
 
   return {
     // 系统管理
@@ -11,6 +16,8 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewPermissionManagement: has('system:permission:page'),
     canViewGameProjectManagement: has('system:game-project:page'),
     canViewSystemConfigs: has('system:role:page'),
+    canViewMiniappHomeConfig: has('system:role:page'),
+    canViewMiniappProtocols: has('system:role:page'),
     canViewAppVersions: has('system:role:page'),
     canViewAnnouncements: has('system:role:page'),
     canViewDutyCsSchedules: has('system:role:page'),
@@ -20,7 +27,11 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || has('system:role:page'),
 
     // 用户/评级
-    canViewUsers: has('users:page'),
+    canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewInternalUsers || canViewAllUsers,
+    canViewMemberUsers,
+    canViewStaffUsers,
+    canViewInternalUsers,
+    canViewAllUsers,
     canViewStaffRatings: has('staff-ratings:page'),
 
     // 陪玩中心

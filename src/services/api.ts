@@ -37,6 +37,28 @@ export interface User {
     depositLimit: string;
     workMode?: 'ONLINE' | 'OFFLINE';
     offlineJoinedAt?: string | null;
+    memberProfile?: {
+        memberCode?: string;
+        levelCode?: string;
+        totalRechargeAmount?: number | string;
+        totalConsumeAmount?: number | string;
+        annualContribution?: number;
+        lastRechargeAt?: string | null;
+    };
+    memberPointAccount?: {
+        availablePoints?: number;
+        totalEarnedPoints?: number;
+        totalSpentPoints?: number;
+    };
+    wechatBindings?: Array<{
+        id: number;
+        platform: string;
+        appId: string;
+        openId: string;
+        unionId?: string | null;
+        lastBindAt?: string | null;
+        lastLoginAt?: string | null;
+    }>;
 }
 
 export interface PaginationResponse {
@@ -74,6 +96,59 @@ export async function getUsers(params: any): Promise<PaginationResponse> {
     return request<PaginationResponse>(`${API_BASE}/users`, {
         method: 'GET',
         params,
+    });
+}
+
+export async function getMemberRechargePlans() {
+    return request(`${API_BASE}/member/recharge-plans`, {
+        method: 'GET',
+    });
+}
+
+export async function getMemberLevelConfigs() {
+    return request(`${API_BASE}/member/levels`, {
+        method: 'GET',
+    });
+}
+
+export async function createMemberLevelConfig(data: any) {
+    return request(`${API_BASE}/member/levels`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateMemberLevelConfig(id: number, data: any) {
+    return request(`${API_BASE}/member/levels/${id}`, {
+        method: 'PATCH',
+        data,
+    });
+}
+
+export async function refreshMemberLevels() {
+    return request(`${API_BASE}/member/levels/refresh`, {
+        method: 'POST',
+    });
+}
+
+export async function createMemberRechargePlan(data: any) {
+    return request(`${API_BASE}/member/recharge-plans`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateMemberRechargePlan(id: number, data: any) {
+    return request(`${API_BASE}/member/recharge-plans/${id}`, {
+        method: 'PATCH',
+        data,
+    });
+}
+
+export async function adjustMemberPoints(data: { userId: number; points: number; remark?: string }) {
+    return request(`${API_BASE}/member/points/adjust`, {
+        method: 'POST',
+        data,
     });
 }
 
@@ -202,6 +277,26 @@ export async function getGameProjects() {
     return request(`${API_BASE}/game-project`);
 }
 
+export async function getGameProjectList(data: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    gameType?: string;
+    category?: string;
+    status?: string;
+}) {
+    return request<{
+        data: any[];
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>(`${API_BASE}/game-project/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function createGameProject(data: any) {
     return request(`${API_BASE}/game-project`, {
         method: 'POST',
@@ -219,6 +314,65 @@ export async function updateGameProject(id: number, data: any) {
 export async function deleteGameProject(id: number) {
     return request(`${API_BASE}/game-project/${id}`, {
         method: 'DELETE',
+    });
+}
+
+export async function getGameProjectRatingSummary(id: number) {
+    return request<{ projectId: number; ratingAvg: number; ratingCount: number }>(`${API_BASE}/game-project/${id}/rating-summary`, {
+        method: 'GET',
+    });
+}
+
+export async function listGameProjectReviews(
+    id: number,
+    data: { page?: number; limit?: number; includeHidden?: boolean },
+) {
+    return request<{
+        data: Array<{
+            id: number;
+            score: number;
+            tags?: unknown;
+            content?: string;
+            anonymous?: boolean;
+            isHidden: boolean;
+            hiddenReason?: string | null;
+            hiddenAt?: string | null;
+            createdAt: string;
+            orderId: number;
+            user?: { id: number; name?: string | null; phone?: string | null } | null;
+        }>;
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    }>(`${API_BASE}/game-project/${id}/reviews/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function hideGameProjectReview(reviewId: number, data: { hidden: boolean; reason?: string }) {
+    return request(`${API_BASE}/game-project/reviews/${reviewId}/hide`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getUploadInfo(data: { module: string; filename?: string; scene?: string }) {
+    return request<{
+        mode: 'signature';
+        module: string;
+        scene: string;
+        cloudPath: string;
+        bucket: string;
+        region: string;
+        uploadUrl: string;
+        fileUrl: string;
+        authorization: string;
+        expiredTime: number;
+    }>(`${API_BASE}/uploads/info`, {
+        method: 'POST',
+        data,
     });
 }
 
@@ -298,6 +452,12 @@ export async function assignDispatch(orderId: number, data: { playerIds: number[
     });
 }
 
+export async function getOrderSourceOptions() {
+    return request(`${API_BASE}/orders/source-options`, {
+        method: 'POST',
+    });
+}
+
 /** 接单：POST /orders/dispatch/accept */
 export async function acceptDispatch(dispatchId: number, data?: { remark?: string }) {
     return request(`${API_BASE}/orders/dispatch/accept`, {
@@ -341,6 +501,7 @@ export interface PublicMenuItem {
     id: number;
     name: string;
     price: number;
+    originPrice?: number | null;
     type: string;
     billingMode: string;
     baseAmount?: number | null;
@@ -350,6 +511,12 @@ export interface PublicMenuItem {
     gameType?: string | null;
     projectType?: string | null;
     category?: string | null;
+    showInMenuList?: boolean | null;
+    gameTypeId?: string | null;
+    categoryId?: string | null;
+    gameTypeName?: string | null;
+    categoryName?: string | null;
+    projectTypeNames?: string[] | null;
 }
 
 export interface PublicMenuDetail extends PublicMenuItem {
@@ -363,13 +530,22 @@ export async function postPublicMenuList(data: {
     gameType?: string;
     projectType?: string;
     category?: string;
+    page?: number;
+    limit?: number;
 }) {
     return request<{
         list: PublicMenuItem[];
+        total?: number;
+        page?: number;
+        limit?: number;
+        totalPages?: number;
+        hasMore?: boolean;
         filters: {
             gameTypes: string[];
             projectTypes: string[];
             categories: string[];
+            gameTypeOptions?: Array<{ key: string; label: string }>;
+            categoryOptions?: Array<{ key: string; label: string }>;
         };
     }>(`${API_BASE}/game-project/public/menu/list`, {
         method: 'POST',
@@ -380,6 +556,13 @@ export async function postPublicMenuList(data: {
 
 export async function getPublicMenuDetail(id: number) {
     return request<PublicMenuDetail>(`${API_BASE}/game-project/public/menu/${id}`, {
+        method: 'GET',
+        skipErrorHandler: true,
+    });
+}
+
+export async function getPublicMiniappHomeConfig() {
+    return request<MiniappHomeConfig>(`${API_BASE}/mini/home/config`, {
         method: 'GET',
         skipErrorHandler: true,
     });
@@ -600,6 +783,10 @@ export async function refundOrder(
 // 更新订单
 export async function updateOrder(data: any) {
     return request(`${API_BASE}/orders/update`, { method: 'POST', data });
+}
+
+export async function deleteOrder(data: { id: number; remark?: string }) {
+    return request(`${API_BASE}/orders/delete`, { method: 'POST', data });
 }
 
 //
@@ -1014,6 +1201,195 @@ export async function upsertSystemConfig(data: {
     return request<SystemConfigItem>(`${API_BASE}/system-configs/upsert`, {
         method: 'POST',
         data,
+    });
+}
+
+export type MiniappHomeConfig = {
+    banners: any[];
+    hotSales: any[];
+    limitedBenefits: any[];
+    recommendedStaff: any[];
+    hotEvents: any[];
+    quickEntries: any[];
+    esportsGoods: any[];
+};
+
+export interface MiniappProtocolItem {
+    id: number;
+    categoryId: number;
+    category?: {
+        id: number;
+        name: string;
+        description?: string;
+        sort: number;
+        enabled: boolean;
+    } | null;
+    key: string;
+    title: string;
+    coverImage?: string;
+    content: string;
+    enabled: boolean;
+    remark?: string;
+    sort: number;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface MiniappProtocolCategoryItem {
+    id: number;
+    name: string;
+    description?: string;
+    sort: number;
+    enabled: boolean;
+    protocolCount?: number;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export async function getMiniappHomeConfig() {
+    return request<MiniappHomeConfig>(`${API_BASE}/system-configs/miniapp/home-config/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertMiniappHomeConfig(config: MiniappHomeConfig) {
+    return request(`${API_BASE}/system-configs/miniapp/home-config/upsert`, {
+        method: 'POST',
+        data: { config },
+    });
+}
+
+export async function getMiniappHomePublishedConfig() {
+    return request<MiniappHomeConfig>(`${API_BASE}/system-configs/miniapp/home-config/published/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function publishMiniappHomeConfig() {
+    return request<{ success: boolean }>(`${API_BASE}/system-configs/miniapp/home-config/publish`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function listMiniappProtocols() {
+    return request<MiniappProtocolItem[]>(`${API_BASE}/miniapp-protocols/list`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function listMiniappProtocolCategories() {
+    return request<MiniappProtocolCategoryItem[]>(`${API_BASE}/miniapp-protocols/categories/list`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertMiniappProtocolCategory(data: {
+    id?: number;
+    name: string;
+    description?: string;
+    sort?: number;
+    enabled?: boolean;
+}) {
+    return request<MiniappProtocolCategoryItem[]>(`${API_BASE}/miniapp-protocols/categories/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function deleteMiniappProtocolCategory(data: { id: number }) {
+    return request<MiniappProtocolCategoryItem[]>(`${API_BASE}/miniapp-protocols/categories/delete`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function upsertMiniappProtocol(data: {
+    id?: number;
+    originalKey?: string;
+    key: string;
+    categoryId: number;
+    title: string;
+    coverImage?: string;
+    content: string;
+    enabled?: boolean;
+    remark?: string;
+    sort?: number;
+}) {
+    return request<MiniappProtocolItem[]>(`${API_BASE}/miniapp-protocols/upsert`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function deleteMiniappProtocol(data: { key: string }) {
+    return request<MiniappProtocolItem[]>(`${API_BASE}/miniapp-protocols/delete`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getPublicMiniappProtocol(key: string) {
+    return request<MiniappProtocolItem | null>(`${API_BASE}/miniapp-protocols/public/${encodeURIComponent(String(key || '').trim())}`, {
+        method: 'GET',
+        skipErrorHandler: true,
+    });
+}
+
+export async function listMiniappHomeStaffCandidates(keyword?: string) {
+    return request<any[]>(`${API_BASE}/system-configs/miniapp/home-staff-candidates`, {
+        method: 'POST',
+        data: { keyword },
+    });
+}
+
+export async function listMiniappAnnouncementOptions(keyword?: string) {
+    return request<Array<{ id: number; title: string; audience: 'ALL' | 'APPLET' | 'ADMIN'; publishAt?: string; expireAt?: string }>>(
+        `${API_BASE}/notifications/admin/announcements/miniapp-options`,
+        {
+            method: 'POST',
+            data: { keyword },
+        },
+    );
+}
+
+
+export async function listMiniappHomeProductCandidates(params?: { keyword?: string }) {
+    return request<any[]>(`${API_BASE}/system-configs/miniapp/home-product-candidates`, {
+        method: 'POST',
+        data: params || {},
+    });
+}
+
+export async function getGoodsCategoryTree() {
+    return request<any[]>(`${API_BASE}/system-configs/goods/category-tree/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertGoodsCategoryTree(tree: any[]) {
+    return request<any>(`${API_BASE}/system-configs/goods/category-tree/upsert`, {
+        method: 'POST',
+        data: { tree },
+    });
+}
+
+export async function getGoodsTagList() {
+    return request<any[]>(`${API_BASE}/system-configs/goods/tag-list/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertGoodsTagList(tags: any[]) {
+    return request<any>(`${API_BASE}/system-configs/goods/tag-list/upsert`, {
+        method: 'POST',
+        data: { tags },
     });
 }
 

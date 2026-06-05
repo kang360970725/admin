@@ -6,6 +6,7 @@ import { getPermissionTree, createPermission, deletePermission } from '@/service
 const { Option } = Select;
 
 const PermissionManagement: React.FC = () => {
+    const [form] = Form.useForm();
     const [permissionTree, setPermissionTree] = useState<any[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedNode, setSelectedNode] = useState<any>(null);
@@ -36,6 +37,9 @@ const PermissionManagement: React.FC = () => {
         try {
             const data = {
                 ...values,
+                key: String(values?.key || '').trim(),
+                name: String(values?.name || '').trim(),
+                module: String(values?.module || '').trim(),
                 parentId: selectedNode?.id || null,
             };
             await createPermission(data);
@@ -108,17 +112,26 @@ const PermissionManagement: React.FC = () => {
             <Modal
                 title={selectedNode ? `在"${selectedNode.name}"下添加权限` : '添加根权限'}
                 open={modalVisible}
-                onCancel={() => setModalVisible(false)}
+                onCancel={() => {
+                    form.resetFields();
+                    setModalVisible(false);
+                }}
                 footer={null}
                 width={500}
             >
-                <Form layout="vertical" onFinish={handleSubmit}>
+                <Form form={form} layout="vertical" onFinish={handleSubmit}>
                     <Form.Item
                         name="key"
                         label="权限键"
                         rules={[{ required: true, message: '请输入权限键' }]}
                     >
-                        <Input placeholder="如：canAccessUserManager" />
+                        <Input
+                            placeholder="如：canAccessUserManager"
+                            onBlur={(e) => {
+                                const value = String(e?.target?.value || '').trim();
+                                form.setFieldValue?.('key', value);
+                            }}
+                        />
                     </Form.Item>
 
                     <Form.Item
@@ -126,7 +139,13 @@ const PermissionManagement: React.FC = () => {
                         label="权限名称"
                         rules={[{ required: true, message: '请输入权限名称' }]}
                     >
-                        <Input placeholder="如：用户管理访问权限" />
+                        <Input
+                            placeholder="如：用户管理访问权限"
+                            onBlur={(e) => {
+                                const value = String(e?.target?.value || '').trim();
+                                form.setFieldValue?.('name', value);
+                            }}
+                        />
                     </Form.Item>
 
                     <Form.Item
@@ -134,7 +153,13 @@ const PermissionManagement: React.FC = () => {
                         label="模块名称"
                         rules={[{ required: true, message: '请输入模块名称' }]}
                     >
-                        <Input placeholder="如：userManager" />
+                        <Input
+                            placeholder="如：userManager"
+                            onBlur={(e) => {
+                                const value = String(e?.target?.value || '').trim();
+                                form.setFieldValue?.('module', value);
+                            }}
+                        />
                     </Form.Item>
 
                     <Form.Item
@@ -150,7 +175,10 @@ const PermissionManagement: React.FC = () => {
 
                     <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
                         <Space>
-                            <Button onClick={() => setModalVisible(false)}>取消</Button>
+                            <Button onClick={() => {
+                                form.resetFields();
+                                setModalVisible(false);
+                            }}>取消</Button>
                             <Button type="primary" htmlType="submit">创建</Button>
                         </Space>
                     </Form.Item>

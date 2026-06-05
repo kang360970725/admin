@@ -79,7 +79,7 @@ export default defineConfig({
     // ===========
     // Auth / Public
     // ===========
-    { path: '/menu', component: '@/pages/PublicMenu/List', layout: false },
+    { path: '/menu', component: '@/pages/PublicMenuGallery', layout: false },
     { path: '/menu/:id', component: '@/pages/PublicMenu/Detail', layout: false },
     { path: '/chest-event', component: '@/pages/PublicChest/index', layout: false },
     { path: '/login', component: '@/pages/Login', layout: false },
@@ -149,21 +149,42 @@ export default defineConfig({
       routes: [
         { path: '/system/role-management', name: '角色管理', component: './System/RoleManagement', access: 'canViewRoleManagement' },
         { path: '/system/permission-management', name: '权限管理', component: './System/PermissionManagement', access: 'canViewPermissionManagement' },
-        { path: '/system/game-project-management', name: '菜单项目管理', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
         { path: '/system/system-configs', name: '基础配置', component: '@/pages/System/SystemConfigs', access: 'canViewSystemConfigs' },
         { path: '/system/app-versions', name: '版本迭代', component: '@/pages/System/AppVersions', access: 'canViewAppVersions' },
         { path: '/system/announcements', name: '系统公告', component: '@/pages/System/Announcements', access: 'canViewAnnouncements' },
         { path: '/system/duty-cs', name: '当班客服配置', component: '@/pages/System/DutyCsSchedules', access: 'canViewDutyCsSchedules' },
-        { path: '/system/coupons', name: '优惠券管理', component: '@/pages/System/Coupons', access: 'canViewCoupons' },
         { path: '/system/notification-test-push', name: '测试推送中心', component: '@/pages/System/NotificationTestPush', access: 'canViewNotificationTestPush' },
       ],
     },
+    {
+      path: '/goods',
+      name: '商品管理',
+      icon: 'ShopOutlined',
+      routes: [
+        { path: '/goods', redirect: '/goods/list' },
+        { path: '/goods/list', name: '商品列表', component: '@/pages/System/GameProjectManagement', access: 'canViewGameProjectManagement' },
+        { path: '/goods/categories', name: '分类管理', component: '@/pages/System/GoodsCategoryManagement', access: 'canViewGameProjectManagement' },
+        { path: '/goods/tags', name: '标签管理', component: '@/pages/System/GoodsTagManagement', access: 'canViewGameProjectManagement' },
+      ],
+    },
+    { path: '/system/game-project-management', redirect: '/goods/list', hideInMenu: true },
     {
       path: '/ops',
       name: '推广运营',
       icon: 'GiftOutlined',
       routes: [
         { path: '/ops/chest-demo', name: '宝盒活动', component: '@/pages/System/ChestDemo', access: 'canViewChestDemo' },
+        { path: '/ops/coupons', name: '优惠券管理', component: '@/pages/System/Coupons', access: 'canViewCoupons' },
+      ],
+    },
+    { path: '/system/coupons', redirect: '/ops/coupons', hideInMenu: true },
+    {
+      path: '/miniapp-config',
+      name: '小程序功能配置',
+      icon: 'AppstoreOutlined',
+      routes: [
+        { path: '/miniapp-config/home', name: '首页配置', component: '@/pages/System/MiniappHomeConfig', access: 'canViewMiniappHomeConfig' },
+        { path: '/miniapp-config/protocols', name: '协议维护', component: '@/pages/System/MiniappProtocols', access: 'canViewMiniappProtocols' },
       ],
     },
     { path: '/system/penalties', redirect: '/penalties', hideInMenu: true },
@@ -242,6 +263,8 @@ export default defineConfig({
       routes: [
         { path: '/wallet', redirect: '/wallet/overview' },
         { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview' },
+        { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels' },
+        { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans' },
         { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions' },
         { path: '/wallet/replay-preview', name: '单用户预核算', component: '@/pages/Wallet/ReplayPreview', access: 'canViewWithdrawals' },
         { path: '/wallet/withdrawals', name: '提现审批', component: '@/pages/Wallet/Withdrawals', access: 'canViewWithdrawals' },
@@ -249,7 +272,19 @@ export default defineConfig({
       ],
     },
 
-    { name: '用户管理', path: '/users', component: '@/pages/Users', icon: 'user', access: 'canViewUsers' },
+    {
+      path: '/users',
+      name: '用户管理',
+      icon: 'user',
+      access: 'canViewUsers',
+      routes: [
+        { path: '/users', redirect: '/users/members' },
+        { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
+        { path: '/users/staff', name: '打手管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
+        { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
+        { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers' },
+      ],
+    },
     { name: '评级管理', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },
 
     // ✅ 全局兜底 404

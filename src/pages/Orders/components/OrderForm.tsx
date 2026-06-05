@@ -23,7 +23,7 @@ import {
     Checkbox,
 } from 'antd';
 import dayjs from 'dayjs';
-import { getGameProjectOptions, getPlayerOptions, getUserCoupons } from '@/services/api';
+import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions, getUserCoupons } from '@/services/api';
 
 type ProjectItem = {
     id: number;
@@ -52,6 +52,7 @@ export type OrderUpsertValues = {
     orderQuantity?: number;
 
     customerGameId?: string;
+    orderSource?: string;
 
     orderTime?: any;
     paymentTime?: any;
@@ -109,6 +110,7 @@ export default function OrderUpsertModal(props: {
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
     const [couponLoading, setCouponLoading] = useState(false);
     const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number }>>([]);
+    const [orderSourceOptions, setOrderSourceOptions] = useState<Array<{ label: string; value: string }>>([]);
 
     const now = useMemo(() => dayjs(), []);
 
@@ -210,6 +212,23 @@ export default function OrderUpsertModal(props: {
         }
     };
 
+    const fetchOrderSources = async () => {
+        try {
+            const res: any = await getOrderSourceOptions();
+            const list = Array.isArray(res) ? res : (res?.data ?? []);
+            const options = list
+                .map((item: any) => ({
+                    value: String(item?.value || '').trim(),
+                    label: String(item?.label || item?.value || '').trim(),
+                }))
+                .filter((item: any) => item.value && item.label);
+            setOrderSourceOptions(options);
+        } catch (e) {
+            console.error(e);
+            setOrderSourceOptions([]);
+        }
+    };
+
     // 小时单：金额=单价*下单数量（小时）
     const recalcHourlyAmount = (pid?: number, qty?: number) => {
         const id = Number(pid);
@@ -284,15 +303,17 @@ export default function OrderUpsertModal(props: {
             orderTime: initialValues?.orderTime ? dayjs(initialValues.orderTime) : now,
             paymentTime: initialValues?.paymentTime ? dayjs(initialValues.paymentTime) : now,
             orderQuantity:
-                initialValues?.orderQuantity != null && initialValues?.orderQuantity !== ''
+                initialValues?.orderQuantity != null
                     ? Number(initialValues.orderQuantity)
                     : 1,
             isGifted: Boolean(initialValues?.isGifted ?? false),
+            orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
         } as any);
 
         void fetchProjects('');
         void fetchPlayers('');
         void fetchCouponOptions();
+        void fetchOrderSources();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
@@ -335,10 +356,24 @@ export default function OrderUpsertModal(props: {
 
             const pid = Number(v?.projectId);
             const hourly = isHourlyProject(pid);
+            const orderSource = String(v?.orderSource || '').trim();
+            const isGifted = Boolean(v?.isGifted);
+            const isPaid = Boolean(v?.isPaid);
+            const canDispatchBeforePaid = isGifted || orderSource === 'CUSTOMER_SERVICE_MANUAL';
 
             // 小时单：必须有下单小时（orderQuantity）
             if (hourly && !(Number(v?.orderQuantity) > 0)) {
                 message.error('小时单必须填写下单小时');
+                return;
+            }
+            if (
+                showPlayers &&
+                Array.isArray(v?.playerIds) &&
+                v.playerIds.length > 0 &&
+                !canDispatchBeforePaid &&
+                !isPaid
+            ) {
+                message.error('非后台客服或管理自主创建的订单，未收款前不可派单');
                 return;
             }
 
@@ -357,6 +392,7 @@ export default function OrderUpsertModal(props: {
                 orderQuantity: Number(v?.orderQuantity ?? 1),
 
                 customerGameId: v?.customerGameId?.trim?.() || undefined,
+                orderSource: v?.orderSource ? String(v.orderSource).trim() : undefined,
 
                 orderTime: v?.orderTime ? dayjs(v.orderTime).toISOString() : now.toISOString(),
                 paymentTime: v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString(),
@@ -408,6 +444,10 @@ export default function OrderUpsertModal(props: {
     const curProjectId = Number(watchedProjectId ?? 0);
     const showQtyForHourly = isHourlyProject(curProjectId);
     const watchedIsPaid = Form.useWatch('isPaid', form);
+    const watchedOrderSource = Form.useWatch('orderSource', form);
+    const watchedIsGifted = Form.useWatch('isGifted', form);
+    const canSelectPlayersWhenUnpaid =
+        Boolean(watchedIsGifted) || String(watchedOrderSource || '').trim() === 'CUSTOMER_SERVICE_MANUAL';
 
 
 
@@ -509,6 +549,16 @@ export default function OrderUpsertModal(props: {
                     </Col>
 
                     <Col {...colProps}>
+                        <Form.Item name="orderSource" label="订单渠道来源" rules={[{ required: true, message: '请选择订单渠道来源' }]}>
+                            <Select
+                                placeholder="请选择订单渠道来源"
+                                options={orderSourceOptions}
+                                allowClear={false}
+                            />
+                        </Form.Item>
+                    </Col>
+
+                    <Col {...colProps}>
                         <Form.Item name="customerGameId" label="客户ID（游戏ID）">
                             <Input placeholder="ID或昵称" />
                         </Form.Item>
@@ -548,6 +598,7 @@ export default function OrderUpsertModal(props: {
                                     onSearch={(v) => fetchPlayers(v)}
                                     options={playerOptions}
                                     loading={playerLoading}
+                                    disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
                                     maxTagCount={2}
                                     allowClear
                                     dropdownRender={(menu) => (
@@ -562,6 +613,11 @@ export default function OrderUpsertModal(props: {
                                     )}
                                 />
                             </Form.Item>
+                            {!watchedIsPaid && !canSelectPlayersWhenUnpaid ? (
+                                <div style={{ marginTop: -8, color: '#ff4d4f', fontSize: 12 }}>
+                                    非后台客服或管理自主创建的订单，未收款前不可派单
+                                </div>
+                            ) : null}
                         </Col>
                     ) : null}
                 </Row>

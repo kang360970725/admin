@@ -274,6 +274,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
     const realtimeLeaderTimerRef = React.useRef<number | null>(null);
     const realtimeTabIdRef = React.useRef(`tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    const [realtimeStreamDegraded, setRealtimeStreamDegraded] = React.useState(false);
     const forceReadContentRef = React.useRef<HTMLDivElement | null>(null);
     const versionPromptedRef = React.useRef<string>('');
     const [isRealtimeLeader, setIsRealtimeLeader] = React.useState(false);
@@ -355,8 +356,10 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
     }, [isStaffUser]);
 
     React.useEffect(() => {
+        // 仅陪玩身份：初始化 + 路由变化时主动拉取，不做自动轮询
+        if (!isStaffUser) return;
         void loadPenaltyPendingTickets();
-    }, [loadPenaltyPendingTickets]);
+    }, [isStaffUser, pathname, loadPenaltyPendingTickets]);
 
     const loadRealtimeNotifications = React.useCallback(async () => {
         try {
@@ -458,6 +461,11 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         // 复用浏览器原生 SSE，减少前端依赖；服务端通过 query.token 鉴权
         const eventSource = new EventSource(getRealtimeStreamUrl(token));
         realtimeEventSourceRef.current = eventSource;
+        setRealtimeStreamDegraded(false);
+
+        eventSource.onopen = () => {
+            setRealtimeStreamDegraded(false);
+        };
 
         eventSource.onmessage = (evt) => {
             try {
@@ -471,6 +479,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
                 }
                 if (msg?.type === 'message' && msg?.item) {
                     const item = msg.item as RealtimeNotificationItem;
+                    setRealtimeStreamDegraded(false);
                     setRealtimeList((prev) => [msg.item as RealtimeNotificationItem, ...prev].slice(0, 200));
                     setRealtimeUnreadCount(Number(msg?.unreadCount || 0));
                     if (isPenaltyForceItem(item)) {
@@ -507,6 +516,7 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
         eventSource.onerror = () => {
             // 连接中断时静默重连（浏览器会自动重连）
             console.warn('[realtime-notification] stream disconnected, browser will retry');
+            setRealtimeStreamDegraded(true);
             // 兜底拉取，避免重连间隙错过提醒
             loadRealtimeNotifications();
         };
@@ -519,22 +529,13 @@ export const layout: RuntimeConfig['layout'] = ({ location }) => {
 
     React.useEffect(() => {
         const token = String(localStorage.getItem('token') || '').trim();
-        if (!token || !isRealtimeLeader || document.hidden) return;
-        // SSE 兜底：低频轮询，防止偶发网络抖动导致完全无提醒
+        if (!token || !isRealtimeLeader || document.hidden || !realtimeStreamDegraded) return;
+        // SSE 异常时兜底轮询（仅异常期间启用）
         const timer = window.setInterval(() => {
             loadRealtimeNotifications();
-        }, 15000);
-        return () => window.clearInterval(timer);
-    }, [loadRealtimeNotifications, isRealtimeLeader]);
-
-    React.useEffect(() => {
-        const token = String(localStorage.getItem('token') || '').trim();
-        if (!token || !isStaffUser) return;
-        const timer = window.setInterval(() => {
-            void loadPenaltyPendingTickets();
         }, 10000);
         return () => window.clearInterval(timer);
-    }, [isStaffUser, loadPenaltyPendingTickets]);
+    }, [loadRealtimeNotifications, isRealtimeLeader, realtimeStreamDegraded]);
 
     const submitPenaltyConfirmInModal = React.useCallback(async () => {
         if (!activePenaltyTicket?.id) return;

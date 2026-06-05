@@ -136,8 +136,8 @@ export const validateModePlayAlloc = (rows: ModePlayRoundRow[], paidAmount: numb
 
   for (const r of rows) {
     const n = Number(r?.income);
-    if (!Number.isFinite(n) || n < 0) {
-      return { ok: false, sum, err: '存在非法金额（必须为 ≥ 0 的数字）' };
+    if (!Number.isFinite(n)) {
+      return { ok: false, sum, err: '存在非法金额（必须为数字）' };
     }
     sum += n;
   }
