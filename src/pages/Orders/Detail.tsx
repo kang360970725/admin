@@ -1064,6 +1064,32 @@ const OrderDetailPage: React.FC = () => {
         const endTime = isHourlyLocal && estHours != null ? orderTime.add(estHours, 'hour').add(20, 'minute') : null;
 
         const baseWan = o?.baseAmountWan ?? null;
+        const originalAmount = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.finalPayableAmount ?? o?.paidAmount ?? 0);
+        const discountAmount = Number(o?.discountAmount ?? 0);
+        const couponDiscountAmount = Number(o?.couponDiscountAmount ?? 0);
+        const activityDiscountAmount = Number(o?.activityDiscountAmount ?? 0);
+        const giftDiscountAmount = Number(o?.giftDiscountAmount ?? 0);
+        const manualAdjustAmount = Number(o?.manualAdjustAmount ?? 0);
+        const finalPayableAmount = Number(
+            o?.finalPayableAmount ??
+            o?.paidAmount ??
+            Math.max(0, originalAmount - discountAmount),
+        );
+        const paidAmount = Number(o?.paidAmount ?? finalPayableAmount ?? 0);
+        const totalDiscount = Number.isFinite(discountAmount) && discountAmount > 0
+            ? discountAmount
+            : couponDiscountAmount + activityDiscountAmount + giftDiscountAmount + manualAdjustAmount;
+        const orderSourceLabel = String(o?.orderSourceLabel || o?.orderSource || '-');
+        const financeLines = [
+            `商品小计：¥${Number.isFinite(originalAmount) ? originalAmount.toFixed(2) : '0.00'}`,
+        ];
+        if (Number.isFinite(totalDiscount) && totalDiscount > 0) {
+            financeLines.push(`优惠券抵扣：- ¥${totalDiscount.toFixed(2)}`);
+        }
+        if (Number.isFinite(manualAdjustAmount) && manualAdjustAmount !== 0) {
+            financeLines.push(`人工调整：${manualAdjustAmount > 0 ? '+ ' : '- '}¥${Math.abs(manualAdjustAmount).toFixed(2)}`);
+        }
+        financeLines.push(`实付金额：¥${Number.isFinite(paidAmount) ? paidAmount.toFixed(2) : finalPayableAmount.toFixed(2)}`);
 
         const customerText = [
             `下单项目：${projectName}`,
@@ -1073,6 +1099,8 @@ const OrderDetailPage: React.FC = () => {
             `接待客服：${csName}`,
             `接待陪玩：`,
             ...playerLines.map((line) => `  ${line}`),
+            `派单方式：${orderSourceLabel}`,
+            ...financeLines,
             isHourlyLocal ? `预计结单时间：${endTime ? endTime.format('YYYY-MM-DD HH:mm') : '-'}` : '',
             `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
             `预计等待时间：5-10分钟`,

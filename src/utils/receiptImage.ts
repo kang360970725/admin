@@ -25,6 +25,7 @@ type ParsedReceipt = {
     project?: string;
     orderMetricLabel?: string;
     orderMetricValue?: string;
+    financeItems: Array<{ label: string; value: string; isBold?: boolean; color?: string }>;
     serviceName?: string;
     players: string[];
     orderTime?: string;
@@ -43,7 +44,7 @@ const splitLabelValue = (line: string) => {
 };
 
 const parseReceipt = (text: string): ParsedReceipt => {
-    const model: ParsedReceipt = {players: [], tips: []};
+    const model: ParsedReceipt = {players: [], tips: [], financeItems: []};
     const lines = String(text ?? '')
         .split('\n')
         .map((line) => normalizeText(line));
@@ -80,6 +81,22 @@ const parseReceipt = (text: string): ParsedReceipt => {
             if (label === '接待陪玩' || label === '接单陪玩') {
                 collectingPlayers = true;
                 if (value) model.players.push(value);
+                continue;
+            }
+
+            if (
+                label === '支付方式' ||
+                label === '派单方式' ||
+                label === '商品小计' ||
+                label === '优惠券抵扣' ||
+                label === '实付金额'
+            ) {
+                model.financeItems.push({
+                    label,
+                    value,
+                    isBold: label === '实付金额',
+                    color: label === '实付金额' ? '#ec4899' : undefined,
+                });
                 continue;
             }
 
@@ -186,6 +203,13 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
     const project = parsed.project || '-';
     const orderMetricLabel = parsed.orderMetricLabel || '订单保底';
     const orderMetricValue = parsed.orderMetricValue || '-';
+    const financeItems = parsed.financeItems.length
+        ? parsed.financeItems
+        : [
+              // {label: '支付方式', value: '支付宝支付 💳'},
+              {label: '商品小计', value: '¥ 0.00'},
+              {label: '实付金额', value: '¥ 0.00', isBold: true, color: COLORS.primary},
+          ];
     const serviceName = parsed.serviceName || '-';
     const players = parsed.players.length ? parsed.players : ['-'] + '🎮';
     const orderTime = parsed.orderTime || '-';
@@ -196,14 +220,6 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
         '请勿相信其他任何人，谨防上当受骗。',
         '本店通过各类渠道收集客服或打手私联接单证据，',
         '举报查实私加联系方式及私单奖 500-2000R',
-    ];
-
-    const financeItems = [
-        // {label: '支付方式', value: '支付宝支付 💳'},
-        {label: '商品小计', value: '¥ 388.00'},
-        // {label: '优惠券抵扣', value: '- ¥ 20.00', color: COLORS.success},
-        {label: '实付金额', value: '¥ 368.00', isBold: true, color: COLORS.primary},
-        // {label: '积分奖励', value: '+ 368 积分 🎉', color: COLORS.secondary},
     ];
 
     const financeTop = 550;
