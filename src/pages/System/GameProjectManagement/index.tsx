@@ -33,6 +33,12 @@ const flattenCategoryTree = (tree: CategoryNode[]) => {
   return list;
 };
 
+const billingModeLabelMap: Record<string, string> = {
+  GUARANTEED: '保底单',
+  HOURLY: '小时单',
+  MODE_PLAY: '玩法单',
+};
+
 const GameProjectManagement: React.FC = () => {
   const [projects, setProjects] = useState<any[]>([]);
   const [categoryTree, setCategoryTree] = useState<CategoryNode[]>([]);
@@ -339,6 +345,26 @@ const GameProjectManagement: React.FC = () => {
       dataIndex: 'price',
       key: 'price',
       render: (price: number) => `¥${Number(price || 0)}`,
+    },
+    {
+      title: '计费模式',
+      dataIndex: 'billingMode',
+      key: 'billingMode',
+      width: 110,
+      render: (v: string) => {
+        const mode = String(v || '').trim();
+        return mode ? <Tag color={mode === 'HOURLY' ? 'blue' : mode === 'GUARANTEED' ? 'gold' : 'green'}>{billingModeLabelMap[mode] || mode}</Tag> : '-';
+      },
+    },
+    {
+      title: '保底数据',
+      dataIndex: 'baseAmount',
+      key: 'baseAmount',
+      width: 110,
+      render: (v: number | null | undefined) => {
+        if (v == null || Number.isNaN(Number(v))) return '-';
+        return `${Number(v)} 万`;
+      },
     },
     {
       title: '评分',
