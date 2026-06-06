@@ -1,8 +1,8 @@
 import dayjs from 'dayjs';
 
 export type ReceiptTheme = {
-    accent?: string;     // 主色
-    accent2?: string;    // 辅色
+    accent?: string;
+    accent2?: string;
     bg1?: string;
     bg2?: string;
     cardBg?: string;
@@ -12,354 +12,604 @@ export type ReceiptTheme = {
 };
 
 export type GenerateReceiptImageOptions = {
-    width?: number;              // 默认 560
-    padding?: number;            // 默认 22
-    headerHeight?: number;       // 默认 86
-    lineHeight?: number;         // 默认 32
-    radius?: number;             // 默认 20
-    maxDpr?: number;             // 默认 3
-    theme?: ReceiptTheme;        // 可选主题
+    width?: number;
+    padding?: number;
+    headerHeight?: number;
+    lineHeight?: number;
+    radius?: number;
+    maxDpr?: number;
+    theme?: ReceiptTheme;
 };
 
-const defaultTheme: Required<ReceiptTheme> = {
-    accent: '#22d3ee',
-    accent2: '#a78bfa',
-    bg1: '#0b1220',
-    bg2: '#0a0f1a',
-    cardBg: 'rgba(255,255,255,0.78)',
-    cardBorder: 'rgba(255,255,255,0.45)',
-    textMain: '#0b1220',
-    textMuted: '#6b7280',
+type ParsedReceipt = {
+    project?: string;
+    orderMetricLabel?: string;
+    orderMetricValue?: string;
+    serviceName?: string;
+    players: string[];
+    orderTime?: string;
+    waitTime?: string;
+    tips: string[];
 };
 
-export const generateReceiptImage = (title: string, text: string, opts: GenerateReceiptImageOptions = {}) => {
-    const lines = String(text ?? '').split('\n');
+const normalizeText = (input: string) => String(input ?? '').replace(/\r/g, '').trimEnd();
 
-    const W = opts.width ?? 560;
-    const P = opts.padding ?? 22;
-    const CARD_R = opts.radius ?? 20;
+const splitLabelValue = (line: string) => {
+    const idx = line.search(/[：:]/);
+    if (idx < 0) return null;
+    const label = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    return {label, value};
+};
 
-    const headerH = opts.headerHeight ?? 86;
-    const lineH = opts.lineHeight ?? 32;
+const parseReceipt = (text: string): ParsedReceipt => {
+    const model: ParsedReceipt = {players: [], tips: []};
+    const lines = String(text ?? '')
+        .split('\n')
+        .map((line) => normalizeText(line));
 
-    const theme = { ...defaultTheme, ...(opts.theme ?? {}) };
+    let collectingPlayers = false;
+    let collectingTips = false;
 
-    const dprRaw =
-        typeof window !== 'undefined' && (window.devicePixelRatio || 1)
-            ? Math.max(1, window.devicePixelRatio || 1)
-            : 1;
-
-    const maxDpr = opts.maxDpr ?? 3;
-    const dpr = Math.min(maxDpr, dprRaw);
-
-    const FONT_FAMILY =
-        'ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", Arial';
-
-    const FONT_NORMAL = `22px ${FONT_FAMILY}`;
-    const FONT_NORMAL_BOLD = `700 22px ${FONT_FAMILY}`;
-    const FONT_TIPS = `18px ${FONT_FAMILY}`;
-    const FONT_TITLE = `800 30px ${FONT_FAMILY}`;
-    const FONT_FOOT = `16px ${FONT_FAMILY}`;
-
-    const canvasTmp = document?.createElement?.('canvas');
-    if (!canvasTmp) return null;
-    canvasTmp.width = Math.floor(W * dpr);
-    canvasTmp.height = Math.floor(10 * dpr);
-    canvasTmp.style.width = `${W}px`;
-    canvasTmp.style.height = `10px`;
-
-    const tctx = canvasTmp.getContext('2d');
-    if (!tctx) return null;
-    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    const maxTextW = W - P * 2 - 18;
-
-    const wrapLines = (ctx: CanvasRenderingContext2D, s: string, maxW: number, font: string) => {
-        ctx.font = font;
-        const out: string[] = [];
-        let cur = '';
-        for (const ch of s) {
-            const next = cur + ch;
-            if (ctx.measureText(next).width > maxW) {
-                if (cur) out.push(cur);
-                cur = ch;
-            } else {
-                cur = next;
-            }
-        }
-        if (cur) out.push(cur);
-        return out.length ? out : [''];
-    };
-
-    // ✅ 分段：温馨提醒之后使用更小字体（原逻辑保留）
-    let inTips = false;
-    const prepared: Array<{ text: string; kind: 'normal' | 'tips' | 'blank' }> = [];
-    for (const raw of lines) {
-        const ln = String(raw ?? '');
-        if (!ln) {
-            prepared.push({ text: '', kind: 'blank' });
+    for (const rawLine of lines) {
+        const line = String(rawLine ?? '').trimEnd();
+        if (!line.trim()) {
+            collectingPlayers = false;
             continue;
         }
-        if (ln.includes('温馨提醒')) inTips = true;
-        prepared.push({ text: ln, kind: inTips ? 'tips' : 'normal' });
-    }
 
-    // 先估算实际渲染行数（考虑换行）
-    const expanded: Array<{ text: string; kind: 'normal' | 'tips' | 'blank' }> = [];
-    for (const it of prepared) {
-        if (it.kind === 'blank') {
-            expanded.push({ text: '', kind: 'blank' });
+        const normalized = line.trim();
+        const pair = splitLabelValue(normalized);
+
+        if (collectingTips) {
+            model.tips.push(normalized);
             continue;
         }
-        const font = it.kind === 'tips' ? FONT_TIPS : FONT_NORMAL;
-        const ws = wrapLines(tctx, it.text, maxTextW, font);
-        ws.forEach((w) => expanded.push({ text: w, kind: it.kind }));
+
+        if (pair) {
+            const {label, value} = pair;
+            if (!label) continue;
+
+            if (label === '温馨提醒') {
+                collectingPlayers = false;
+                collectingTips = true;
+                if (value) model.tips.push(value);
+                continue;
+            }
+
+            if (label === '接待陪玩' || label === '接单陪玩') {
+                collectingPlayers = true;
+                if (value) model.players.push(value);
+                continue;
+            }
+
+            collectingPlayers = false;
+
+            switch (label) {
+                case '下单项目':
+                    model.project = value;
+                    break;
+                case '订单保底':
+                case '订单时长':
+                    model.orderMetricLabel = label;
+                    model.orderMetricValue = value;
+                    break;
+                case '接待客服':
+                    model.serviceName = value;
+                    break;
+                case '下单时间':
+                    model.orderTime = value;
+                    break;
+                case '预计等待时间':
+                    model.waitTime = value;
+                    break;
+                default:
+                    break;
+            }
+            continue;
+        }
+
+        if (collectingPlayers) {
+            model.players.push(normalized.replace(/^\s+/, ''));
+            continue;
+        }
     }
 
-    const bodyH = expanded.length * lineH + 96;
-    const H = P * 2 + headerH + bodyH;
+    return model;
+};
 
-    const canvas = document?.createElement?.('canvas');
-    if (!canvas) return null;
-    canvas.width = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    canvas.style.width = `${W}px`;
-    canvas.style.height = `${H}px`;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // =========================
-    // 背景：深色渐变 + 轻噪点
-    // =========================
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, theme.bg1);
-    bg.addColorStop(1, theme.bg2);
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    const addNoise = (alpha = 0.035) => {
-        const step = 2;
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        for (let yy = 0; yy < H; yy += step) {
-            for (let xx = 0; xx < W; xx += step) {
-                const v = Math.random() * 255;
-                ctx.fillStyle = `rgb(${v},${v},${v})`;
-                ctx.fillRect(xx, yy, 1, 1);
-            }
-        }
-        ctx.restore();
-    };
-    addNoise(0.035);
-
-    const glowBlob = (cx: number, cy: number, r: number, rgb: string, a: number) => {
-        ctx.save();
-        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, `rgba(${rgb},${a})`);
-        g.addColorStop(1, `rgba(${rgb},0)`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+const roundRect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number,
+    fill?: string | CanvasGradient,
+    stroke?: string,
+) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    if (fill) {
+        ctx.fillStyle = fill;
         ctx.fill();
-        ctx.restore();
-    };
-    glowBlob(W * 0.15, H * 0.10, 220, '34,211,238', 0.20);
-    glowBlob(W * 0.85, H * 0.18, 240, '167,139,250', 0.18);
-
-    // =========================
-    // 卡片
-    // =========================
-    const x = P;
-    const y = P;
-    const cw = W - P * 2;
-    const ch = H - P * 2;
-
-    const roundRect = (rx: number, ry: number, rw: number, rh: number, r: number) => {
-        ctx.beginPath();
-        ctx.moveTo(rx + r, ry);
-        ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
-        ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
-        ctx.arcTo(rx, ry + rh, rx, ry, r);
-        ctx.arcTo(rx, ry, rx + rw, ry, r);
-        ctx.closePath();
-    };
-
-    ctx.save();
-    ctx.shadowColor = 'rgba(34, 211, 238, 0.25)';
-    ctx.shadowBlur = 28;
-    ctx.shadowOffsetY = 10;
-    roundRect(x, y, cw, ch, CARD_R);
-    ctx.fillStyle = theme.cardBg;
-    ctx.fill();
-    ctx.restore();
-
-    ctx.save();
-    roundRect(x + 0.5, y + 0.5, cw - 1, ch - 1, CARD_R);
-    ctx.strokeStyle = theme.cardBorder;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-
-    // =========================
-    // Header
-    // =========================
-    roundRect(x, y, cw, headerH, CARD_R);
-    ctx.save();
-    ctx.clip();
-    const hg = ctx.createLinearGradient(x, y, x + cw, y + headerH);
-    hg.addColorStop(0, '#0b1220');
-    hg.addColorStop(0.55, '#111827');
-    hg.addColorStop(1, '#0b1220');
-    ctx.fillStyle = hg;
-    ctx.fillRect(x, y, cw, headerH);
-
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(x, y + 10, cw, 1);
-    ctx.globalAlpha = 1;
-
-    ctx.globalAlpha = 0.35;
-    const spot = ctx.createRadialGradient(x + cw - 56, y + 28, 0, x + cw - 56, y + 28, 42);
-    spot.addColorStop(0, 'rgba(255,255,255,0.9)');
-    spot.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = spot;
-    ctx.beginPath();
-    ctx.arc(x + cw - 56, y + 28, 42, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    ctx.restore();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = FONT_TITLE;
-    ctx.fillText(title, x + 22, y + 56);
-
-    // 撕口
-    const punch = (cy: number) => {
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-out';
-        const r = 5;
-        const gap = 16;
-        for (let px = x + 18; px < x + cw - 18; px += gap) {
-            ctx.beginPath();
-            ctx.arc(px, cy, r, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.restore();
-    };
-    punch(y + headerH);
-
-    // =========================
-    // 内容
-    // =========================
-    const isKeyLine = (s: string) =>
-        s.startsWith('下单项目：') ||
-        s.startsWith('订单时长：') ||
-        s.startsWith('订单保底：') ||
-        s.startsWith('预计结单时间：');
-
-    let yy = y + headerH + 38;
-
-    for (const it of expanded) {
-        if (it.kind === 'blank') {
-            yy += lineH * 0.55;
-            continue;
-        }
-
-        if (it.kind === 'tips') {
-            ctx.font = FONT_TIPS;
-            ctx.fillStyle = theme.textMuted;
-        } else {
-            ctx.font = FONT_NORMAL;
-            ctx.fillStyle = theme.textMain;
-        }
-
-        const shouldHighlight = it.kind === 'normal' && isKeyLine(it.text);
-
-        if (shouldHighlight) {
-            const idx = it.text.indexOf('：');
-            const left = idx >= 0 ? it.text.slice(0, idx + 1) : it.text;
-            const right = idx >= 0 ? it.text.slice(idx + 1) : '';
-
-            // 荧光底
-            ctx.save();
-            ctx.font = FONT_NORMAL_BOLD;
-
-            const leftW = (() => {
-                ctx.font = FONT_NORMAL;
-                return ctx.measureText(left).width;
-            })();
-            const valueW = ctx.measureText(right).width;
-
-            const padX = 10;
-            const padY = 7;
-            const bx = x + 20 + leftW + 2;
-            const by = yy - 22 - padY;
-            const bw = Math.min(valueW + padX * 2, cw - 40 - leftW);
-            const bh = 28 + padY * 2;
-
-            const vg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
-            vg.addColorStop(0, 'rgba(34, 211, 238, 0.18)');
-            vg.addColorStop(1, 'rgba(167, 139, 250, 0.16)');
-            ctx.fillStyle = vg;
-
-            const rr = 12;
-            ctx.beginPath();
-            ctx.moveTo(bx + rr, by);
-            ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr);
-            ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
-            ctx.arcTo(bx, by + bh, bx, by, rr);
-            ctx.arcTo(bx, by, bx + bw, by, rr);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.strokeStyle = 'rgba(34, 211, 238, 0.28)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            ctx.restore();
-
-            // 左 label
-            ctx.font = FONT_NORMAL;
-            ctx.fillStyle = '#334155';
-            ctx.fillText(left, x + 20, yy);
-
-            // 右 value
-            ctx.save();
-            ctx.font = FONT_NORMAL_BOLD;
-            ctx.shadowColor = 'rgba(34, 211, 238, 0.25)';
-            ctx.shadowBlur = 10;
-            ctx.fillStyle = theme.textMain;
-            ctx.fillText(right, x + 20 + leftW + 10, yy);
-            ctx.restore();
-        } else {
-            ctx.fillText(it.text, x + 20, yy);
-        }
-
-        yy += lineH;
     }
+    if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+    }
+};
 
-    // =========================
-    // Footer
-    // =========================
-    const footerY = y + ch - 56;
+const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+    let line = '';
+    const lines: string[] = [];
+    for (const ch of String(text ?? '')) {
+        const test = line + ch;
+        if (ctx.measureText(test).width > maxWidth && line !== '') {
+            lines.push(line);
+            line = ch;
+        } else {
+            line = test;
+        }
+    }
+    if (line) lines.push(line);
+    return lines.length ? lines : [''];
+};
 
-    const dg = ctx.createLinearGradient(x + 20, 0, x + cw - 20, 0);
-    dg.addColorStop(0, 'rgba(34,211,238,0)');
-    dg.addColorStop(0.5, 'rgba(148,163,184,0.55)');
-    dg.addColorStop(1, 'rgba(167,139,250,0)');
-    ctx.strokeStyle = dg;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + 20, footerY);
-    ctx.lineTo(x + cw - 20, footerY);
-    ctx.stroke();
+export const generateReceiptImage = async (title: string, text: string, opts: GenerateReceiptImageOptions = {}) => {
+    if (typeof document === 'undefined') return null;
 
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.95)';
-    ctx.font = FONT_FOOT;
-    const rightText = dayjs().format('YYYY-MM-DD HH:mm');
-    ctx.fillText(`BlueCat · 订单专用小票 · ${rightText}`, x + 20, footerY + 32);
+    const QUALITY = Math.min(opts.maxDpr ?? 3, Math.max(2, window.devicePixelRatio || 1));
+    const COLORS = {
+        bg: '#ffffff',
+        primary: '#ec4899',
+        secondary: '#f472b6',
+        accent: '#fb923c',
+        textMain: '#374151',
+        textMuted: '#9ca3af',
+        lightPink: '#fdf2f8',
+        lightPurple: '#f5f3ff',
+        lightOrange: '#fff7ed',
+        success: '#10b981',
+    };
 
-    return canvas.toDataURL('image/png');
+    const parsed = parseReceipt(text);
+    const project = parsed.project || '-';
+    const orderMetricLabel = parsed.orderMetricLabel || '订单保底';
+    const orderMetricValue = parsed.orderMetricValue || '-';
+    const serviceName = parsed.serviceName || '-';
+    const players = parsed.players.length ? parsed.players : ['-'] + '🎮';
+    const orderTime = parsed.orderTime || '-';
+    const waitTime = parsed.waitTime || '5-10分钟';
+    const tips = [
+        '消费过程中如遇任何问题，请随时联系本单客服处理~',
+        '订单完结24小时内支持售后，客服为售后唯一渠道；',
+        '请勿相信其他任何人，谨防上当受骗。',
+        '本店通过各类渠道收集客服或打手私联接单证据，',
+        '举报查实私加联系方式及私单奖 500-2000R',
+    ];
+
+    const financeItems = [
+        // {label: '支付方式', value: '支付宝支付 💳'},
+        {label: '商品小计', value: '¥ 388.00'},
+        // {label: '优惠券抵扣', value: '- ¥ 20.00', color: COLORS.success},
+        {label: '实付金额', value: '¥ 368.00', isBold: true, color: COLORS.primary},
+        // {label: '积分奖励', value: '+ 368 积分 🎉', color: COLORS.secondary},
+    ];
+
+    const financeTop = 550;
+    const financeBoxHeight = 90 + Math.max(0, financeItems.length - 2) * 30;
+    const complaintGap = 20;
+    const complaintTop = financeTop + financeBoxHeight + complaintGap;
+    const complaintLineGap = 26;
+    const complaintBoxHeight = 91 + Math.max(0, tips.length - 1) * complaintLineGap;
+    const footerCenterY = complaintTop + complaintBoxHeight + 25;
+    const contentH = Math.max(990, footerCenterY + 110);
+
+    const createCanvas = (w: number, h: number) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(w * QUALITY);
+        canvas.height = Math.round(h * QUALITY);
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.setTransform(QUALITY, 0, 0, QUALITY, 0, 0);
+        return {canvas, ctx};
+    };
+
+    const contentW = 450;
+    const content = createCanvas(contentW, contentH);
+    if (!content) return null;
+    const C = content.ctx;
+
+    // content canvas: replicate the original receipt canvas only
+    C.clearRect(0, 0, contentW, contentH);
+    roundRect(C, 0, 0, contentW, contentH, 38, COLORS.bg);
+
+    const centerX = contentW / 2;
+
+    const drawHeader = () => {
+        const centerY = 100;
+
+        C.beginPath();
+        C.fillStyle = COLORS.lightPink;
+        C.arc(centerX, centerY, 50, 0, Math.PI * 2);
+        C.fill();
+
+        C.fillStyle = COLORS.lightPink;
+        C.beginPath();
+        C.moveTo(centerX - 45, centerY - 20);
+        C.quadraticCurveTo(centerX - 55, centerY - 65, centerX - 15, centerY - 48);
+        C.fill();
+        C.beginPath();
+        C.moveTo(centerX + 45, centerY - 20);
+        C.quadraticCurveTo(centerX + 55, centerY - 65, centerX + 15, centerY - 48);
+        C.fill();
+
+        C.fillStyle = COLORS.textMain;
+        C.beginPath();
+        C.arc(centerX - 18, centerY - 5, 4, 0, Math.PI * 2);
+        C.arc(centerX + 18, centerY - 5, 4, 0, Math.PI * 2);
+        C.fill();
+
+        C.fillStyle = '#ffb6c1';
+        C.globalAlpha = 0.6;
+        C.beginPath();
+        C.ellipse(centerX - 30, centerY + 10, 8, 5, 0, 0, Math.PI * 2);
+        C.ellipse(centerX + 30, centerY + 10, 8, 5, 0, 0, Math.PI * 2);
+        C.fill();
+        C.globalAlpha = 1;
+
+        C.strokeStyle = COLORS.textMain;
+        C.lineWidth = 2;
+        C.beginPath();
+        C.moveTo(centerX - 5, centerY + 10);
+        C.quadraticCurveTo(centerX, centerY + 15, centerX + 5, centerY + 10);
+        C.stroke();
+
+        C.beginPath();
+        C.moveTo(centerX - 40, centerY + 5);
+        C.lineTo(centerX - 60, centerY + 2);
+        C.moveTo(centerX - 40, centerY + 12);
+        C.lineTo(centerX - 60, centerY + 15);
+        C.moveTo(centerX + 40, centerY + 5);
+        C.lineTo(centerX + 60, centerY + 2);
+        C.moveTo(centerX + 40, centerY + 12);
+        C.lineTo(centerX + 60, centerY + 15);
+        C.stroke();
+
+        C.fillStyle = COLORS.primary;
+        C.font = 'bold 28px sans-serif';
+        C.textAlign = 'center';
+        C.fillText(`蓝猫爽打 · 订单小票`, centerX, centerY + 85);
+        C.fillStyle = COLORS.textMuted;
+        C.font = '16px sans-serif';
+        C.fillText('每一局游戏，都有蓝猫守护', centerX, centerY + 110);
+    };
+
+    const drawCoreInfo = () => {
+        const startY = 235;
+        const margin = 30;
+        const width = 390;
+
+        roundRect(C, margin, startY, width, 210, 20, COLORS.lightOrange);
+
+        C.textAlign = 'left';
+        C.fillStyle = COLORS.textMain;
+        C.font = 'bold 18px sans-serif';
+        C.fillText('下单项目：', margin + 20, startY + 35);
+        C.fillText(`${orderMetricLabel}：`, margin + 20, startY + 80);
+        C.fillText('接待客服：', margin + 20, startY + 125);
+        C.fillText('接待陪玩：', margin + 20, startY + 170);
+
+        roundRect(C, margin + 110, startY + 13, 230, 32, 8, COLORS.accent);
+        C.fillStyle = '#ffffff';
+        C.font = 'bold 16px sans-serif';
+        const projectLines = wrapText(C, project, 210);
+        C.fillText(projectLines[0], margin + 120, startY + 35);
+
+        roundRect(C, margin + 110, startY + 58, 120, 32, 8, COLORS.accent);
+        C.fillStyle = '#ffffff';
+        C.fillText(orderMetricValue, margin + 120, startY + 80);
+
+        C.fillStyle = COLORS.textMain;
+        C.font = '18px sans-serif';
+        C.fillText(serviceName, margin + 110, startY + 125);
+
+        C.fillStyle = COLORS.textMain;
+        C.font = '18px sans-serif';
+        const playX = margin + 110;
+        const playMaxWidth = contentW - margin - 20 - playX;
+        const playerText = Array.isArray(players) ? players.join(' ') : String(players);
+        wrapText(C, playerText, playMaxWidth).forEach((line, i) => {
+            C.fillText(line, playX, startY + 170 + i * 26);
+        });
+    };
+
+    const drawTimeInfo = () => {
+        const timeY = 460;
+        C.textAlign = 'left';
+        C.fillStyle = COLORS.primary;
+        C.font = '14px sans-serif';
+        C.fillText(`预计等待时间：${waitTime} ⏱️`, 50, timeY + 20);
+
+        C.fillStyle = COLORS.textMuted;
+        C.font = '14px sans-serif';
+        C.fillText(`下单时间：${orderTime}`, 50, timeY + 48);
+
+        C.setLineDash([5, 5]);
+        C.strokeStyle = '#e5e7eb';
+        C.beginPath();
+        C.moveTo(30, timeY + 70);
+        C.lineTo(contentW - 30, timeY + 70);
+        C.stroke();
+        C.setLineDash([]);
+    };
+
+    const drawFinancialDetails = () => {
+        const financeY = financeTop;
+        const margin = 30;
+        const width = 390;
+        roundRect(C, margin, financeY, width, financeBoxHeight, 20, COLORS.lightPurple);
+        C.textAlign = 'left';
+        C.fillStyle = COLORS.textMain;
+        financeItems.forEach((item, index) => {
+            const y = financeY + 35 + index * 30;
+            C.textAlign = 'left';
+            C.fillStyle = COLORS.textMain;
+            C.font = '16px sans-serif';
+            C.fillText(item.label, margin + 20, y);
+
+            C.textAlign = 'right';
+            C.fillStyle = item.color || COLORS.textMain;
+            C.font = item.isBold ? 'bold 20px sans-serif' : '16px sans-serif';
+            C.fillText(item.value, margin + width - 20, y);
+        });
+    };
+
+    const drawComplaintInfo = () => {
+        const complaintY = complaintTop;
+        const margin = 30;
+        const width = 390;
+        roundRect(C, margin, complaintY, width, complaintBoxHeight, 20, '#fce4ec');
+
+        C.textAlign = 'left';
+        C.fillStyle = COLORS.textMain;
+        C.font = 'bold 17px sans-serif';
+        C.fillText('📢 售后与投诉须知', margin + 20, complaintY + 32);
+
+        C.font = '13px sans-serif';
+        tips.forEach((line, i) => {
+            const isHighlighted =
+                String(line).includes('本店通过各类渠道') ||
+                String(line).includes('举报查实私加联系方式及私单奖');
+            C.fillStyle = isHighlighted ? COLORS.primary : '#6b7280';
+            C.font = isHighlighted ? 'bold 13px sans-serif' : '13px sans-serif';
+            C.fillText(line, margin + 20, complaintY + 60 + i * 26);
+        });
+    };
+
+    const drawFooter = () => {
+        C.textAlign = 'center';
+
+        C.fillStyle = COLORS.primary;
+        C.font = 'bold 16px sans-serif';
+        C.fillText('感谢你的选择，喵~ 🐱 期待下次陪你一起玩！', centerX, footerCenterY);
+
+        C.fillStyle = COLORS.textMuted;
+        C.font = '12px sans-serif';
+        C.fillText('官方社交账号：微信公众号 | 抖音 | 小红书 @蓝猫爽打', centerX, footerCenterY + 25);
+
+        C.fillStyle = COLORS.secondary;
+        C.font = 'italic 14px sans-serif';
+        C.fillText('" 喵喵喵！记得给我们好评哦～ 🐾 "', centerX, footerCenterY + 50);
+
+        C.fillStyle = '#d1d5db';
+        C.font = '10px monospace';
+        C.fillText(`BlueCat · 萌爪订单小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, centerX, footerCenterY + 70);
+    };
+
+    const drawDecorations = () => {
+        const items = [
+            {x: 40, y: 60, type: 'paw'},
+            {x: 380, y: 150, type: 'star'},
+            {x: 50, y: contentH - 50, type: 'heart'},
+            {x: 400, y: contentH - 40, type: 'paw'},
+            {x: 30, y: 350, type: 'star'},
+        ];
+
+        items.forEach((item) => {
+            C.globalAlpha = 0.3;
+            if (item.type === 'paw') {
+                C.fillStyle = COLORS.secondary;
+                C.beginPath();
+                C.ellipse(item.x, item.y + 7.5, 15, 12, 0, 0, Math.PI * 2);
+                C.fill();
+                C.beginPath();
+                C.arc(item.x - 15, item.y - 3.75, 6, 0, Math.PI * 2);
+                C.arc(item.x - 5, item.y - 15, 6, 0, Math.PI * 2);
+                C.arc(item.x + 5, item.y - 15, 6, 0, Math.PI * 2);
+                C.arc(item.x + 15, item.y - 3.75, 6, 0, Math.PI * 2);
+                C.fill();
+            }
+            if (item.type === 'star') {
+                let rot = (Math.PI / 2) * 3;
+                const spikes = 5;
+                const outerRadius = 8;
+                const innerRadius = outerRadius / 2;
+                let x = item.x;
+                let y = item.y;
+                const step = Math.PI / spikes;
+                C.beginPath();
+                C.moveTo(item.x, item.y - outerRadius);
+                for (let i = 0; i < spikes; i++) {
+                    x = item.x + Math.cos(rot) * outerRadius;
+                    y = item.y + Math.sin(rot) * outerRadius;
+                    C.lineTo(x, y);
+                    rot += step;
+                    x = item.x + Math.cos(rot) * innerRadius;
+                    y = item.y + Math.sin(rot) * innerRadius;
+                    C.lineTo(x, y);
+                    rot += step;
+                }
+                C.lineTo(item.x, item.y - outerRadius);
+                C.closePath();
+                C.fillStyle = COLORS.accent;
+                C.fill();
+            }
+            if (item.type === 'heart') {
+                C.fillStyle = COLORS.primary;
+                C.save();
+                C.translate(item.x, item.y);
+                C.scale(12 / 80, 12 / 80);
+                C.beginPath();
+                C.moveTo(0, 0);
+                C.bezierCurveTo(0, -3, -5, -15, -25, -15);
+                C.bezierCurveTo(-55, -15, -55, 22.5, -55, 22.5);
+                C.bezierCurveTo(-55, 40, -35, 62, 0, 80);
+                C.bezierCurveTo(35, 62, 55, 40, 55, 22.5);
+                C.bezierCurveTo(55, 22.5, 55, -15, 25, -15);
+                C.bezierCurveTo(10, -15, 0, -3, 0, 0);
+                C.closePath();
+                C.fill();
+                C.restore();
+            }
+            C.globalAlpha = 1;
+        });
+    };
+
+    drawHeader();
+    drawCoreInfo();
+    drawTimeInfo();
+    drawFinancialDetails();
+    drawComplaintInfo();
+    drawFooter();
+    drawDecorations();
+
+    // outer frame canvas wrapping the receipt canvas
+    const frameOuterPad = 28;
+    const frameInnerPad = 10;
+    const frameW = contentW + frameOuterPad * 2 + frameInnerPad * 2;
+    const frameH = contentH + frameOuterPad * 2 + frameInnerPad * 2;
+    const finalW = frameW + 32;
+    const finalH = frameH + 48;
+
+    const final = createCanvas(finalW, finalH);
+    if (!final) return null;
+    const F = final.ctx;
+    F.clearRect(0, 0, finalW, finalH);
+    F.fillStyle = '#ffffff';
+    F.fillRect(0, 0, finalW, finalH);
+
+    const frameX = 16;
+    const frameY = 24;
+    const frameGrad = F.createLinearGradient(frameX, frameY, frameX + frameW, frameY + frameH);
+    frameGrad.addColorStop(0, '#f8bbd0');
+    frameGrad.addColorStop(0.4, '#ce93d8');
+    frameGrad.addColorStop(1, '#f48fb1');
+    F.save();
+    F.shadowColor = 'rgba(233, 30, 99, 0.35)';
+    F.shadowBlur = 18;
+    F.shadowOffsetY = 8;
+    roundRect(F, frameX, frameY, frameW, frameH, 48, frameGrad);
+    F.restore();
+
+    F.save();
+    F.strokeStyle = 'rgba(255,255,255,0.35)';
+    F.lineWidth = 3;
+    roundRect(F, frameX + 8, frameY + 8, frameW - 16, frameH - 16, 42);
+    F.stroke();
+    F.restore();
+
+    F.save();
+    roundRect(F, frameX + frameOuterPad + 10, frameY + frameOuterPad + 10, frameW - (frameOuterPad + 10) * 2, frameH - (frameOuterPad + 10) * 2, 40, '#ffffff');
+    F.restore();
+
+    F.save();
+    F.strokeStyle = 'rgba(255,255,255,0.48)';
+    F.lineWidth = 2;
+    roundRect(F, frameX + frameOuterPad + 10, frameY + frameOuterPad + 10, frameW - (frameOuterPad + 10) * 2, frameH - (frameOuterPad + 10) * 2, 36);
+    F.stroke();
+    F.restore();
+
+    const topBadgeText = '欢迎板板大驾光临';
+    F.save();
+    F.font = '18px sans-serif';
+    const topBadgeW = F.measureText(topBadgeText).width + 98;
+    const topBadgeX = frameX + frameW / 2 - topBadgeW / 2;
+    const topBadgeY = frameY - 8;
+    const topBadgeGrad = F.createLinearGradient(topBadgeX, topBadgeY, topBadgeX + topBadgeW, topBadgeY + 42);
+    topBadgeGrad.addColorStop(0, '#f8bbd0');
+    topBadgeGrad.addColorStop(1, '#ce93d8');
+    roundRect(F, topBadgeX, topBadgeY, topBadgeW, 42, 21, topBadgeGrad);
+    F.fillStyle = '#ffffff';
+    F.textAlign = 'center';
+    F.textBaseline = 'middle';
+    F.fillText(topBadgeText, frameX + frameW / 2, topBadgeY + 22);
+    F.font = '22px sans-serif';
+    F.fillText('♡', topBadgeX + 28, topBadgeY + 22);
+    F.fillText('🐱', topBadgeX + topBadgeW - 28, topBadgeY + 22);
+    F.restore();
+
+    const bottomBadgeText = 'BlueCat · 蓝猫爽打 与您同行';
+    F.save();
+    F.font = '13px sans-serif';
+    const bottomBadgeW = F.measureText(bottomBadgeText).width + 34;
+    const bottomBadgeX = frameX + frameW / 2 - bottomBadgeW / 2;
+    const bottomBadgeY = frameY + frameH - 30;
+    roundRect(F, bottomBadgeX, bottomBadgeY, bottomBadgeW, 28, 14, 'rgba(255,255,255,0.86)');
+    F.strokeStyle = 'rgba(206,147,216,0.25)';
+    F.lineWidth = 1;
+    roundRect(F, bottomBadgeX, bottomBadgeY, bottomBadgeW, 28, 14);
+    F.stroke();
+    F.fillStyle = COLORS.primary;
+    F.textAlign = 'center';
+    F.textBaseline = 'middle';
+    F.fillText(bottomBadgeText, frameX + frameW / 2, bottomBadgeY + 14);
+    F.restore();
+
+    F.save();
+    F.globalAlpha = 0.85;
+    F.fillStyle = '#ffffff';
+    F.beginPath();
+    F.arc(frameX + 24, frameY + 24, 6, 0, Math.PI * 2);
+    F.arc(frameX + 34, frameY + 16, 5, 0, Math.PI * 2);
+    F.arc(frameX + 42, frameY + 26, 4.5, 0, Math.PI * 2);
+    F.arc(frameX + 32, frameY + 32, 4, 0, Math.PI * 2);
+    F.fill();
+    F.beginPath();
+    F.arc(frameX + frameW - 24, frameY + 54, 6, 0, Math.PI * 2);
+    F.arc(frameX + frameW - 32, frameY + 44, 5, 0, Math.PI * 2);
+    F.arc(frameX + frameW - 42, frameY + 56, 4.5, 0, Math.PI * 2);
+    F.arc(frameX + frameW - 32, frameY + 64, 4, 0, Math.PI * 2);
+    F.fill();
+    F.beginPath();
+    F.arc(frameX + 24, frameY + frameH - 36, 6, 0, Math.PI * 2);
+    F.arc(frameX + 34, frameY + frameH - 44, 5, 0, Math.PI * 2);
+    F.arc(frameX + 42, frameY + frameH - 34, 4.5, 0, Math.PI * 2);
+    F.arc(frameX + 32, frameY + frameH - 28, 4, 0, Math.PI * 2);
+    F.fill();
+    F.beginPath();
+    F.arc(frameX + frameW - 24, frameY + frameH - 34, 6, 0, Math.PI * 2);
+    F.arc(frameX + frameW - 32, frameY + frameH - 44, 5, 0, Math.PI * 2);
+    F.arc(frameX + frameW - 42, frameY + frameH - 32, 4.5, 0, Math.PI * 2);
+    F.arc(frameX + frameW - 32, frameY + frameH - 26, 4, 0, Math.PI * 2);
+    F.fill();
+    F.restore();
+
+    const contentX = frameX + frameOuterPad + frameInnerPad;
+    const contentY = frameY + frameOuterPad + frameInnerPad;
+    F.drawImage(content.canvas, contentX, contentY, contentW, contentH);
+
+    return final.canvas.toDataURL('image/png');
 };

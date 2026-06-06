@@ -28,6 +28,12 @@ export interface User {
     avatar?: string;
     album?: string[];
     rating?: number;
+    staffRating?: {
+        id?: number;
+        name?: string;
+        scope?: 'BOTH' | 'ONLINE' | 'OFFLINE' | string;
+        rate?: number;
+    } | null;
     level: number;
     balance: number;
     needResetPwd: boolean;

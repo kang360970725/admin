@@ -49,6 +49,7 @@ import {
     getEnumDicts,
     getOrderDetail,
     getPlayerOptions,
+    getUserById,
     markOrderPaid,
     recalculateOrderSettlements,
     refundOrder, rollbackWrongSettlementReversals,
@@ -82,6 +83,7 @@ const OrderDetailPage: React.FC = () => {
     // players for select
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<{ label: string; value: number }[]>([]);
+    const [staffProfiles, setStaffProfiles] = useState<Record<number, any>>({});
 
     // dispatch modal/drawer
     const [dispatchModalOpen, setDispatchModalOpen] = useState(false);
@@ -1020,7 +1022,18 @@ const OrderDetailPage: React.FC = () => {
         const customerId = o?.customerGameId ?? '-';
         const csName = o?.dispatcher?.name || o?.dispatcher?.phone || '客服';
 
-        const pickPlayersText = (detail: any) => {
+        const formatPlayerLine = (player: any) => {
+            const name = player?.user?.name || player?.user?.nickname || player?.user?.phone || player?.userId || '陪玩';
+            const userId = Number(player?.userId ?? player?.user?.id);
+            const ratingName = String(
+                player?.user?.staffRating?.name ||
+                staffProfiles?.[userId]?.staffRating?.name ||
+                '',
+            ).trim();
+            return ratingName ? `${name}（${ratingName}）` : `${name}`;
+        };
+
+        const pickPlayersLines = (detail: any): string[] => {
             const cd = detail?.currentDispatch;
             const cdParts = Array.isArray(cd?.participants) ? cd.participants : [];
             const active = cdParts.filter((p: any) => p?.isActive !== false);
@@ -1031,14 +1044,14 @@ const OrderDetailPage: React.FC = () => {
 
             const parts = active.length ? active : lastParts;
 
-            const names = parts
-                .map((p: any) => p?.user?.name || p?.user?.nickname || p?.user?.phone || p?.userId)
-                .filter(Boolean);
+            const names: string[] = parts
+                .map((p: any) => formatPlayerLine(p))
+                .filter((line: string) => Boolean(line));
 
-            return names.length ? names.join('、') : '（待派单/待接单）';
+            return names.length ? names : ['（待派单/待接单）'];
         };
 
-        const playerNames = pickPlayersText(o);
+        const playerLines: string[] = pickPlayersLines(o);
 
         const unitPrice = Number(o?.projectSnapshot?.price ?? o?.project?.price);
         const paid = Number(o?.paidAmount ?? o?.receivableAmount);
@@ -1058,7 +1071,8 @@ const OrderDetailPage: React.FC = () => {
                 isHourlyLocal ? `${estHours != null ? estHours.toFixed(2) : '-'} 小时` : `${baseWan ?? '-'} 万`
             }`,
             `接待客服：${csName}`,
-            `接待陪玩：${playerNames}`,
+            `接待陪玩：`,
+            ...playerLines.map((line) => `  ${line}`),
             isHourlyLocal ? `预计结单时间：${endTime ? endTime.format('YYYY-MM-DD HH:mm') : '-'}` : '',
             `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
             `预计等待时间：5-10分钟`,
@@ -1074,7 +1088,8 @@ const OrderDetailPage: React.FC = () => {
         const staffText = [
             `订单编号：${orderNo}`,
             `客户ID：${customerId}`,
-            `接单陪玩：${playerNames}`,
+            `接单陪玩：`,
+            ...playerLines.map((line) => `  ${line}`),
             `开单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
             `派单客服：${csName}`,
             `实时单，请在 3 分钟内完成对接。`,
@@ -1083,17 +1098,15 @@ const OrderDetailPage: React.FC = () => {
         return {customerText, staffText};
     };
 
-    const openReceipt = (type: 'customer' | 'staff') => {
+    const openReceipt = async (type: 'customer' | 'staff') => {
         const {customerText, staffText} = buildReceiptTextsFromDetail();
         setReceiptTextCustomer(customerText);
         setReceiptTextStaff(staffText);
-        // setReceiptImgCustomer(generateReceiptImage('蓝猫爽打-订单小票', customerText));
-        setReceiptImgCustomer(
-            generateReceiptImage('蓝猫爽打-订单小票', customerText, {
-                width: 560,
-                theme: {accent: '#22d3ee', accent2: '#a78bfa'},
-            }),
-        );
+        const image = await generateReceiptImage('蓝猫爽打 · 萌爪订单', customerText, {
+            width: 450,
+            theme: {accent: '#22d3ee', accent2: '#a78bfa'},
+        });
+        setReceiptImgCustomer(image);
         setReceiptType(type);
         setReceiptOpen(true);
     };
@@ -1182,10 +1195,41 @@ const OrderDetailPage: React.FC = () => {
         try {
             const res = await getOrderDetail(orderId);
             setOrder(res);
+            await hydrateStaffProfiles(res);
         } catch (e: any) {
             message.error(e?.response?.data?.message || '加载订单详情失败');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const hydrateStaffProfiles = async (detail: any) => {
+        const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+        const current = detail?.currentDispatch ? [detail.currentDispatch] : [];
+        const allDispatches = [...current, ...dispatches];
+        const userIds = new Set<number>();
+
+        allDispatches.forEach((d: any) => {
+            const parts = Array.isArray(d?.participants) ? d.participants : [];
+            parts.forEach((p: any) => {
+                const uid = Number(p?.userId ?? p?.user?.id);
+                if (Number.isFinite(uid) && uid > 0) userIds.add(uid);
+            });
+        });
+
+        const missingIds = Array.from(userIds).filter((id) => !staffProfiles[id]);
+        if (!missingIds.length) return;
+
+        const results = await Promise.allSettled(missingIds.map((id) => getUserById(id)));
+        const next: Record<number, any> = {};
+        results.forEach((res, idx) => {
+            if (res.status !== 'fulfilled') return;
+            const user = res.value as any;
+            const id = missingIds[idx];
+            next[id] = user;
+        });
+        if (Object.keys(next).length) {
+            setStaffProfiles((prev) => ({...prev, ...next}));
         }
     };
 
@@ -3546,8 +3590,11 @@ const OrderDetailPage: React.FC = () => {
                                         src={receiptImgCustomer}
                                         alt="receipt"
                                         style={{
-                                            width: isMobile ? 320 : 360,
+                                            width: isMobile ? 250 : 290,
                                             maxWidth: '100%',
+                                            height: 'auto',
+                                            maxHeight: isMobile ? '52vh' : '58vh',
+                                            objectFit: 'contain',
                                             border: '1px solid #eee',
                                             borderRadius: 14,
                                             background: '#fff',
