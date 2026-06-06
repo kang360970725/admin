@@ -159,6 +159,11 @@ function decodeJwtExp(token?: string | null): number {
 const REFRESH_AHEAD_SECONDS = 30 * 60;
 let refreshingTokenPromise: Promise<string | null> | null = null;
 
+function isPublicMenuPath(pathname?: string | null) {
+    const path = String(pathname || window.location.pathname || '').trim();
+    return path === '/menu' || path.startsWith('/menu/');
+}
+
 async function ensureFreshTokenBeforeRequest(currentToken?: string | null): Promise<string | null> {
     const token = String(currentToken || '').trim();
     if (!token) return null;
@@ -238,6 +243,11 @@ export async function getInitialState(): Promise<{
             return undefined;
         }
     };
+
+    // ✅ 菜单页是公开页：即使本地有 token，也不做有效性校验，避免失效 token 触发跳转登录
+    if (isPublicMenuPath(window.location.pathname)) {
+        return { fetchUserInfo };
+    }
 
     // 如果是登录页面，不执行
     if (window.location.pathname !== '/login') {
@@ -1075,12 +1085,13 @@ export const request: RuntimeConfig['request'] = {
             let token = localStorage.getItem('token');
             const isAuthLogin = String(url || '').includes('/auth/login');
             const isAuthRefresh = String(url || '').includes('/auth/refresh');
-            if (token && !isAuthLogin && !isAuthRefresh) {
+            const skipAuthForPublicMenu = isPublicMenuPath(window.location.pathname);
+            if (token && !isAuthLogin && !isAuthRefresh && !skipAuthForPublicMenu) {
                 token = await ensureFreshTokenBeforeRequest(token);
             }
             const headers = { ...(options?.headers || {}) };
 
-            if (token) headers.Authorization = `Bearer ${token}`;
+            if (token && !skipAuthForPublicMenu) headers.Authorization = `Bearer ${token}`;
             headers['Content-Type'] = headers['Content-Type'] || 'application/json';
 
             return { url, options: { ...options, headers } };
