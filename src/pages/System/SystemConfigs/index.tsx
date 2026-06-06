@@ -26,6 +26,7 @@ const categoryMeta = {
   ALL: { label: '全部配置', color: 'default' },
   WECHAT: { label: '微信配置', color: 'green' },
   PAYMENT: { label: '支付回调', color: 'blue' },
+  COS: { label: '对象存储', color: 'magenta' },
   FINANCE: { label: '费用规则', color: 'gold' },
   OTHER: { label: '其他配置', color: 'default' },
 } as const;
@@ -36,6 +37,7 @@ function resolveCategory(row: SystemConfigItem): CategoryKey {
   const key = String(row.key || '').trim();
   if (key.startsWith('wechat_mini_')) return 'WECHAT';
   if (key === 'app_public_base_url' || key.startsWith('wechat_pay_')) return 'PAYMENT';
+  if (key.startsWith('cos_')) return 'COS';
   if (key.startsWith('offline_fee_')) return 'FINANCE';
   return 'OTHER';
 }
@@ -89,6 +91,18 @@ const SystemConfigsPage: React.FC = () => {
       valueType: row.valueType,
       remark: row.remark,
       enabled: row.enabled,
+    });
+  };
+
+  const openCreate = () => {
+    setEditing(null);
+    setVisible(true);
+    form.setFieldsValue({
+      key: '',
+      value: '',
+      valueType: 'STRING',
+      remark: '',
+      enabled: true,
     });
   };
 
@@ -175,6 +189,13 @@ const SystemConfigsPage: React.FC = () => {
         dataSource={visibleData}
         pagination={{ pageSize: 10, showSizeChanger: true }}
         toolBarRender={() => [
+          <Button
+            key="add"
+            type="primary"
+            onClick={openCreate}
+          >
+            新增配置
+          </Button>,
           <Segmented
             key="category"
             options={categoryOptions}
@@ -247,7 +268,7 @@ const SystemConfigsPage: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item label="配置键" name="key" rules={[{ required: true, message: '请输入配置键' }]}>
-            <Input disabled={Boolean(editing)} />
+            <Input disabled={Boolean(editing)} placeholder="例如 cos_secret_id / custom_key" />
           </Form.Item>
 
           <Form.Item label="值类型" name="valueType" rules={[{ required: true, message: '请选择值类型' }]}>
