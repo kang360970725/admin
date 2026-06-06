@@ -2019,6 +2019,10 @@ export async function recalculateOrderSettlements(data: {
     reason?: string;
     scope?: string;
     allowWalletSync?: boolean;
+    modePlayAllocList?: any[];
+    playerEvaluations?: any[];
+    orderTipEnabled?: boolean;
+    orderTipUserIds?: number[];
 }) {
     return request(`${API_BASE}/orders/repair-wallet-by-settlementsV1`, {
         method: 'POST',

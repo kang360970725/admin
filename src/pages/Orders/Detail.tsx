@@ -334,6 +334,23 @@ const OrderDetailPage: React.FC = () => {
         setRecalcResult(null);
         setWalletPreview(null);
         setWalletApplyResult(null);
+        setPlayerEvalRows(buildConfirmPlayerEvalRowsFromOrder(order));
+        const storedEvaluations = Array.isArray(order?.playerEvaluations) ? order.playerEvaluations : [];
+        const firstBadEval = storedEvaluations.find((item: any) => Number(item?.score ?? 0) <= 2 && Boolean(item?.afterSaleHandled));
+        const firstGoodEval = storedEvaluations.find((item: any) => Number(item?.score ?? 0) >= 4);
+        setOrderAfterSale({
+            enabled: Boolean(firstBadEval?.afterSaleHandled),
+            action: firstBadEval?.afterSaleAction || undefined,
+            responsibleUserIds: Array.isArray(firstBadEval?.responsibleUserIds)
+                ? firstBadEval.responsibleUserIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+                : [],
+        });
+        setOrderTip({
+            enabled: Array.isArray(firstGoodEval?.tippedUserIds) && firstGoodEval.tippedUserIds.length > 0,
+            tippedUserIds: Array.isArray(firstGoodEval?.tippedUserIds)
+                ? firstGoodEval.tippedUserIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+                : [],
+        });
         initRecalcModePlayAlloc()
         setToolsOpen(true);
 
@@ -515,7 +532,7 @@ const OrderDetailPage: React.FC = () => {
             .sort((a: any, b: any) => (Number(a?.round ?? 0) - Number(b?.round ?? 0)));
 
         return list.map((d: any) => {
-            const active = (d?.participants ?? []).filter((p: any) => p?.acceptedAt && !p?.rejectedAt);
+            const active = getSettlementParticipants(d);
             const names = active.map((p: any) => p?.user?.name).filter(Boolean);
 
             return {
@@ -531,15 +548,24 @@ const OrderDetailPage: React.FC = () => {
 
     const buildConfirmPlayerEvalRowsFromOrder = (detail: any): PlayerEvalRow[] => {
         const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+        const storedEvaluations = Array.isArray(detail?.playerEvaluations) ? detail.playerEvaluations : [];
+        const evalMap = new Map<string, any>();
+        storedEvaluations.forEach((item: any) => {
+            const key = `${Number(item?.dispatchId ?? 0)}_${Number(item?.playerUserId ?? 0)}`;
+            evalMap.set(key, item);
+        });
         const inStatuses = ['COMPLETED', 'ARCHIVED'];
         const list = dispatches
             .filter((d: any) => inStatuses.includes(String(d?.status)))
             .sort((a: any, b: any) => (Number(a?.round ?? 0) - Number(b?.round ?? 0)));
 
         return list.map((d: any) => {
-            const active = (d?.participants ?? []).filter((p: any) => p?.acceptedAt && !p?.rejectedAt);
+            const active = getSettlementParticipants(d);
             const participantIds = active.map((p: any) => Number(p?.userId)).filter((n: number) => Number.isFinite(n) && n > 0);
             const participantNames = active.map((p: any) => p?.user?.name || `#${p?.userId ?? ''}`);
+            const firstStored = participantIds
+                .map((playerUserId) => evalMap.get(`${Number(d.id)}_${Number(playerUserId)}`))
+                .find(Boolean);
 
             return {
                 key: String(d.id),
@@ -547,15 +573,43 @@ const OrderDetailPage: React.FC = () => {
                 round: Number(d?.round ?? 0),
                 participantIds,
                 participantNames,
-                score: 3,
-                tipEnabled: false,
-                tippedUserIds: [],
+                score: Number(firstStored?.score ?? 3),
+                tipEnabled: Array.isArray(firstStored?.tippedUserIds) && firstStored.tippedUserIds.length > 0,
+                tippedUserIds: Array.isArray(firstStored?.tippedUserIds)
+                    ? firstStored.tippedUserIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+                    : [],
             };
+        });
+    };
+
+    const getSettlementParticipants = (d: any) => {
+        const parts = Array.isArray(d?.participants) ? d.participants : [];
+        return parts.filter((p: any) => {
+            const userId = Number(p?.userId ?? 0);
+            if (!Number.isFinite(userId) || userId <= 0) return false;
+            return p?.rejectedAt ? false : true;
         });
     };
 
     const patchPlayerEvalRow = (key: string, patch: Partial<PlayerEvalRow>) => {
         setPlayerEvalRows((prev) => prev.map((row) => (row.key === key ? {...row, ...patch} : row)));
+    };
+
+    const buildExpandedPlayerEvaluations = (rows: PlayerEvalRow[]) => {
+        return rows.flatMap((row) => {
+            const isBad = row.score <= 2;
+            const isGood = row.score >= 4;
+            return row.participantIds.map((playerUserId) => ({
+                dispatchId: row.dispatchId,
+                playerUserId,
+                score: row.score,
+                ratingLabel: isGood ? 'GOOD' : row.score === 3 ? 'MEDIUM' : 'BAD',
+                afterSaleHandled: isBad ? Boolean(orderAfterSale.enabled) : false,
+                afterSaleAction: isBad && orderAfterSale.enabled ? (orderAfterSale.action || undefined) : undefined,
+                responsibleUserIds: isBad && orderAfterSale.enabled ? orderAfterSale.responsibleUserIds : [],
+                tippedUserIds: orderTip.enabled ? orderTip.tippedUserIds : [],
+            }));
+        });
     };
 
     const runRecalcPreview = async () => {
@@ -634,6 +688,9 @@ const OrderDetailPage: React.FC = () => {
                 applyRepair: false,
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
+                playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
+                orderTipEnabled: Boolean(orderTip.enabled),
+                orderTipUserIds: orderTip.enabled ? orderTip.tippedUserIds : [],
             } as any);
 
             setRepairPreview(res);
@@ -713,6 +770,9 @@ const OrderDetailPage: React.FC = () => {
                 scope: 'COMPLETED_AND_ARCHIVED',
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
+                playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
+                orderTipEnabled: Boolean(orderTip.enabled),
+                orderTipUserIds: orderTip.enabled ? orderTip.tippedUserIds : [],
             } as any);
 
             setToolsResult(res);
@@ -825,8 +885,22 @@ const OrderDetailPage: React.FC = () => {
         }
 
         setPlayerEvalRows(buildConfirmPlayerEvalRowsFromOrder(order));
-        setOrderAfterSale({ enabled: false, action: undefined, responsibleUserIds: [] });
-        setOrderTip({ enabled: false, tippedUserIds: [] });
+        const storedEvaluations = Array.isArray(order?.playerEvaluations) ? order.playerEvaluations : [];
+        const firstBadEval = storedEvaluations.find((item: any) => Number(item?.score ?? 0) <= 2 && Boolean(item?.afterSaleHandled));
+        const firstGoodEval = storedEvaluations.find((item: any) => Number(item?.score ?? 0) >= 4);
+        setOrderAfterSale({
+            enabled: Boolean(firstBadEval?.afterSaleHandled),
+            action: firstBadEval?.afterSaleAction || undefined,
+            responsibleUserIds: Array.isArray(firstBadEval?.responsibleUserIds)
+                ? firstBadEval.responsibleUserIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+                : [],
+        });
+        setOrderTip({
+            enabled: Array.isArray(firstGoodEval?.tippedUserIds) && firstGoodEval.tippedUserIds.length > 0,
+            tippedUserIds: Array.isArray(firstGoodEval?.tippedUserIds)
+                ? firstGoodEval.tippedUserIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
+                : [],
+        });
 
         setConfirmCompleteOpen(true);
     };
@@ -928,20 +1002,7 @@ const OrderDetailPage: React.FC = () => {
             };
 
             if (isModePlay) payload.modePlayAllocList = modePlayAllocList;
-            const expandedEvaluations = playerEvalRows.flatMap((row) => {
-                const isBad = row.score <= 2;
-                const isGood = row.score >= 4;
-                return row.participantIds.map((playerUserId, idx) => ({
-                    dispatchId: row.dispatchId,
-                    playerUserId,
-                    score: row.score,
-                    ratingLabel: isGood ? 'GOOD' : row.score === 3 ? 'MEDIUM' : 'BAD',
-                    afterSaleHandled: isBad ? Boolean(orderAfterSale.enabled) : false,
-                    afterSaleAction: isBad && orderAfterSale.enabled ? (orderAfterSale.action || undefined) : undefined,
-                    responsibleUserIds: isBad && orderAfterSale.enabled ? orderAfterSale.responsibleUserIds : [],
-                }));
-            });
-            payload.playerEvaluations = expandedEvaluations;
+            payload.playerEvaluations = buildExpandedPlayerEvaluations(playerEvalRows);
             payload.orderTipEnabled = Boolean(orderTip.enabled);
             payload.orderTipUserIds = orderTip.enabled ? orderTip.tippedUserIds : [];
 
@@ -3181,6 +3242,173 @@ const OrderDetailPage: React.FC = () => {
                                 </Card>
                             ) : null}
 
+                            <div style={{
+                                border: '1px solid #e5e7eb',
+                                background: '#fafafa',
+                                borderRadius: 12,
+                                padding: 12,
+                            }}>
+                                <Space style={{justifyContent: 'space-between', width: '100%', marginBottom: 8}} align="start">
+                                    <div>
+                                        <div style={{fontWeight: 600, marginBottom: 8}}>
+                                            轮次评价
+                                        </div>
+                                        <Typography.Text type="secondary" style={{display: 'block', marginBottom: 10, fontSize: 12}}>
+                                            重算前可直接修改历史轮次评价；修改后请重新点击“① 重新核算（预览）”。
+                                        </Typography.Text>
+                                    </div>
+                                    <Space wrap>
+                                        <Button size="small" onClick={() => {
+                                            setPlayerEvalRows((prev) => prev.map((row) => ({...row, score: 5, tipEnabled: false, tippedUserIds: []})));
+                                            setOrderTip({ enabled: false, tippedUserIds: [] });
+                                        }}>一键全员好评</Button>
+                                        <Button size="small" danger onClick={() => {
+                                            setPlayerEvalRows((prev) => prev.map((row) => ({...row, score: 1, tipEnabled: false, tippedUserIds: []})));
+                                            setOrderTip({ enabled: false, tippedUserIds: [] });
+                                            setOrderAfterSale({ enabled: true, action: orderAfterSale.action, responsibleUserIds: orderAfterSale.responsibleUserIds });
+                                        }}>一键全员差评</Button>
+                                    </Space>
+                                </Space>
+                                <Table
+                                    size="small"
+                                    rowKey="key"
+                                    pagination={false}
+                                    dataSource={playerEvalRows}
+                                    scroll={{x: true}}
+                                    columns={[
+                                        {
+                                            title: '轮次 / 参与者',
+                                            width: 220,
+                                            render: (_: any, row: PlayerEvalRow) => (
+                                                <Space direction="vertical" size={2}>
+                                                    <Tag style={{borderRadius: 999}}>第{row.round}轮</Tag>
+                                                    <Space size={4} wrap>
+                                                        {row.participantNames.map((name, idx) => (
+                                                            <Tag key={idx} style={{borderRadius: 999}}>{name}</Tag>
+                                                        ))}
+                                                    </Space>
+                                                </Space>
+                                            ),
+                                        },
+                                        {
+                                            title: '评分',
+                                            width: 260,
+                                            render: (_: any, row: PlayerEvalRow) => (
+                                                <Radio.Group
+                                                    value={row.score}
+                                                    onChange={(e) => {
+                                                        const nextScore = Number(e.target.value);
+                                                        patchPlayerEvalRow(row.key, {score: nextScore, tipEnabled: false, tippedUserIds: []});
+                                                        if (nextScore <= 2) {
+                                                            setOrderTip((prev) => ({
+                                                                ...prev,
+                                                                tippedUserIds: prev.tippedUserIds.filter((id) => !row.participantIds.includes(id)),
+                                                            }));
+                                                        }
+                                                    }}
+                                                >
+                                                    <Space direction="vertical" size={2}>
+                                                        <Radio value={5}>好评</Radio>
+                                                        <Radio value={3}>中评</Radio>
+                                                        <Radio value={1}>差评</Radio>
+                                                    </Space>
+                                                </Radio.Group>
+                                            ),
+                                        },
+                                    ]}
+                                />
+
+                                <div style={{marginTop: 12, borderTop: '1px dashed #d9d9d9', paddingTop: 12}}>
+                                    <div style={{fontWeight: 600, marginBottom: 8}}>打赏</div>
+                                    <Typography.Text type="secondary" style={{display: 'block', marginBottom: 10, fontSize: 12}}>
+                                        仅好评轮参与者可进入候选；差评轮参与者不进入打赏列表。
+                                    </Typography.Text>
+                                    {playerEvalUserOptions.length ? (
+                                        <Space direction="vertical" size={8} style={{width: '100%'}}>
+                                            <Space size={8} align="center">
+                                                <Switch
+                                                    checked={orderTip.enabled}
+                                                    onChange={(checked) => setOrderTip((prev) => ({
+                                                        ...prev,
+                                                        enabled: checked,
+                                                        tippedUserIds: checked ? prev.tippedUserIds : [],
+                                                    }))}
+                                                />
+                                                <Typography.Text>是否打赏</Typography.Text>
+                                            </Space>
+                                            {orderTip.enabled ? (
+                                                <Select
+                                                    mode="multiple"
+                                                    allowClear
+                                                    placeholder="选择被打赏打手"
+                                                    style={{width: '100%'}}
+                                                    options={playerEvalUserOptions}
+                                                    value={orderTip.tippedUserIds}
+                                                    onChange={(vals) => setOrderTip((prev) => ({
+                                                        ...prev,
+                                                        tippedUserIds: Array.isArray(vals)
+                                                            ? vals.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+                                                            : [],
+                                                    }))}
+                                                />
+                                            ) : (
+                                                <Typography.Text type="secondary">未开启打赏</Typography.Text>
+                                            )}
+                                        </Space>
+                                    ) : (
+                                        <Typography.Text type="secondary">暂无可打赏打手。</Typography.Text>
+                                    )}
+                                </div>
+
+                                {hasBadRound ? (
+                                    <div style={{marginTop: 12, borderTop: '1px dashed #d9d9d9', paddingTop: 12}}>
+                                        <div style={{fontWeight: 600, marginBottom: 8}}>订单售后</div>
+                                        <Space direction="vertical" size={8} style={{width: '100%'}}>
+                                            <Space size={8} align="center">
+                                                <Switch
+                                                    checked={orderAfterSale.enabled}
+                                                    onChange={(checked) => setOrderAfterSale((prev) => ({...prev, enabled: checked, responsibleUserIds: checked ? prev.responsibleUserIds : [], action: checked ? prev.action : undefined}))}
+                                                />
+                                                <Typography.Text>已售后</Typography.Text>
+                                            </Space>
+                                            {orderAfterSale.enabled ? (
+                                                <>
+                                                    <Select
+                                                        value={orderAfterSale.action}
+                                                        placeholder="选择处理方式"
+                                                        style={{width: '100%'}}
+                                                        options={[
+                                                            {label: '有责扣除收益 50%', value: 'RESPONSIBLE_50'},
+                                                            {label: '有责扣除收益 100%', value: 'RESPONSIBLE_100'},
+                                                            {label: '已维护客户，无需处理陪玩', value: 'NO_ACTION'},
+                                                        ]}
+                                                        onChange={(val) => setOrderAfterSale((prev) => ({...prev, action: String(val || '')}))}
+                                                    />
+                                                    <Select
+                                                        mode="multiple"
+                                                        allowClear
+                                                        placeholder="选择责任打手"
+                                                        style={{width: '100%'}}
+                                                        options={Array.from(new Map(
+                                                            playerEvalRows
+                                                                .filter((row) => row.score <= 2)
+                                                                .flatMap((row) => row.participantIds.map((pid, idx) => [pid, row.participantNames[idx] || `#${pid}`] as const))
+                                                        ).entries()).map(([value, label]) => ({value, label}))}
+                                                        value={orderAfterSale.responsibleUserIds}
+                                                        onChange={(vals) => setOrderAfterSale((prev) => ({
+                                                            ...prev,
+                                                            responsibleUserIds: Array.isArray(vals)
+                                                                ? vals.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+                                                                : [],
+                                                        }))}
+                                                    />
+                                                </>
+                                            ) : null}
+                                        </Space>
+                                    </div>
+                                ) : null}
+                            </div>
+
                             <Space wrap>
                                 <Button
                                     loading={toolsLoading}
@@ -3542,7 +3770,6 @@ const OrderDetailPage: React.FC = () => {
                                                 options={[
                                                     {label: '有责扣除收益 50%', value: 'RESPONSIBLE_50'},
                                                     {label: '有责扣除收益 100%', value: 'RESPONSIBLE_100'},
-                                                    {label: '已退款，承担客情维护费', value: 'MAINTENANCE_REFUND'},
                                                     {label: '已维护客户，无需处理陪玩', value: 'NO_ACTION'},
                                                 ]}
                                                 onChange={(val) => setOrderAfterSale((prev) => ({...prev, action: String(val || '')}))}
@@ -3565,11 +3792,6 @@ const OrderDetailPage: React.FC = () => {
                                                         : [],
                                                 }))}
                                             />
-                                            {String(orderAfterSale.action || '') === 'MAINTENANCE_REFUND' ? (
-                                                <Typography.Text type="secondary" style={{fontSize: 12}}>
-                                                    退款场景下，所选责任打手默认差评并承担客情维护费。
-                                                </Typography.Text>
-                                            ) : null}
                                         </>
                                     ) : null}
                                 </Space>
