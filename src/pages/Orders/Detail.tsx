@@ -129,6 +129,7 @@ const OrderDetailPage: React.FC = () => {
     const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
     const [confirmCompleteLoading, setConfirmCompleteLoading] = useState(false);
     const [confirmCompleteRemark, setConfirmCompleteRemark] = useState('');
+    const [confirmCompleteSettlementBaseMode, setConfirmCompleteSettlementBaseMode] = useState<'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT'>('SETTLEMENT_BASE_AMOUNT');
 
     // 重算工具 - 玩法单分轮输入
     const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<any>(null);
@@ -614,8 +615,8 @@ const OrderDetailPage: React.FC = () => {
     const runRecalcPreview = async () => {
         if (!order?.id) return;
 
-        // ✅ 口径：赠送单用 receivableAmount，否则用 paidAmount（和你 submitConfirmComplete 保持一致）
-        const paidBase = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+        // ✅ 口径：按订单结单时确认的收益基数
+        const paidBase = getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT');
 
         // ✅ 玩法单：重算必须携带每轮金额（无论 need 与否）
         let modePlayAllocList: any[] | undefined = undefined;
@@ -714,8 +715,8 @@ const OrderDetailPage: React.FC = () => {
             return;
         }
 
-        // ✅ 口径：赠送单用 receivableAmount，否则用 paidAmount
-        const paidBase = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+        // ✅ 口径：按订单结单时确认的收益基数
+        const paidBase = getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT');
 
         // ✅ 玩法单：应用时也携带每轮金额（无论 need 与否）
         let modePlayAllocList: any[] | undefined = undefined;
@@ -796,6 +797,15 @@ const OrderDetailPage: React.FC = () => {
         return Number.isFinite(n) ? n : 0;
     };
 
+    const getOrderSettlementBasisAmount = (
+        detail: any,
+        mode: 'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT' = 'SETTLEMENT_BASE_AMOUNT',
+    ) => {
+        const cashAmount = toNum(detail?.isGifted !== true ? detail?.paidAmount : detail?.receivableAmount);
+        const settlementBaseAmount = toNum(detail?.settlementBaseAmount ?? detail?.paidAmount ?? detail?.receivableAmount);
+        return mode === 'PAID_AMOUNT' ? cashAmount : settlementBaseAmount;
+    };
+
     const getDispatchParticipantIds = (d: any): number[] => {
         // 注意：ARCHIVED 轮参与者 isActive 可能 false，这里不要按 isActive 过滤
         const parts = Array.isArray(d?.participants) ? d.participants : [];
@@ -862,8 +872,8 @@ const OrderDetailPage: React.FC = () => {
             income: 0,
         }));
 
-        // ✅ 默认：按轮次均分实付金额
-        rows = seedModePlayEqualByRound(rows, toNum(detail?.isGifted !== true ? detail?.paidAmount : detail?.receivableAmount));
+        // ✅ 默认：按轮次均分结算基数
+        rows = seedModePlayEqualByRound(rows, getOrderSettlementBasisAmount(detail, 'SETTLEMENT_BASE_AMOUNT'));
 
         return {need: true, rows};
     };
@@ -874,6 +884,7 @@ const OrderDetailPage: React.FC = () => {
     // ==========================
     const openConfirmComplete = () => {
         setConfirmCompleteRemark('');
+        setConfirmCompleteSettlementBaseMode('SETTLEMENT_BASE_AMOUNT');
 
         // ✅ 玩法单：在打开弹窗前一次性初始化分轮表格
         if (isModePlay) {
@@ -944,8 +955,11 @@ const OrderDetailPage: React.FC = () => {
     const submitConfirmComplete = async () => {
         if (!order?.id) return;
 
-        // ✅ 口径：赠送单用 receivableAmount，否则用 paidAmount（和你校验/传参统一）
-        const paidBase = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+        // ✅ 口径拆分：
+        // - cashAmount：真实实收
+        // - basisAmount：本单结算金额（可选按结算金额 / 实收金额）
+        const cashAmount = getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
+        const basisAmount = getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode);
 
         try {
             setConfirmCompleteLoading(true);
@@ -967,7 +981,7 @@ const OrderDetailPage: React.FC = () => {
 
                 if (modePlayAlloc?.need === true) {
                     // ✅ need=true：必须人工分配 + 校验
-                    const v = validateModePlayAlloc(rows as any, paidBase);
+                    const v = validateModePlayAlloc(rows as any, basisAmount);
                     if (!v.ok) {
                         message.warning(v.err || '请先完成玩法单分配校验');
                         return;
@@ -977,9 +991,9 @@ const OrderDetailPage: React.FC = () => {
                         income: toNum(r.income ?? 0),
                     }));
                 } else {
-                    // ✅ need=false 或 need 未初始化：默认按轮次均分 paidBase（最后一轮吃尾差）
+                    // ✅ need=false 或 need 未初始化：默认按轮次均分收益基数（最后一轮吃尾差）
                     const n = rows.length;
-                    const totalCents = Math.round(paidBase * 100);
+                    const totalCents = Math.round(basisAmount * 100);
                     const base = Math.floor(totalCents / n);
                     const remainder = totalCents - base * n;
 
@@ -996,7 +1010,7 @@ const OrderDetailPage: React.FC = () => {
             const payload: any = {
                 id: Number(order.id),
                 remark: confirmCompleteRemark || undefined,
-                paidAmount: paidBase,
+                paidAmount: cashAmount,
                 confirmPaid: true,
             };
 
@@ -1004,6 +1018,7 @@ const OrderDetailPage: React.FC = () => {
             payload.playerEvaluations = buildExpandedPlayerEvaluations(playerEvalRows);
             payload.orderTipEnabled = Boolean(orderTip.enabled);
             payload.orderTipUserIds = orderTip.enabled ? orderTip.tippedUserIds : [];
+            payload.settlementBaseMode = confirmCompleteSettlementBaseMode;
 
             await confirmCompleteOrder(payload);
 
@@ -1144,9 +1159,6 @@ const OrderDetailPage: React.FC = () => {
         const baseWan = o?.baseAmountWan ?? null;
         const originalAmount = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.finalPayableAmount ?? o?.paidAmount ?? 0);
         const discountAmount = Number(o?.discountAmount ?? 0);
-        const couponDiscountAmount = Number(o?.couponDiscountAmount ?? 0);
-        const activityDiscountAmount = Number(o?.activityDiscountAmount ?? 0);
-        const giftDiscountAmount = Number(o?.giftDiscountAmount ?? 0);
         const manualAdjustAmount = Number(o?.manualAdjustAmount ?? 0);
         const finalPayableAmount = Number(
             o?.finalPayableAmount ??
@@ -1154,16 +1166,10 @@ const OrderDetailPage: React.FC = () => {
             Math.max(0, originalAmount - discountAmount),
         );
         const paidAmount = Number(o?.paidAmount ?? finalPayableAmount ?? 0);
-        const totalDiscount = Number.isFinite(discountAmount) && discountAmount > 0
-            ? discountAmount
-            : couponDiscountAmount + activityDiscountAmount + giftDiscountAmount + manualAdjustAmount;
         const orderSourceLabel = String(o?.orderSourceLabel || o?.orderSource || '-');
         const financeLines = [
             `商品小计：¥${Number.isFinite(originalAmount) ? originalAmount.toFixed(2) : '0.00'}`,
         ];
-        if (Number.isFinite(totalDiscount) && totalDiscount > 0) {
-            financeLines.push(`优惠券抵扣：- ¥${totalDiscount.toFixed(2)}`);
-        }
         if (Number.isFinite(manualAdjustAmount) && manualAdjustAmount !== 0) {
             financeLines.push(`人工调整：${manualAdjustAmount > 0 ? '+ ' : '- '}¥${Math.abs(manualAdjustAmount).toFixed(2)}`);
         }
@@ -1946,8 +1952,7 @@ const OrderDetailPage: React.FC = () => {
         </Card>
     );
 
-    // ===== Mobile: 当前参与者卡片列表 =====
-    const MobileParticipants = (
+    const MobileParticipantsBlock = (
         <Card title="当前参与者（本轮）" style={cardStyleMobile} bodyStyle={cardBodyMobile}>
             {participantRows?.length ? (
                 <List
@@ -1972,15 +1977,15 @@ const OrderDetailPage: React.FC = () => {
                                         接单时间：{p?.acceptedAt ? new Date(p.acceptedAt).toLocaleString() : '-'}
                                     </Typography.Text>
                                 </Space>
-                            </List.Item>
-                        );
-                    }}
+                        </List.Item>
+                    );
+                }}
                 />
             ) : (
                 <div>
                     <Tag color="orange" style={{borderRadius: 999}}>{currentDispatch?.id ? '暂无参与者' : '当前还未派单'}</Tag>
                 </div>
-            )}
+                )}
         </Card>
     );
 
@@ -2376,6 +2381,9 @@ const OrderDetailPage: React.FC = () => {
                         ¥{order?.paidAmount ?? '-'}
                         {isHourly ? <Tag style={{marginLeft: 8}}>小时单可补收</Tag> : null}
                     </Descriptions.Item>
+                    <Descriptions.Item label="结算金额">
+                        ¥{order?.settlementBaseAmount ?? order?.paidAmount ?? order?.receivableAmount ?? '-'}
+                    </Descriptions.Item>
 
                     <Descriptions.Item label="订单保底（万）">
                         {baseAmountWan ?? '-'}
@@ -2594,7 +2602,9 @@ const OrderDetailPage: React.FC = () => {
                                     {MobileQuickActions}
                                     {MobileInfo}
                                     {ReconcileHintBlock}
-                                    {order?.status !== 'REFUNDED' && !hideCurrentParticipants ? MobileParticipants : null}
+                                    <Space direction="vertical" size={12} style={{width: '100%'}}>
+                                        {order?.status !== 'REFUNDED' && !hideCurrentParticipants ? MobileParticipantsBlock : null}
+                                    </Space>
 
                                     <Collapse
                                         defaultActiveKey={[]}
@@ -2995,6 +3005,9 @@ const OrderDetailPage: React.FC = () => {
                 initialValues={{
                     id: order?.id,
                     projectId: order?.projectId,
+                    receivableAmount: order?.receivableAmount,
+                    paidAmount: order?.paidAmount,
+                    settlementAmount: order?.settlementBaseAmount ?? order?.paidAmount ?? order?.receivableAmount,
                     customerGameId: order?.customerGameId,
                     orderTime: order?.orderTime,
                     paymentTime: order?.paymentTime,
@@ -3514,7 +3527,10 @@ const OrderDetailPage: React.FC = () => {
                     disabled: (() => {
                         if (!playerEvalFormValid) return true;
                         if (!(isModePlay && modePlayAlloc?.need)) return false;
-                        const v = validateModePlayAlloc(modePlayAlloc.rows, toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount));
+                        const v = validateModePlayAlloc(
+                            modePlayAlloc.rows,
+                            getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode),
+                        );
                         return !v.ok;
                     })(),
                 }}
@@ -3523,8 +3539,8 @@ const OrderDetailPage: React.FC = () => {
 
                     {/* ✅ 玩法单：多轮不同参与者 -> 分轮收入输入 */}
                     {isModePlay && modePlayAlloc?.need ? (() => {
-                        const paid = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
-                        const v = validateModePlayAlloc(modePlayAlloc.rows, paid);
+                        const basisAmount = getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode);
+                        const v = validateModePlayAlloc(modePlayAlloc.rows, basisAmount);
 
                         return (
                             <div style={{
@@ -3537,7 +3553,7 @@ const OrderDetailPage: React.FC = () => {
                                     ⚠ 当前玩法单存在多轮不同参与者
                                 </div>
                                 <div style={{color: '#8c8c8c', marginBottom: 10}}>
-                                    请按派单轮次分配每一轮收入（系统将自动均分给该轮参与者，支持输入负数表示扣款）。分配合计不得大于订单实付金额。
+                                    请按派单轮次分配每一轮收益基数（系统将自动均分给该轮参与者，支持输入负数表示扣款）。分配合计不得大于当前选定基数。
                                 </div>
                                 <Space style={{marginBottom: 8}} wrap>
                                     <Button
@@ -3545,14 +3561,17 @@ const OrderDetailPage: React.FC = () => {
                                         onClick={() => {
                                             setModePlayAlloc((prev) => {
                                                 if (!prev) return prev;
-                                                return {
-                                                    ...prev,
-                                                    rows: seedModePlayEqualByRound(prev.rows, toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount)),
-                                                };
-                                            });
-                                        }}
-                                    >
-                                        按轮均分实付金额
+                                                    return {
+                                                        ...prev,
+                                                        rows: seedModePlayEqualByRound(
+                                                            prev.rows,
+                                                            getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode),
+                                                        ),
+                                                    };
+                                                });
+                                            }}
+                                        >
+                                        按轮均分收益基数
                                     </Button>
                                     <Typography.Text type="secondary" style={{fontSize: 12}}>
                                         默认已按轮次均分（最后一轮自动补尾差），支持负数扣款
@@ -3617,7 +3636,7 @@ const OrderDetailPage: React.FC = () => {
                                     flexWrap: 'wrap'
                                 }}>
                                     <Tag style={{borderRadius: 999}}>已分配：¥{v.sum.toFixed(2)}</Tag>
-                                    <Tag style={{borderRadius: 999}}>实付金额：¥{paid.toFixed(2)}</Tag>
+                                    <Tag style={{borderRadius: 999}}>收益基数：¥{basisAmount.toFixed(2)}</Tag>
                                     <Tag color={v.ok ? 'green' : 'red'} style={{borderRadius: 999}}>
                                         {v.ok ? '可继续分配' : '分配超额/非法'}
                                     </Tag>
@@ -3631,6 +3650,59 @@ const OrderDetailPage: React.FC = () => {
                             </div>
                         );
                     })() : null}
+
+                    <div style={{
+                        border: '1px solid #e5e7eb',
+                        background: '#fafafa',
+                        borderRadius: 12,
+                        padding: 12,
+                    }}>
+                        <div style={{fontWeight: 600, marginBottom: 8}}>结算金额</div>
+                        <Typography.Text type="secondary" style={{display: 'block', marginBottom: 10, fontSize: 12}}>
+                            结单时决定本单收益基数，不影响“收钱吧”人工收款对账。
+                        </Typography.Text>
+                        {(() => {
+                            const paidAmount = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
+                            const settlementBaseAmount = toNum(order?.settlementBaseAmount ?? order?.paidAmount ?? order?.receivableAmount);
+
+                            return (
+                                <Radio.Group
+                                    value={confirmCompleteSettlementBaseMode}
+                                    onChange={(e) => {
+                                        const nextMode = String(e.target.value) as 'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT';
+                                        setConfirmCompleteSettlementBaseMode(nextMode);
+                                        if (isModePlay && modePlayAlloc?.rows?.length) {
+                                            setModePlayAlloc((prev: any) => {
+                                                if (!prev) return prev;
+                                                return {
+                                                    ...prev,
+                                                    rows: seedModePlayEqualByRound(
+                                                        prev.rows,
+                                                        getOrderSettlementBasisAmount(order, nextMode),
+                                                    ),
+                                                };
+                                            });
+                                        }
+                                    }}
+                                >
+                                    <Space direction="vertical" size={6}>
+                                        <Radio value="SETTLEMENT_BASE_AMOUNT">
+                                            使用订单结算金额
+                                            <Typography.Text type="secondary" style={{marginLeft: 8}}>
+                                                ¥{settlementBaseAmount.toFixed(2)}
+                                            </Typography.Text>
+                                        </Radio>
+                                        <Radio value="PAID_AMOUNT">
+                                            使用实付金额
+                                            <Typography.Text type="secondary" style={{marginLeft: 8}}>
+                                                ¥{paidAmount.toFixed(2)}
+                                            </Typography.Text>
+                                        </Radio>
+                                    </Space>
+                                </Radio.Group>
+                            );
+                        })()}
+                    </div>
 
                     <div style={{
                         border: '1px solid #e5e7eb',

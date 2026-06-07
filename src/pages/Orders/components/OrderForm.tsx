@@ -10,6 +10,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Col,
+    Collapse,
     DatePicker,
     Divider,
     Form,
@@ -21,9 +22,14 @@ import {
     Select,
     Button,
     Checkbox,
+    Drawer,
+    List,
+    Tag,
+    Space,
 } from 'antd';
 import dayjs from 'dayjs';
-import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions, getUserCoupons } from '@/services/api';
+import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions } from '@/services/api';
+import { useIsMobile } from '@/utils/useIsMobile';
 
 type ProjectItem = {
     id: number;
@@ -45,6 +51,7 @@ export type OrderUpsertValues = {
 
     receivableAmount: number; // 应收
     paidAmount: number; // 实收
+    settlementAmount?: number; // 结算金额
 
     baseAmountWan?: number | null; // 订单保底（万）
 
@@ -73,7 +80,7 @@ export type OrderUpsertValues = {
     unitPrice?: number;
     playerNames?: string[];
 
-    /** 是否赠送单：不计入营业额统计，但仍正常结算 */
+    /** 是否赠送单：历史兼容字段，前端默认隐藏，不再展示编辑 */
     isGifted?: boolean;
 
     /**
@@ -82,7 +89,6 @@ export type OrderUpsertValues = {
      * - 赠送单 isGifted=true 时，这里仍允许传，但后端会按赠送单规则处理
      */
     isPaid?: boolean;
-    userCouponId?: number;
 };
 
 export default function OrderUpsertModal(props: {
@@ -96,6 +102,7 @@ export default function OrderUpsertModal(props: {
     const { open, title, initialValues, showPlayers, onCancel, onSubmit } = props;
 
     const [form] = Form.useForm<OrderUpsertValues>();
+    const isMobile = useIsMobile(768);
 
     const [submitting, setSubmitting] = useState(false);
 
@@ -108,8 +115,8 @@ export default function OrderUpsertModal(props: {
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
-    const [couponLoading, setCouponLoading] = useState(false);
-    const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number }>>([]);
+    const [playerPickerOpen, setPlayerPickerOpen] = useState(false);
+    const [playerPickerKeyword, setPlayerPickerKeyword] = useState('');
     const [orderSourceOptions, setOrderSourceOptions] = useState<Array<{ label: string; value: string }>>([]);
 
     const now = useMemo(() => dayjs(), []);
@@ -170,12 +177,12 @@ export default function OrderUpsertModal(props: {
                 };
             });
 
-            setPlayerMap(map);
+            setPlayerMap((prev) => ({ ...prev, ...map }));
             setPlayerOptions(opts);
         } catch (e) {
             console.error(e);
             message.error('获取打手列表失败');
-            setPlayerMap({});
+            setPlayerMap((prev) => prev);
             setPlayerOptions([]);
         } finally {
             setPlayerLoading(false);
@@ -187,29 +194,6 @@ export default function OrderUpsertModal(props: {
         if (!id) return false;
         const mode = String(projectMap?.[id]?.billingMode ?? '');
         return mode === 'HOURLY';
-    };
-
-    const fetchCouponOptions = async () => {
-        setCouponLoading(true);
-        try {
-            const res: any = await getUserCoupons({ page: 1, limit: 100, status: 'UNUSED' });
-            const list = Array.isArray(res?.data) ? res.data : [];
-            const options = list.map((row: any) => {
-                const uid = row?.user?.id ? `用户#${row.user.id}` : '用户#-';
-                const uname = row?.user?.name || row?.user?.phone || '-';
-                const tname = row?.template?.name || `模板#${row?.templateId ?? '-'}`;
-                return {
-                    value: Number(row.id),
-                    label: `券#${row.id} ${tname} / ${uid} ${uname}`,
-                };
-            });
-            setCouponOptions(options);
-        } catch (e) {
-            console.error(e);
-            setCouponOptions([]);
-        } finally {
-            setCouponLoading(false);
-        }
     };
 
     const fetchOrderSources = async () => {
@@ -243,6 +227,7 @@ export default function OrderUpsertModal(props: {
             form?.setFieldsValue?.({
                 receivableAmount: total,
                 paidAmount: total,
+                settlementAmount: total,
             } as any);
         }
     };
@@ -277,6 +262,7 @@ export default function OrderUpsertModal(props: {
                 const total = Number(p.price) * qty;
                 patch.receivableAmount = total;
                 patch.paidAmount = total;
+                patch.settlementAmount = total;
             }
         } else {
             // 非小时单：数量默认 1（不展示，但提交需要）
@@ -286,6 +272,7 @@ export default function OrderUpsertModal(props: {
             if (p?.price != null) {
                 patch.receivableAmount = Number(p.price);
                 patch.paidAmount = Number(p.price);
+                patch.settlementAmount = Number(p.price);
             }
         }
 
@@ -308,11 +295,18 @@ export default function OrderUpsertModal(props: {
                     : 1,
             isGifted: Boolean(initialValues?.isGifted ?? false),
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
+            settlementAmount:
+                initialValues?.settlementAmount != null
+                    ? Number(initialValues.settlementAmount)
+                    : (initialValues?.settlementBaseAmount != null
+                        ? Number(initialValues.settlementBaseAmount)
+                        : (initialValues?.paidAmount != null
+                            ? Number(initialValues.paidAmount)
+                            : (initialValues?.receivableAmount != null ? Number(initialValues.receivableAmount) : undefined))),
         } as any);
 
         void fetchProjects('');
         void fetchPlayers('');
-        void fetchCouponOptions();
         void fetchOrderSources();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
@@ -321,7 +315,7 @@ export default function OrderUpsertModal(props: {
     useEffect(() => {
         if (!open) return;
         const pid = (form?.getFieldValue?.('projectId') as any) ?? initialValues?.projectId;
-        if (pid) syncByProject(pid);
+        if (pid && !initialValues?.id) syncByProject(pid);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, projectMap]);
 
@@ -334,17 +328,20 @@ export default function OrderUpsertModal(props: {
             recalcHourlyAmount(pid, Number(changed.orderQuantity));
         }
 
+        if (changed?.paidAmount != null) {
+            form?.setFieldValue?.('settlementAmount' as any, Number(changed.paidAmount));
+        }
+
         if (showPlayers && Array.isArray(changed?.playerIds) && changed.playerIds.length > MAX_PLAYERS) {
             message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
-            form?.setFieldValue?.('playerIds' as any, changed.playerIds.slice(0, MAX_PLAYERS));
+            updatePlayerSelection(changed.playerIds.slice(0, MAX_PLAYERS).map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n)));
         }
 
         // 维护 playerNames（小票用）
         if (showPlayers && Array.isArray(changed?.playerIds)) {
-            const names = changed.playerIds
-                .map((id: any) => playerMap?.[Number(id)])
-                .filter(Boolean);
-            form?.setFieldsValue?.({ playerNames: names } as any);
+            updatePlayerSelection(
+                changed.playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+            );
         }
     };
 
@@ -385,6 +382,7 @@ export default function OrderUpsertModal(props: {
 
                 receivableAmount: Number(v?.receivableAmount),
                 paidAmount: Number(v?.paidAmount),
+                settlementAmount: v?.settlementAmount != null ? Number(v?.settlementAmount) : Number(v?.paidAmount),
 
                 baseAmountWan: v?.baseAmountWan != null && v?.baseAmountWan !== '' ? Number(v?.baseAmountWan) : null,
 
@@ -419,10 +417,6 @@ export default function OrderUpsertModal(props: {
                  * - 赠送单：这里仍允许用户勾选，但通常赠送单不需要收款
                  */
                 isPaid: Boolean(v?.isPaid),
-                userCouponId:
-                    v?.userCouponId != null && v?.userCouponId !== ''
-                        ? Number(v.userCouponId)
-                        : undefined,
                 // 小票展示字段
                 projectName: v?.projectName,
                 billingMode: v?.billingMode,
@@ -438,7 +432,8 @@ export default function OrderUpsertModal(props: {
 
     // ---------- UI：默认 2 列（你当前 UI 改动） ----------
     // 2列：lg=12；要 3 列把 lg 改 8
-    const colProps = { xs: 24, md: 12, lg: 12 };
+    const compactColProps = { xs: 12, sm: 12, md: 12, lg: 12 };
+    const fullColProps = { xs: 24, sm: 24, md: 24, lg: 24 };
 
     const watchedProjectId = Form.useWatch('projectId', form);
     const curProjectId = Number(watchedProjectId ?? 0);
@@ -448,6 +443,39 @@ export default function OrderUpsertModal(props: {
     const watchedIsGifted = Form.useWatch('isGifted', form);
     const canSelectPlayersWhenUnpaid =
         Boolean(watchedIsGifted) || String(watchedOrderSource || '').trim() === 'CUSTOMER_SERVICE_MANUAL';
+    const watchedPlayerIds = Form.useWatch('playerIds', form) || [];
+
+    const updatePlayerSelection = (nextIds: number[]) => {
+        const limitedIds = nextIds.slice(0, MAX_PLAYERS);
+        const names = limitedIds
+            .map((id: any) => playerMap?.[Number(id)])
+            .filter(Boolean);
+        form?.setFieldsValue?.({
+            playerIds: limitedIds,
+            playerNames: names,
+        } as any);
+    };
+
+    const togglePlayerSelection = (playerId: number) => {
+        const current = Array.isArray(watchedPlayerIds)
+            ? watchedPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+            : [];
+        const exists = current.includes(playerId);
+        const next = exists ? current.filter((id) => id !== playerId) : [...current, playerId];
+        if (!exists && current.length >= MAX_PLAYERS) {
+            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+            return;
+        }
+        updatePlayerSelection(next);
+    };
+
+    const openPlayerPicker = async () => {
+        setPlayerPickerKeyword('');
+        setPlayerPickerOpen(true);
+        if (!playerOptions.length) {
+            await fetchPlayers('');
+        }
+    };
 
 
 
@@ -469,7 +497,8 @@ export default function OrderUpsertModal(props: {
             confirmLoading={submitting}
             destroyOnClose
             centered
-            width={700}
+            width={isMobile ? '96vw' : 700}
+            style={isMobile ? { top: 12 } : undefined}
             okText="保存"
             cancelText="取消"
         >
@@ -478,7 +507,7 @@ export default function OrderUpsertModal(props: {
                 <Divider style={{ marginTop: 0, marginBottom: 12 }} />
 
                 <Row gutter={[16, 12]}>
-                    <Col {...colProps}>
+                    <Col {...fullColProps}>
                         <Form.Item name="projectId" label="项目" rules={[{ required: true, message: '请选择项目' }]}>
                             <Select
                                 placeholder="请选择项目"
@@ -494,7 +523,7 @@ export default function OrderUpsertModal(props: {
 
                     {/* ✅ 小时单才展示“下单小时(数量)” */}
                     {showQtyForHourly ? (
-                        <Col {...colProps}>
+                        <Col {...compactColProps}>
                             <Form.Item
                                 name="orderQuantity"
                                 label="下单小时"
@@ -503,13 +532,13 @@ export default function OrderUpsertModal(props: {
                                 <InputNumber min={1} max={24} step={1} style={{ width: '100%' }} placeholder="例如：1 / 2 / 3 ..." />
                             </Form.Item>
                         </Col>
-                    ) : <Col {...colProps}>
+                    ) : <Col {...compactColProps}>
                         <Form.Item name="baseAmountWan" label="订单保底(万)">
                             <InputNumber min={0} style={{ width: '100%' }} placeholder="随项目自动同步，可手改" />
                         </Form.Item>
                     </Col>}
 
-                    <Col {...colProps}>
+                    <Col {...compactColProps}>
                         <Form.Item name="receivableAmount" label="应收金额" rules={[{ required: true, message: '请输入应收金额' }]}>
                             <InputNumber
                                 min={0}
@@ -519,7 +548,7 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    <Col {...colProps}>
+                    <Col {...compactColProps}>
                         <Form.Item name="paidAmount" label="实收金额" rules={[{ required: true, message: '请输入实收金额' }]}>
                             <InputNumber
                                 min={0}
@@ -529,26 +558,17 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    <Col {...colProps}>
-                        <Form.Item name="isGifted" valuePropName="checked" label="是否是赠送单">
-                            <Checkbox>赠送单勾选即可，无需修改实收金额</Checkbox>
-                        </Form.Item>
-                    </Col>
-
-                    <Col {...colProps}>
-                        <Form.Item name="userCouponId" label="优惠券（可选）">
-                            <Select
-                                placeholder="选择用户券后将按券规则计算"
-                                allowClear
-                                showSearch
-                                optionFilterProp="label"
-                                options={couponOptions}
-                                loading={couponLoading}
+                    <Col {...compactColProps}>
+                        <Form.Item name="settlementAmount" label="结算金额" rules={[{ required: true, message: '请输入结算金额' }]}>
+                            <InputNumber
+                                min={0}
+                                style={{ width: '100%' }}
+                                placeholder="默认跟实收金额一致"
                             />
                         </Form.Item>
                     </Col>
 
-                    <Col {...colProps}>
+                    <Col {...fullColProps}>
                         <Form.Item name="orderSource" label="订单渠道来源" rules={[{ required: true, message: '请选择订单渠道来源' }]}>
                             <Select
                                 placeholder="请选择订单渠道来源"
@@ -558,13 +578,13 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    <Col {...colProps}>
+                    <Col {...fullColProps}>
                         <Form.Item name="customerGameId" label="客户ID（游戏ID）">
                             <Input placeholder="ID或昵称" />
                         </Form.Item>
                     </Col>
 
-                    <Col xs={24} md={24} lg={6}>
+                    <Col {...compactColProps}>
                         <Form.Item name="paymentTime" label="付款时间">
                             <DatePicker
                                 showTime
@@ -574,7 +594,7 @@ export default function OrderUpsertModal(props: {
                             />
                         </Form.Item>
                     </Col>
-                    <Col xs={24} md={24} lg={6}>
+                    <Col {...compactColProps}>
                         <Form.Item
                             name="isPaid"
                             valuePropName="checked"
@@ -588,65 +608,114 @@ export default function OrderUpsertModal(props: {
 
                     {/* 新建可选派单 */}
                     {showPlayers ? (
-                        <Col xs={24} md={24} lg={12}>
+                        <Col {...fullColProps}>
                             <Form.Item name="playerIds" label={`接待陪玩（最多 ${MAX_PLAYERS} 人）`}>
-                                <Select
-                                    mode="multiple"
-                                    placeholder="可选：新建即派单"
-                                    showSearch
-                                    filterOption={false}
-                                    onSearch={(v) => fetchPlayers(v)}
-                                    options={playerOptions}
-                                    loading={playerLoading}
-                                    disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
-                                    maxTagCount={2}
-                                    allowClear
-                                    dropdownRender={(menu) => (
-                                        <>
-                                            {menu}
-                                            <div style={{ padding: 8, borderTop: '1px solid rgba(0,0,0,.06)' }}>
-                                                <Button block loading={playerLoading} onClick={() => fetchPlayers('')}>
-                                                    刷新列表
-                                                </Button>
+                                {isMobile ? (
+                                    <div>
+                                        <Button
+                                            block
+                                            disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
+                                            loading={playerLoading}
+                                            onClick={() => void openPlayerPicker()}
+                                        >
+                                            {Array.isArray(watchedPlayerIds) && watchedPlayerIds.length
+                                                ? `已选 ${watchedPlayerIds.length} 人，点击修改`
+                                                : '选择陪玩'}
+                                        </Button>
+
+                                        <div style={{ marginTop: 8, minHeight: 20 }}>
+                                            {Array.isArray(watchedPlayerIds) && watchedPlayerIds.length ? (
+                                                <Space size={6} wrap>
+                                                    {watchedPlayerIds.map((id: any) => (
+                                                        <Tag
+                                                            key={Number(id)}
+                                                            closable
+                                                            onClose={(e) => {
+                                                                e.preventDefault();
+                                                                updatePlayerSelection(
+                                                                    watchedPlayerIds
+                                                                        .map((x: any) => Number(x))
+                                                                        .filter((n: number) => !Number.isNaN(n) && n !== Number(id))
+                                                                );
+                                                            }}
+                                                        >
+                                                            {playerMap?.[Number(id)] || `#${id}`}
+                                                        </Tag>
+                                                    ))}
+                                                </Space>
+                                            ) : (
+                                                <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                                                    未选择陪玩
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {!watchedIsPaid && !canSelectPlayersWhenUnpaid ? (
+                                            <div style={{ marginTop: 6, color: '#ff4d4f', fontSize: 12 }}>
+                                                非后台客服或管理自主创建的订单，未收款前不可派单
                                             </div>
-                                        </>
-                                    )}
-                                />
+                                        ) : null}
+                                    </div>
+                                ) : (
+                                    <Select
+                                        mode="multiple"
+                                        placeholder="可选：新建即派单"
+                                        showSearch
+                                        filterOption={false}
+                                        onSearch={(v) => fetchPlayers(v)}
+                                        options={playerOptions}
+                                        loading={playerLoading}
+                                        disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
+                                        maxTagCount={2}
+                                        allowClear
+                                        dropdownRender={(menu) => (
+                                            <>
+                                                {menu}
+                                                <div style={{ padding: 8, borderTop: '1px solid rgba(0,0,0,.06)' }}>
+                                                    <Button block loading={playerLoading} onClick={() => fetchPlayers('')}>
+                                                        刷新列表
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    />
+                                )}
                             </Form.Item>
-                            {!watchedIsPaid && !canSelectPlayersWhenUnpaid ? (
-                                <div style={{ marginTop: -8, color: '#ff4d4f', fontSize: 12 }}>
-                                    非后台客服或管理自主创建的订单，未收款前不可派单
-                                </div>
-                            ) : null}
                         </Col>
                     ) : null}
                 </Row>
 
-                {/* 2) 抽成信息 */}
-                <Divider style={{ marginTop: 16, marginBottom: 12 }} />
-                <Row gutter={[16, 12]}>
-                    <Col {...colProps}>
-                        <Form.Item name="inviter" label="邀请人">
-                            <Input placeholder="可选" />
-                        </Form.Item>
-                    </Col>
+                {/* 2) 更多设置 */}
+                <Collapse
+                    style={{ marginTop: 16 }}
+                    items={[
+                        {
+                            key: 'more',
+                            label: '更多设置',
+                            children: (
+                                <Row gutter={[16, 12]}>
+                                    <Col {...compactColProps}>
+                                        <Form.Item name="inviter" label="邀请人">
+                                            <Input placeholder="可选" />
+                                        </Form.Item>
+                                    </Col>
 
-                    <Col {...colProps}>
-                        <Form.Item name="customClubRate" label="特殊单固定抽成">
-                            <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} placeholder="0~1" />
-                        </Form.Item>
-                    </Col>
-                </Row>
+                                    <Col {...compactColProps}>
+                                        <Form.Item name="customClubRate" label="特殊单固定抽成">
+                                            <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} placeholder="0~1" />
+                                        </Form.Item>
+                                    </Col>
 
-                {/* 3) 备注 */}
-                <Divider style={{ marginTop: 16, marginBottom: 12 }} />
-                <Row gutter={[16, 12]}>
-                    <Col span={24}>
-                        <Form.Item name="remark" label="备注">
-                            <Input.TextArea rows={3} placeholder="可选" />
-                        </Form.Item>
-                    </Col>
-                </Row>
+                                    <Col {...fullColProps}>
+                                        <Form.Item name="remark" label="备注">
+                                            <Input.TextArea rows={3} placeholder="可选" />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                            ),
+                        },
+                    ]}
+                />
 
                 {/* 隐藏字段：小票展示用 */}
                 <Form.Item name="projectName" hidden>
@@ -661,7 +730,84 @@ export default function OrderUpsertModal(props: {
                 <Form.Item name="playerNames" hidden>
                     <Input />
                 </Form.Item>
+                <Form.Item name="isGifted" hidden>
+                    <Input />
+                </Form.Item>
             </Form>
+
+            {isMobile ? (
+                <Drawer
+                    open={playerPickerOpen}
+                    title="选择陪玩"
+                    placement="bottom"
+                    height="86vh"
+                    destroyOnClose
+                    onClose={() => setPlayerPickerOpen(false)}
+                >
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <Space style={{ width: '100%', justifyContent: 'space-between' }} align="center">
+                            <div style={{ fontWeight: 600 }}>选择陪玩</div>
+                            <Button type="primary" onClick={() => setPlayerPickerOpen(false)}>
+                                完成
+                            </Button>
+                        </Space>
+
+                        <Input.Search
+                            allowClear
+                            value={playerPickerKeyword}
+                            placeholder="搜索昵称或手机号"
+                            onChange={(e) => {
+                                const kw = e.target.value;
+                                setPlayerPickerKeyword(kw);
+                                void fetchPlayers(kw);
+                            }}
+                        />
+
+                        <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+                            已选 {Array.isArray(watchedPlayerIds) ? watchedPlayerIds.length : 0}/{MAX_PLAYERS} 人，点击列表项即可切换。
+                        </div>
+
+                        <List
+                            loading={playerLoading}
+                            dataSource={playerOptions}
+                            locale={{ emptyText: '暂无可选陪玩' }}
+                            renderItem={(item) => {
+                                const selected = Array.isArray(watchedPlayerIds)
+                                    ? watchedPlayerIds.map((x: any) => Number(x)).includes(item.value)
+                                    : false;
+                                const selectedCount = Array.isArray(watchedPlayerIds) ? watchedPlayerIds.length : 0;
+                                const canAddMore = selected || selectedCount < MAX_PLAYERS;
+                                return (
+                                    <List.Item
+                                        onClick={() => {
+                                            if (!selected && !canAddMore) {
+                                                message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+                                                return;
+                                            }
+                                            togglePlayerSelection(item.value);
+                                        }}
+                                        style={{
+                                            cursor: 'pointer',
+                                            paddingLeft: 0,
+                                            paddingRight: 0,
+                                        }}
+                                    >
+                                        <Space align="start" size={12} style={{ width: '100%', justifyContent: 'space-between' }}>
+                                            <div style={{ minWidth: 0 }}>
+                                                <div style={{ fontWeight: 500 }}>{playerMap?.[item.value] || item.label}</div>
+                                                <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+                                                    {item.label}
+                                                </div>
+                                            </div>
+                                            <Checkbox checked={selected} />
+                                        </Space>
+                                    </List.Item>
+                                );
+                            }}
+                        />
+                    </Space>
+                </Drawer>
+            ) : null}
         </Modal>
     );
 }

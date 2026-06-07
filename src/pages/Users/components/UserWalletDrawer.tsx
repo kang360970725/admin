@@ -62,6 +62,17 @@ export default function UserWalletDrawer(props: any) {
         return getEnumText('WalletBizType', row?.bizType);
     };
 
+    const isReversedSourceTx = (row: any) =>
+        String(row?.status || '') === 'REVERSED' &&
+        ['SETTLEMENT_EARNING', 'SETTLEMENT_EARNING_BASE', 'SETTLEMENT_EARNING_CARRY', 'SETTLEMENT_EARNING_CS', 'SETTLEMENT_BOMB_LOSS'].includes(
+            String(row?.bizType || ''),
+        );
+
+    const getAmountSign = (row: any) => {
+        if (isReversedSourceTx(row)) return '-';
+        return row?.direction === 'IN' ? '+' : '-';
+    };
+
     const directionMetaMap: Record<string, { color: string; icon: React.ReactNode }> = {
         IN: { color: 'green', icon: <span style={{ fontWeight: 700 }}>↑</span> },
         OUT: { color: 'red', icon: <span style={{ fontWeight: 700 }}>↓</span> },
@@ -107,6 +118,9 @@ export default function UserWalletDrawer(props: any) {
             render: (_: any, r: any) => {
                 const label = resolveBizTypeLabel(r);
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
+                if (String(r.status || '') === 'REVERSED' && ['SETTLEMENT_EARNING', 'SETTLEMENT_EARNING_BASE', 'SETTLEMENT_EARNING_CARRY', 'SETTLEMENT_EARNING_CS', 'SETTLEMENT_BOMB_LOSS'].includes(String(r.bizType || ''))) {
+                    return <Tag color="default">{label}（已冲正）</Tag>;
+                }
                 return <Tag color={color}>{label}</Tag>;
             },
         },
@@ -118,12 +132,13 @@ export default function UserWalletDrawer(props: any) {
             align: 'right',
             search: false,
             render: (v: any, r: any) => {
-                const isIn = r.direction === 'IN';
                 const n = Number(v ?? 0);
+                const sign = getAmountSign(r);
+                const color = sign === '+' ? '#52c41a' : '#ff4d4f';
 
                 return (
-                    <span style={{ color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500 }}>
-            {isIn ? '+' : '-'}
+                    <span style={{ color, fontWeight: 500 }}>
+            {sign}
                         {Number.isFinite(n) ? n.toFixed(1) : '0.0'}
           </span>
                 );
@@ -146,6 +161,7 @@ export default function UserWalletDrawer(props: any) {
             align: 'right',
             search: false,
             render: (_: any, row: any) => {
+                if (String(row.status || '') === 'REVERSED') return <span style={{ color: '#999' }}>已冲正</span>;
                 const a = row.availableAfter;
                 const f = row.frozenAfter;
                 if (a === null || a === undefined || f === null || f === undefined) return '-';

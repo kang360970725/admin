@@ -1,9 +1,19 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {useModel, useNavigate} from '@umijs/max';
-import {Button, Checkbox, Form, Input, InputNumber, message, Modal, Space, Tag, Tooltip} from 'antd';
-import {assignDispatch, createOrder, deleteOrder, getOrderSourceOptions, getOrders, markOrderPaid} from '@/services/api';
+import {Button, Card, Checkbox, Col, Collapse, Form, Input, InputNumber, message, Modal, Row, Space, Tag, Tooltip} from 'antd';
+import {
+    assignDispatch,
+    createOrder,
+    deleteOrder,
+    getOrderSourceOptions,
+    getOrders,
+    markOrderPaid,
+    postFinanceReconciliation,
+} from '@/services/api';
 import OrderUpsertModal from './components/OrderForm';
 import {PageContainer, ProTable, type ActionType} from '@ant-design/pro-components';
+import dayjs from 'dayjs';
+import { useIsMobile } from '@/utils/useIsMobile';
 
 /**
  * ✅ 订单状态字典（前端兜底）
@@ -30,12 +40,24 @@ const statusText: Record<string, { text: string; color?: string }> = {
 const OrdersPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const navigate = useNavigate();
+    const isMobile = useIsMobile(768);
     const [createOpen, setCreateOpen] = useState(false);
+    const [todayOverview, setTodayOverview] = useState<any>(null);
+    const [overviewLoading, setOverviewLoading] = useState(false);
 
     // ✅ 当前用户（用于：敏感字段 customerGameId 在“已结单”状态下脱敏展示）
     const {initialState} = useModel('@@initialState');
     const currentUser: any = initialState?.currentUser;
-
+    const canViewOrderOverview = useMemo(() => {
+        const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
+        const userType = String(currentUser?.userType || '').trim().toUpperCase();
+        return (
+            permissions.includes('orders:detail:page') ||
+            permissions.includes('finance:dashboard:view') ||
+            userType === 'ADMIN' ||
+            userType === 'SUPER_ADMIN'
+        );
+    }, [currentUser]);
     /**
      * ✅ 是否允许查看“已结单后的 customerGameId”
      * 后端也会做强制脱敏/不返回，这里是前端兜底防漏。
@@ -112,6 +134,30 @@ const OrdersPage: React.FC = () => {
         () => Object.fromEntries(orderSourceOptions.map((item) => [item.value, { text: item.label }])),
         [orderSourceOptions],
     );
+
+    const loadOverview = async () => {
+        setOverviewLoading(true);
+        try {
+            if (!canViewOrderOverview) {
+                setTodayOverview(null);
+                return;
+            }
+
+            const date = dayjs().format('YYYY-MM-DD');
+            const [dailyRes] = await Promise.allSettled([
+                postFinanceReconciliation({ startDate: date, endDate: date }),
+            ]);
+
+            setTodayOverview(dailyRes.status === 'fulfilled' ? dailyRes.value?.data?.summary || null : null);
+        } finally {
+            setOverviewLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        void loadOverview();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentUser?.id, canViewOrderOverview]);
 
     const openMarkPaidModal = (row: any) => {
         setMarkPaidOrder(row);
@@ -201,12 +247,14 @@ const OrdersPage: React.FC = () => {
             width: 150,
             valueType: 'select',
             valueEnum: orderSourceValueEnum,
+            hideInTable: isMobile,
             render: (_: any, row: any) => row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : '-',
         },
         {
             title: '状态',
             dataIndex: 'status',
             width: 130,
+            hideInTable: false,
             render: (_: any, row: any) => {
                 const s = statusText[row.status] || {text: row.status};
                 return <Tag color={s?.color}>{s.text}</Tag>;
@@ -220,6 +268,7 @@ const OrdersPage: React.FC = () => {
             title: '收款',
             dataIndex: 'isPaid',
             width: 110,
+            hideInTable: false,
             valueType: 'select',
             valueEnum: {
                 true: {text: '已收款'},
@@ -237,6 +286,7 @@ const OrdersPage: React.FC = () => {
             title: '实付',
             dataIndex: 'paidAmount',
             width: 90,
+            hideInTable: false,
             render: (_: any, row: any) => `¥${row.paidAmount}`,
             search: false,
         },
@@ -250,6 +300,7 @@ const OrdersPage: React.FC = () => {
             title: '客户游戏ID',
             dataIndex: 'customerGameId',
             ellipsis: true,
+            hideInTable: isMobile,
             render: (_: any, row: any) => {
                 const raw = row?.customerGameId;
 
@@ -281,12 +332,14 @@ const OrdersPage: React.FC = () => {
             title: '派单客服',
             dataIndex: ['dispatcher', 'name'],
             width: 110,
+            hideInTable: isMobile,
             search: false,
         },
         {
             title: '当前陪玩',
             dataIndex: 'currentPlayers',
             search: false,
+            hideInTable: isMobile,
             render: (_: any, row: any) => {
                 const players = row.currentDispatch?.participants?.map((p: any) => p.user?.name || p.user?.phone) || [];
                 if (players.length === 0) return '-';
@@ -304,6 +357,7 @@ const OrdersPage: React.FC = () => {
             dataIndex: 'createdAt',
             valueType: 'dateTime',
             width: 170,
+            hideInTable: isMobile,
             search: false,
         },
         {
@@ -357,14 +411,75 @@ const OrdersPage: React.FC = () => {
                 `}
             </style>
 
+            <Card
+                loading={overviewLoading}
+                size="small"
+                style={{marginBottom: 12, borderRadius: 12}}
+                bodyStyle={{padding: isMobile ? '8px 10px' : '10px 12px'}}
+            >
+                <Space direction="vertical" size={isMobile ? 6 : 8} style={{width: '100%'}}>
+                    <Row gutter={[8, 8]}>
+                        <Col xs={12} sm={8}>
+                            <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
+                                <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>今日订单</div>
+                                <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                    {Number(todayOverview?.orderCount || 0)}
+                                </div>
+                            </div>
+                        </Col>
+                        <Col xs={12} sm={8}>
+                            <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
+                                <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>今日营收</div>
+                                <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                    ¥{Number(todayOverview?.allPaidAmountTotal || 0).toFixed(2)}
+                                </div>
+                            </div>
+                        </Col>
+                        <Col xs={12} sm={8}>
+                            <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
+                                <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>收钱吧</div>
+                                <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                    ¥{Number(todayOverview?.manualReceiptAmountTotal || 0).toFixed(2)}
+                                </div>
+                            </div>
+                        </Col>
+                    </Row>
+
+                    <Collapse
+                        ghost
+                        size="small"
+                        items={[
+                            {
+                                key: 'detail',
+                                label: '查看统计说明',
+                                children: (
+                                    <Space direction="vertical" size={6} style={{width: '100%'}}>
+                                        <div style={{fontSize: 12, color: 'rgba(0,0,0,.45)'}}>
+                                            统计按付款时间计算。仅展示今日经营数据与收钱吧总额。
+                                        </div>
+                                    </Space>
+                                ),
+                            },
+                        ]}
+                    />
+                </Space>
+            </Card>
+
             <ProTable<any>
                 rowKey="id"
                 actionRef={actionRef}
                 columns={columns}
-                search={{labelWidth: 90}}
+                search={isMobile ? { labelWidth: 72, defaultCollapsed: true } : { labelWidth: 90 }}
+                options={isMobile ? false : undefined}
+                pagination={{
+                    pageSize: isMobile ? 10 : 20,
+                    showSizeChanger: !isMobile,
+                    simple: isMobile,
+                }}
+                scroll={isMobile ? { x: 760 } : undefined}
                 toolbar={{
                     actions: [
-                        <Button key="new" type="primary" onClick={() => setCreateOpen(true)}>
+                        <Button key="new" type="primary" onClick={() => setCreateOpen(true)} style={isMobile ? {width: '100%'} : undefined}>
                             新建订单
                         </Button>,
                     ],
@@ -418,6 +533,7 @@ const OrdersPage: React.FC = () => {
                         projectId: payload?.projectId,
                         receivableAmount: payload?.receivableAmount,
                         paidAmount: payload?.paidAmount,
+                        settlementAmount: payload?.settlementAmount,
                         baseAmountWan: payload?.baseAmountWan ?? undefined,
                         customerGameId: payload?.customerGameId,
                         orderSource: payload?.orderSource,
@@ -432,7 +548,6 @@ const OrdersPage: React.FC = () => {
 
                         // ✅ 是否已收款（不再由 paymentTime 推断）
                         isPaid: Boolean(payload?.isPaid),
-                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
                     });
 
                     const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);

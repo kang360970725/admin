@@ -18,6 +18,8 @@ import {
     Typography,
     FloatButton,
     Checkbox,
+    List,
+    Pagination,
 } from 'antd';
 import {
     AppstoreOutlined,
@@ -39,6 +41,7 @@ import {
     getOrders,
     getPlayerOptions,
     getUserCoupons,
+    updatePlayerWorkMode,
 } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import OrderUpsertModal from "@/pages/Orders/components/OrderForm";
@@ -62,6 +65,16 @@ const statusText: Record<string, { text: string; color?: string }> = {
 
 type OptionItem = { label: string; value: number };
 type ProjectOptionItem = { label: string; value: number; baseAmount?: number | null; price?: number | null };
+type PlayerManageItem = {
+    id: number;
+    name?: string;
+    phone?: string;
+    ratingName?: string;
+    todayHandledCount?: number;
+    workMode?: 'ONLINE' | 'OFFLINE';
+    offlineJoinedAt?: string | null;
+    workStatus?: string;
+};
 
 type OrderRow = {
     id: number;
@@ -97,11 +110,11 @@ const normalizeList = (res: any): any[] => {
 };
 
 // 简易防抖：减少移动端搜索抖动请求
-const useDebouncedFn = (fn: (kw?: string) => void, delay = 250) => {
+const useDebouncedFn = (fn: (...args: any[]) => void, delay = 250) => {
     const timer = useRef<number | null>(null);
-    return (kw?: string) => {
+    return (...args: any[]) => {
         if (timer.current) window.clearTimeout(timer.current);
-        timer.current = window.setTimeout(() => fn(kw), delay);
+        timer.current = window.setTimeout(() => fn(...args), delay);
     };
 };
 
@@ -111,63 +124,6 @@ export default function CSWorkbenchPage() {
     const isMobile = useIsMobile(768);
 
     const [createOpen, setCreateOpen] = useState(false);
-
-
-    // ======================
-    // ✅ PC 端：只显示“发单按钮”
-    // ======================
-    if (!isMobile) {
-        return (
-            <PageContainer title="客服工作台">
-                <Card style={{ borderRadius: 16, maxWidth: 720, margin: '0 auto' }}>
-                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }} onClick={() => setCreateOpen(true)}>
-                            快捷发单
-                        </Button>
-                    </Space>
-                </Card>
-
-
-                <OrderUpsertModal
-                    open={createOpen}
-                    title="创建订单"
-                    showPlayers
-                    onCancel={() => setCreateOpen(false)}
-                    onSubmit={async (payload) => {
-                        const created = await createOrder({
-                            projectId: payload?.projectId,
-                            receivableAmount: payload?.receivableAmount,
-                            paidAmount: payload?.paidAmount,
-                            baseAmountWan: payload?.baseAmountWan ?? undefined,
-                            customerGameId: payload?.customerGameId,
-                            orderTime: payload?.orderTime,
-                            paymentTime: payload?.paymentTime,
-                            csRate: payload?.csRate,
-                            inviteRate: payload?.inviteRate,
-                            inviter: payload?.inviter,
-                        customClubRate: payload?.customClubRate,
-                        remark: payload?.remark,
-                        // ✅ 新增：赠送单标识
-                        isGifted: Boolean(payload?.isGifted),
-                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
-                    });
-
-                        const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
-                        if (!orderId) throw new Error('创建订单失败：未返回订单ID');
-
-                        if (payload?.playerIds?.length) {
-                            await assignDispatch(orderId, { playerIds: payload?.playerIds, remark: '新建订单时派单' });
-                        }
-
-                        message.success('创建成功');
-                        setCreateOpen(false);
-                        actionRef.current?.reload?.();
-                        navigate(`/orders/${orderId}`);
-                    }}
-                />
-            </PageContainer>
-        );
-    }
 
     // TAB：create / archived / wait_assign / wait_accept
     const [tab, setTab] = useState<'create' | 'ARCHIVED' | 'WAIT_ASSIGN' | 'WAIT_ACCEPT'>('create');
@@ -200,8 +156,17 @@ export default function CSWorkbenchPage() {
     // 打手 options（复用：创建订单立即派单 + 列表派单）
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
+    const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
+    const [onlinePlayers, setOnlinePlayers] = useState<PlayerManageItem[]>([]);
+    const [onlinePlayerLoading, setOnlinePlayerLoading] = useState(false);
+    const [onlinePlayerKeyword, setOnlinePlayerKeyword] = useState('');
+    const [onlinePlayerPage, setOnlinePlayerPage] = useState(1);
+    const [onlinePlayerPageSize] = useState(20);
+    const [onlinePlayerTotal, setOnlinePlayerTotal] = useState(0);
     const [playerKeywordCreate, setPlayerKeywordCreate] = useState('');
     const [playerKeywordDispatch, setPlayerKeywordDispatch] = useState('');
+    const [playerPickerOpenCreate, setPlayerPickerOpenCreate] = useState(false);
+    const [playerPickerOpenDispatch, setPlayerPickerOpenDispatch] = useState(false);
     const [couponLoading, setCouponLoading] = useState(false);
     const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number }>>([]);
 
@@ -238,16 +203,59 @@ export default function CSWorkbenchPage() {
         try {
             const res = await getPlayerOptions({ keyword: kw || '', onlyIdle: true });
             const arr = normalizeList(res);
+            const map: Record<number, string> = {};
             const options: OptionItem[] = safeArray(arr).map((u: any) => ({
                 value: Number(u.id),
                 label: `${u.name || '未命名'}（${u.phone || '-'}）`,
             }));
+            safeArray(arr).forEach((u: any) => {
+                const id = Number(u.id);
+                if (Number.isFinite(id) && id > 0) {
+                    map[id] = String(u.name || u.phone || '未命名');
+                }
+            });
             setPlayerOptions(options);
+            setPlayerMap((prev) => ({ ...prev, ...map }));
         } catch (e) {
             console.error(e);
             setPlayerOptions([]);
         } finally {
             setPlayerLoading(false);
+        }
+    };
+
+    const fetchOnlinePlayers = async (kw?: string, page?: number) => {
+        setOnlinePlayerLoading(true);
+        try {
+            const queryPage = Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+            const res: any = await getPlayerOptions({
+                keyword: kw || '',
+                onlyIdle: false,
+                onlyOnline: true,
+                paginate: true,
+                page: queryPage,
+                limit: onlinePlayerPageSize,
+            });
+            const arr = normalizeList(res?.data ?? res);
+            const items: PlayerManageItem[] = safeArray(arr).map((u: any) => ({
+                id: Number(u.id),
+                name: String(u.name || '未命名'),
+                phone: String(u.phone || '-'),
+                ratingName: String(u.ratingName || u?.staffRating?.name || '-'),
+                todayHandledCount: Number(u.todayHandledCount ?? 0),
+                workMode: u.workMode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE',
+                offlineJoinedAt: u.offlineJoinedAt ?? null,
+                workStatus: String(u.workStatus || 'IDLE'),
+            }));
+            setOnlinePlayers(items);
+            setOnlinePlayerPage(Number(res?.page ?? queryPage));
+            setOnlinePlayerTotal(Number(res?.total ?? items.length ?? 0));
+        } catch (e) {
+            console.error(e);
+            setOnlinePlayers([]);
+            setOnlinePlayerTotal(0);
+        } finally {
+            setOnlinePlayerLoading(false);
         }
     };
 
@@ -276,6 +284,70 @@ export default function CSWorkbenchPage() {
 
     const debouncedFetchProjects = useDebouncedFn(fetchProjects, 250);
     const debouncedFetchPlayers = useDebouncedFn(fetchPlayers, 250);
+    const debouncedFetchOnlinePlayers = useDebouncedFn(fetchOnlinePlayers, 250);
+
+    const watchedCreatePlayerIds = Form.useWatch('playerIds', createForm) || [];
+    const watchedDispatchPlayerIds = Form.useWatch('playerIds', dispatchForm) || [];
+    const visibleOnlinePlayers = useMemo(
+        () => {
+            const rows = Array.isArray(onlinePlayers) ? onlinePlayers : [];
+            return rows.filter((player) => player.workMode === 'ONLINE');
+        },
+        [onlinePlayers],
+    );
+
+    const syncSettlementAmount = (value?: any) => {
+        const next = Number(value ?? 0);
+        createForm.setFieldsValue({
+            settlementAmount: Number.isFinite(next) ? next : 0,
+        });
+    };
+
+    const updatePlayerSelection = (targetForm: any, nextIds: number[]) => {
+        const limitedIds = nextIds.slice(0, MAX_PLAYERS);
+        const names = limitedIds.map((id) => playerMap?.[Number(id)]).filter(Boolean);
+        targetForm.setFieldsValue({
+            playerIds: limitedIds,
+            playerNames: names,
+        });
+    };
+
+    const toggleCreatePlayer = (playerId: number) => {
+        const current = Array.isArray(watchedCreatePlayerIds)
+            ? watchedCreatePlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+            : [];
+        const exists = current.includes(playerId);
+        if (!exists && current.length >= MAX_PLAYERS) {
+            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+            return;
+        }
+        updatePlayerSelection(createForm, exists ? current.filter((id) => id !== playerId) : [...current, playerId]);
+    };
+
+    const toggleDispatchPlayer = (playerId: number) => {
+        const current = Array.isArray(watchedDispatchPlayerIds)
+            ? watchedDispatchPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+            : [];
+        const exists = current.includes(playerId);
+        if (!exists && current.length >= MAX_PLAYERS) {
+            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+            return;
+        }
+        updatePlayerSelection(dispatchForm, exists ? current.filter((id) => id !== playerId) : [...current, playerId]);
+    };
+
+    const handleTogglePlayerWorkMode = async (playerId: number, nextMode: 'ONLINE' | 'OFFLINE') => {
+        try {
+            await updatePlayerWorkMode(playerId, { workMode: nextMode });
+            message.success(nextMode === 'ONLINE' ? '已设为在线' : '已设为离线');
+            void fetchOnlinePlayers(onlinePlayerKeyword, onlinePlayerPage);
+            void fetchPlayers(playerKeywordCreate || '');
+            void fetchPlayers(playerKeywordDispatch || '');
+        } catch (e: any) {
+            console.error(e);
+            message.error(e?.response?.data?.message || e?.message || '状态更新失败');
+        }
+    };
 
     const fetchOrders = async (nextPage?: number) => {
         if (tab === 'create') return;
@@ -316,6 +388,7 @@ export default function CSWorkbenchPage() {
     useEffect(() => {
         void fetchProjects('');
         void fetchPlayers('');
+            void fetchOnlinePlayers('', 1);
         void fetchCoupons();
 
         // 创建表单默认值（减少手机端输入）
@@ -324,9 +397,9 @@ export default function CSWorkbenchPage() {
             paymentTime: now,
             receivableAmount: 0,
             paidAmount: 0,
+            settlementAmount: 0,
             playerIds: [],
             remark: '客服工作台创建',
-            isGifted: false, // ✅ 赠送单：补上字段（移动端之前“丢了”）
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -335,6 +408,13 @@ export default function CSWorkbenchPage() {
         if (tab !== 'create') void fetchOrders(1);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
+
+    useEffect(() => {
+        if (!isMobile) {
+            void fetchOnlinePlayers(onlinePlayerKeyword, 1);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isMobile]);
 
     // ============ 列表派单 ============
     const openDispatch = (order: OrderRow) => {
@@ -404,6 +484,25 @@ export default function CSWorkbenchPage() {
         }
     };
 
+    const onCreateFormValuesChange = (changed: any) => {
+        if (changed?.paidAmount != null) {
+            syncSettlementAmount(changed.paidAmount);
+        }
+
+        if (changed?.projectId) {
+            const selected = projectOptions.find((item) => Number(item.value) === Number(changed.projectId));
+            const selectedPrice = (selected as any)?.price;
+            if (selectedPrice != null && Number.isFinite(Number(selectedPrice))) {
+                const p = trunc1(selectedPrice);
+                const currentPaid = Number(createForm.getFieldValue('paidAmount') ?? 0);
+                if (!currentPaid) {
+                    createForm.setFieldsValue({ paidAmount: p });
+                }
+                syncSettlementAmount(currentPaid || p);
+            }
+        }
+    };
+
     // ============ 创建订单（手机端） ============
     const submitCreateOrder = async () => {
         try {
@@ -436,12 +535,10 @@ export default function CSWorkbenchPage() {
                 projectId,
                 receivableAmount,
                 paidAmount,
+                settlementAmount: values.settlementAmount != null && values.settlementAmount !== '' ? Number(values.settlementAmount) : Number(values.paidAmount),
                 baseAmountWan:
                     values.baseAmountWan != null && values.baseAmountWan !== '' ? Number(values.baseAmountWan) : undefined,
                 customerGameId: customerId || undefined,
-
-                // ✅ 赠送单：补上（不改业务逻辑，只是让后端字段能接到）
-                isGifted: Boolean(values.isGifted),
 
                 orderTime: values.orderTime ? dayjs(values.orderTime).toISOString() : now.toISOString(),
                 paymentTime: values.paymentTime ? dayjs(values.paymentTime).toISOString() : now.toISOString(),
@@ -662,7 +759,7 @@ export default function CSWorkbenchPage() {
                         <Text type="secondary">高级项可展开。</Text>
                     </Space>
 
-                    <Form form={createForm} layout="vertical" requiredMark={false} style={{ marginTop: 6 }}>
+                    <Form form={createForm} layout="vertical" requiredMark={false} style={{ marginTop: 6 }} onValuesChange={onCreateFormValuesChange}>
                         <Form.Item name="projectId" label="项目" rules={[{ required: true, message: '请选择项目' }]}>
                             <Select
                                 allowClear
@@ -725,9 +822,14 @@ export default function CSWorkbenchPage() {
                             </Col>
                         </Row>
 
-                        {/* ✅ 赠送单选项：补回 */}
-                        <Form.Item name="isGifted" valuePropName="checked" label="赠送单">
-                            <Checkbox>勾选后不计入营业额统计，但仍正常结算</Checkbox>
+                        <Form.Item name="settlementAmount" label="结算金额" rules={[{ required: true, message: '请填写结算金额' }]}>
+                            <InputNumber
+                                min={0}
+                                precision={1}
+                                step={10}
+                                style={{ width: '100%', borderRadius: 12 }}
+                                placeholder="默认与实付一致"
+                            />
                         </Form.Item>
 
                         <Form.Item name="customerGameId" label="客户游戏ID">
@@ -766,29 +868,71 @@ export default function CSWorkbenchPage() {
                         </Form.Item>
 
                         <Form.Item name="playerIds" label={`立即派单（可选，最多 ${MAX_PLAYERS} 名）`}>
-                            <Select
-                                mode="multiple"
-                                allowClear
-                                placeholder="选择空闲打手（下拉内搜索，不弹键盘遮挡）"
-                                options={playerOptions}
-                                loading={playerLoading}
-                                maxTagCount={2}
-                                // ✅ 移动端同理：禁用 showSearch，改用 dropdownRender
-                                showSearch={false}
-                                dropdownRender={playerDropdownCreate}
-                                onDropdownVisibleChange={(open) => {
-                                    if (open) (document.activeElement as any)?.blur?.();
-                                }}
-                                onChange={(vals) => {
-                                    const arr = safeArray<any>(vals);
-                                    if (arr.length > MAX_PLAYERS) {
-                                        message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
-                                        createForm.setFieldValue('playerIds', arr.slice(0, MAX_PLAYERS));
-                                    }
-                                }}
-                                style={{ width: '100%' }}
-                                {...commonSelectProps}
-                            />
+                            {isMobile ? (
+                                <div>
+                                    <Button
+                                        block
+                                        loading={playerLoading}
+                                        onClick={() => setPlayerPickerOpenCreate(true)}
+                                    >
+                                        {Array.isArray(watchedCreatePlayerIds) && watchedCreatePlayerIds.length
+                                            ? `已选 ${watchedCreatePlayerIds.length} 人，点击修改`
+                                            : '选择陪玩'}
+                                    </Button>
+
+                                    <div style={{ marginTop: 8, minHeight: 20 }}>
+                                        {Array.isArray(watchedCreatePlayerIds) && watchedCreatePlayerIds.length ? (
+                                            <Space size={6} wrap>
+                                                {watchedCreatePlayerIds.map((id: any) => (
+                                                    <Tag
+                                                        key={Number(id)}
+                                                        closable
+                                                        onClose={(e) => {
+                                                            e.preventDefault();
+                                                            updatePlayerSelection(
+                                                                createForm,
+                                                                watchedCreatePlayerIds
+                                                                    .map((x: any) => Number(x))
+                                                                    .filter((n: number) => !Number.isNaN(n) && n !== Number(id))
+                                                            );
+                                                        }}
+                                                    >
+                                                        {playerMap?.[Number(id)] || `#${id}`}
+                                                    </Tag>
+                                                ))}
+                                            </Space>
+                                        ) : (
+                                            <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                                                未选择陪玩
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <Select
+                                    mode="multiple"
+                                    allowClear
+                                    placeholder="选择空闲打手（下拉内搜索，不弹键盘遮挡）"
+                                    options={playerOptions}
+                                    loading={playerLoading}
+                                    maxTagCount={2}
+                                    // ✅ 移动端同理：禁用 showSearch，改用 dropdownRender
+                                    showSearch={false}
+                                    dropdownRender={playerDropdownCreate}
+                                    onDropdownVisibleChange={(open) => {
+                                        if (open) (document.activeElement as any)?.blur?.();
+                                    }}
+                                    onChange={(vals) => {
+                                        const arr = safeArray<any>(vals);
+                                        if (arr.length > MAX_PLAYERS) {
+                                            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+                                            createForm.setFieldValue('playerIds', arr.slice(0, MAX_PLAYERS));
+                                        }
+                                    }}
+                                    style={{ width: '100%' }}
+                                    {...commonSelectProps}
+                                />
+                            )}
                         </Form.Item>
 
                         <details style={{ marginTop: 2 }}>
@@ -843,9 +987,9 @@ export default function CSWorkbenchPage() {
                                         paymentTime: now,
                                         receivableAmount: 0,
                                         paidAmount: 0,
+                                        settlementAmount: 0,
                                         playerIds: [],
                                         remark: '客服工作台创建',
-                                        isGifted: false,
                                     });
                                     setProjectKeyword('');
                                     setPlayerKeywordCreate('');
@@ -999,28 +1143,70 @@ export default function CSWorkbenchPage() {
                             label={`选择打手（最多 ${MAX_PLAYERS} 名）`}
                             rules={[{ required: true, message: '请选择打手' }]}
                         >
-                            <Select
-                                mode="multiple"
-                                allowClear
-                                placeholder="选择空闲打手（下拉内搜索，不弹键盘遮挡）"
-                                options={playerOptions}
-                                loading={playerLoading}
-                                maxTagCount={2}
-                                showSearch={false}
-                                dropdownRender={playerDropdownDispatch}
-                                onDropdownVisibleChange={(open) => {
-                                    if (open) (document.activeElement as any)?.blur?.();
-                                }}
-                                onChange={(vals) => {
-                                    const arr = safeArray<any>(vals);
-                                    if (arr.length > MAX_PLAYERS) {
-                                        message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
-                                        dispatchForm.setFieldValue('playerIds', arr.slice(0, MAX_PLAYERS));
-                                    }
-                                }}
-                                style={{ width: '100%' }}
-                                {...commonSelectProps}
-                            />
+                            {isMobile ? (
+                                <div>
+                                    <Button
+                                        block
+                                        loading={playerLoading}
+                                        onClick={() => setPlayerPickerOpenDispatch(true)}
+                                    >
+                                        {Array.isArray(watchedDispatchPlayerIds) && watchedDispatchPlayerIds.length
+                                            ? `已选 ${watchedDispatchPlayerIds.length} 人，点击修改`
+                                            : '选择陪玩'}
+                                    </Button>
+
+                                    <div style={{ marginTop: 8, minHeight: 20 }}>
+                                        {Array.isArray(watchedDispatchPlayerIds) && watchedDispatchPlayerIds.length ? (
+                                            <Space size={6} wrap>
+                                                {watchedDispatchPlayerIds.map((id: any) => (
+                                                    <Tag
+                                                        key={Number(id)}
+                                                        closable
+                                                        onClose={(e) => {
+                                                            e.preventDefault();
+                                                            updatePlayerSelection(
+                                                                dispatchForm,
+                                                                watchedDispatchPlayerIds
+                                                                    .map((x: any) => Number(x))
+                                                                    .filter((n: number) => !Number.isNaN(n) && n !== Number(id))
+                                                            );
+                                                        }}
+                                                    >
+                                                        {playerMap?.[Number(id)] || `#${id}`}
+                                                    </Tag>
+                                                ))}
+                                            </Space>
+                                        ) : (
+                                            <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                                                未选择陪玩
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <Select
+                                    mode="multiple"
+                                    allowClear
+                                    placeholder="选择空闲打手（下拉内搜索，不弹键盘遮挡）"
+                                    options={playerOptions}
+                                    loading={playerLoading}
+                                    maxTagCount={2}
+                                    showSearch={false}
+                                    dropdownRender={playerDropdownDispatch}
+                                    onDropdownVisibleChange={(open) => {
+                                        if (open) (document.activeElement as any)?.blur?.();
+                                    }}
+                                    onChange={(vals) => {
+                                        const arr = safeArray<any>(vals);
+                                        if (arr.length > MAX_PLAYERS) {
+                                            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+                                            dispatchForm.setFieldValue('playerIds', arr.slice(0, MAX_PLAYERS));
+                                        }
+                                    }}
+                                    style={{ width: '100%' }}
+                                    {...commonSelectProps}
+                                />
+                            )}
                         </Form.Item>
 
                         <Form.Item name="remark" label="派单备注（可选）">
@@ -1050,47 +1236,368 @@ export default function CSWorkbenchPage() {
                     </Form>
                 </Space>
             </Drawer>
+
+            <Drawer
+                title="选择陪玩"
+                placement="bottom"
+                height="86vh"
+                open={playerPickerOpenCreate}
+                destroyOnClose
+                onClose={() => setPlayerPickerOpenCreate(false)}
+                styles={{
+                    header: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+                    body: { paddingBottom: 24 },
+                }}
+            >
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <Space style={{ width: '100%', justifyContent: 'space-between' }} align="center">
+                        <div style={{ fontWeight: 600 }}>创建订单选陪玩</div>
+                        <Button type="primary" onClick={() => setPlayerPickerOpenCreate(false)}>
+                            完成
+                        </Button>
+                    </Space>
+
+                    <Input.Search
+                        allowClear
+                        value={playerKeywordCreate}
+                        placeholder="搜索昵称或手机号"
+                        onChange={(e) => {
+                            const kw = e.target.value;
+                            setPlayerKeywordCreate(kw);
+                            void fetchPlayers(kw);
+                        }}
+                    />
+
+                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+                        已选 {Array.isArray(watchedCreatePlayerIds) ? watchedCreatePlayerIds.length : 0}/{MAX_PLAYERS} 人，点击列表项即可切换。
+                    </div>
+
+                    <List
+                        loading={playerLoading}
+                        dataSource={playerOptions}
+                        locale={{ emptyText: '暂无可选陪玩' }}
+                        renderItem={(item) => {
+                            const selected = Array.isArray(watchedCreatePlayerIds)
+                                ? watchedCreatePlayerIds.map((x: any) => Number(x)).includes(item.value)
+                                : false;
+                            const selectedCount = Array.isArray(watchedCreatePlayerIds) ? watchedCreatePlayerIds.length : 0;
+                            const canAddMore = selected || selectedCount < MAX_PLAYERS;
+                            return (
+                                <List.Item
+                                    onClick={() => {
+                                        if (!selected && !canAddMore) {
+                                            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+                                            return;
+                                        }
+                                        toggleCreatePlayer(item.value);
+                                    }}
+                                    style={{ cursor: 'pointer', paddingLeft: 0, paddingRight: 0 }}
+                                >
+                                    <Space align="start" size={12} style={{ width: '100%', justifyContent: 'space-between' }}>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 500 }}>{playerMap?.[item.value] || item.label}</div>
+                                            <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>{item.label}</div>
+                                        </div>
+                                        <Checkbox checked={selected} />
+                                    </Space>
+                                </List.Item>
+                            );
+                        }}
+                    />
+                </Space>
+            </Drawer>
+
+            <Drawer
+                title="选择陪玩"
+                placement="bottom"
+                height="86vh"
+                open={playerPickerOpenDispatch}
+                destroyOnClose
+                onClose={() => setPlayerPickerOpenDispatch(false)}
+                styles={{
+                    header: { borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+                    body: { paddingBottom: 24 },
+                }}
+            >
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <Space style={{ width: '100%', justifyContent: 'space-between' }} align="center">
+                        <div style={{ fontWeight: 600 }}>派单选陪玩</div>
+                        <Button type="primary" onClick={() => setPlayerPickerOpenDispatch(false)}>
+                            完成
+                        </Button>
+                    </Space>
+
+                    <Input.Search
+                        allowClear
+                        value={playerKeywordDispatch}
+                        placeholder="搜索昵称或手机号"
+                        onChange={(e) => {
+                            const kw = e.target.value;
+                            setPlayerKeywordDispatch(kw);
+                            void fetchPlayers(kw);
+                        }}
+                    />
+
+                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+                        已选 {Array.isArray(watchedDispatchPlayerIds) ? watchedDispatchPlayerIds.length : 0}/{MAX_PLAYERS} 人，点击列表项即可切换。
+                    </div>
+
+                    <List
+                        loading={playerLoading}
+                        dataSource={playerOptions}
+                        locale={{ emptyText: '暂无可选陪玩' }}
+                        renderItem={(item) => {
+                            const selected = Array.isArray(watchedDispatchPlayerIds)
+                                ? watchedDispatchPlayerIds.map((x: any) => Number(x)).includes(item.value)
+                                : false;
+                            const selectedCount = Array.isArray(watchedDispatchPlayerIds) ? watchedDispatchPlayerIds.length : 0;
+                            const canAddMore = selected || selectedCount < MAX_PLAYERS;
+                            return (
+                                <List.Item
+                                    onClick={() => {
+                                        if (!selected && !canAddMore) {
+                                            message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
+                                            return;
+                                        }
+                                        toggleDispatchPlayer(item.value);
+                                    }}
+                                    style={{ cursor: 'pointer', paddingLeft: 0, paddingRight: 0 }}
+                                >
+                                    <Space align="start" size={12} style={{ width: '100%', justifyContent: 'space-between' }}>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 500 }}>{playerMap?.[item.value] || item.label}</div>
+                                            <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>{item.label}</div>
+                                        </div>
+                                        <Checkbox checked={selected} />
+                                    </Space>
+                                </List.Item>
+                            );
+                        }}
+                    />
+                </Space>
+            </Drawer>
         </>
     );
 
-    return (
-        <PageContainer title="客服工作台" subTitle="手机端创建订单 / 快速派单">
-            <div style={{ maxWidth: 980, margin: '0 auto' }}>
-                <Tabs
-                    activeKey={tab}
-                    onChange={(k) => setTab(k as any)}
-                    items={[
-                        { key: 'create', label: '创建订单', children: CreatePanel },
-                        { key: 'ARCHIVED', label: '存单', children: ListPanel },
-                        { key: 'WAIT_ASSIGN', label: '待派单', children: ListPanel },
-                        { key: 'WAIT_ACCEPT', label: '待接单', children: ListPanel },
-                    ]}
-                />
-            </div>
+    const DesktopPanel = (
+        <PageContainer title="客服工作台">
+            <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 960, margin: '0 auto' }}>
+                <Card
+                    title="打手在线管理"
+                    extra={
+                        <Space>
+                            <Button
+                                icon={<ReloadOutlined />}
+                                onClick={() => void fetchOnlinePlayers(onlinePlayerKeyword, onlinePlayerPage)}
+                                loading={onlinePlayerLoading}
+                            >
+                                刷新状态
+                            </Button>
+                        </Space>
+                    }
+                    style={{ borderRadius: 16 }}
+                >
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <Row gutter={[12, 12]} align="middle">
+                            <Col xs={24} md={12}>
+                                <Input.Search
+                                    allowClear
+                                    placeholder="搜索打手姓名 / 手机号"
+                                    value={onlinePlayerKeyword}
+                                    onChange={(e) => {
+                                        const kw = e.target.value;
+                                        setOnlinePlayerKeyword(kw);
+                                        setOnlinePlayerPage(1);
+                                        debouncedFetchOnlinePlayers(kw, 1);
+                                    }}
+                                />
+                            </Col>
+                            <Col xs={24} md={12}>
+                                <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                    <Text type="secondary">
+                                        在线 {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => p.workMode === 'ONLINE').length : 0} / 总数{' '}
+                                        {Array.isArray(onlinePlayers) ? onlinePlayers.length : 0}
+                                    </Text>
+                                    <Text type="secondary">可上下线、可刷新状态</Text>
+                                </Space>
+                            </Col>
+                        </Row>
 
-            <FloatButton.Group
-                trigger="click"
-                type="primary"
-                style={{ right: 16, bottom: 16 }}
-                icon={<AppstoreOutlined />}
-            >
-                <FloatButton
-                    icon={<ReloadOutlined />}
-                    tooltip="刷新"
-                    onClick={() => {
-                        if (tab === 'create') {
-                            void fetchProjects(projectKeyword || '');
-                            void fetchPlayers(playerKeywordCreate || '');
-                            message.success('已刷新选项');
-                            return;
-                        }
-                        void fetchOrders(1);
-                    }}
-                />
-                <FloatButton icon={<ProfileOutlined />} tooltip="订单" onClick={() => history.push('/orders')} />
-                <FloatButton icon={<WalletOutlined />} tooltip="钱包" onClick={() => history.push('/wallet/overview')} />
-                <FloatButton icon={<ThunderboltOutlined />} tooltip="工作台" onClick={() => history.push('/workbench')} />
-            </FloatButton.Group>
+                        <Row gutter={[12, 12]}>
+                            {visibleOnlinePlayers.map((player) => {
+                                const isOnline = player.workMode !== 'OFFLINE';
+                                return (
+                                    <Col key={player.id} xs={24} md={12} lg={8}>
+                                        <Card
+                                            size="small"
+                                            style={{
+                                                borderRadius: 14,
+                                                border: isOnline ? '1px solid rgba(82,196,26,0.25)' : '1px solid rgba(0,0,0,0.06)',
+                                                background: isOnline ? 'rgba(82,196,26,0.04)' : '#fff',
+                                            }}
+                                            bodyStyle={{ padding: 12 }}
+                                        >
+                                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">
+                                                    <div>
+                                                        <div style={{ fontWeight: 600 }}>{player.name || '未命名'}</div>
+                                                        <div style={{ fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+                                                            {player.phone || '-'} · {player.ratingName || '-'}
+                                                        </div>
+                                                    </div>
+                                                    <Tag color={isOnline ? 'green' : 'default'}>{isOnline ? '在线' : '离线'}</Tag>
+                                                </Space>
+
+                                                <Space size={8} wrap>
+                                                    <Tag>今日接单 {player.todayHandledCount ?? 0}</Tag>
+                                                    {player.offlineJoinedAt ? (
+                                                        <Tag color="default">
+                                                            {isOnline ? '在线中' : `离线 ${dayjs(player.offlineJoinedAt).format('MM-DD HH:mm')}`}
+                                                        </Tag>
+                                                    ) : null}
+                                                </Space>
+
+                                                <Space wrap>
+                                                    <Button
+                                                        size="small"
+                                                        type={isOnline ? 'default' : 'primary'}
+                                                        onClick={() => void handleTogglePlayerWorkMode(player.id, 'ONLINE')}
+                                                        loading={onlinePlayerLoading}
+                                                    >
+                                                        设为在线
+                                                    </Button>
+                                                    <Button
+                                                        size="small"
+                                                        danger={isOnline}
+                                                        onClick={() => void handleTogglePlayerWorkMode(player.id, 'OFFLINE')}
+                                                        loading={onlinePlayerLoading}
+                                                    >
+                                                        设为离线
+                                                    </Button>
+                                                </Space>
+                                            </Space>
+                                        </Card>
+                                    </Col>
+                                );
+                            })}
+                        </Row>
+
+                        {!visibleOnlinePlayers.length ? (
+                            <Card size="small" style={{ borderRadius: 14, border: '1px dashed rgba(0,0,0,0.12)' }}>
+                                <Text type="secondary">暂无打手在线数据。</Text>
+                            </Card>
+                        ) : null}
+
+                        {onlinePlayerTotal > 0 ? (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
+                                <Pagination
+                                    size="small"
+                                    current={onlinePlayerPage}
+                                    pageSize={onlinePlayerPageSize}
+                                    total={onlinePlayerTotal}
+                                    showSizeChanger={false}
+                                    showLessItems
+                                    onChange={(pageNo) => {
+                                        setOnlinePlayerPage(pageNo);
+                                        void fetchOnlinePlayers(onlinePlayerKeyword, pageNo);
+                                    }}
+                                />
+                            </div>
+                        ) : null}
+                    </Space>
+                </Card>
+
+                <Card style={{ borderRadius: 16, maxWidth: 720, margin: '0 auto' }}>
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }} onClick={() => setCreateOpen(true)}>
+                            快捷发单
+                        </Button>
+                    </Space>
+                </Card>
+            </Space>
+
+            <OrderUpsertModal
+                open={createOpen}
+                title="创建订单"
+                showPlayers
+                onCancel={() => setCreateOpen(false)}
+                onSubmit={async (payload) => {
+                    const created = await createOrder({
+                        projectId: payload?.projectId,
+                        receivableAmount: payload?.receivableAmount,
+                        paidAmount: payload?.paidAmount,
+                        baseAmountWan: payload?.baseAmountWan ?? undefined,
+                        customerGameId: payload?.customerGameId,
+                        orderTime: payload?.orderTime,
+                        paymentTime: payload?.paymentTime,
+                        csRate: payload?.csRate,
+                        inviteRate: payload?.inviteRate,
+                        inviter: payload?.inviter,
+                        customClubRate: payload?.customClubRate,
+                        remark: payload?.remark,
+                        // ✅ 新增：赠送单标识
+                        isGifted: Boolean(payload?.isGifted),
+                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
+                    });
+
+                    const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
+                    if (!orderId) throw new Error('创建订单失败：未返回订单ID');
+
+                    if (payload?.playerIds?.length) {
+                        await assignDispatch(orderId, { playerIds: payload?.playerIds, remark: '新建订单时派单' });
+                    }
+
+                    message.success('创建成功');
+                    setCreateOpen(false);
+                    actionRef.current?.reload?.();
+                    navigate(`/orders/${orderId}`);
+                }}
+            />
         </PageContainer>
+    );
+
+    return (
+        isMobile ? (
+            <PageContainer title="客服工作台" subTitle="手机端创建订单 / 快速派单">
+                <div style={{ maxWidth: 980, margin: '0 auto' }}>
+                    <Tabs
+                        activeKey={tab}
+                        onChange={(k) => setTab(k as any)}
+                        items={[
+                            { key: 'create', label: '创建订单', children: CreatePanel },
+                            { key: 'ARCHIVED', label: '存单', children: ListPanel },
+                            { key: 'WAIT_ASSIGN', label: '待派单', children: ListPanel },
+                            { key: 'WAIT_ACCEPT', label: '待接单', children: ListPanel },
+                        ]}
+                    />
+                </div>
+
+                <FloatButton.Group
+                    trigger="click"
+                    type="primary"
+                    style={{ right: 16, bottom: 16 }}
+                    icon={<AppstoreOutlined />}
+                >
+                    <FloatButton
+                        icon={<ReloadOutlined />}
+                        tooltip="刷新"
+                        onClick={() => {
+                            if (tab === 'create') {
+                                void fetchProjects(projectKeyword || '');
+                                void fetchPlayers(playerKeywordCreate || '');
+                                message.success('已刷新选项');
+                                return;
+                            }
+                            void fetchOrders(1);
+                        }}
+                    />
+                    <FloatButton icon={<ProfileOutlined />} tooltip="订单" onClick={() => history.push('/orders')} />
+                    <FloatButton icon={<WalletOutlined />} tooltip="钱包" onClick={() => history.push('/wallet/overview')} />
+                    <FloatButton icon={<ThunderboltOutlined />} tooltip="工作台" onClick={() => history.push('/workbench')} />
+                </FloatButton.Group>
+            </PageContainer>
+        ) : (
+            DesktopPanel
+        )
     );
 }

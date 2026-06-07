@@ -575,9 +575,16 @@ export async function getPublicMiniappHomeConfig() {
 }
 
 // 空闲打手下拉（支持 keyword；默认 onlyIdle=true）
-export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean }) {
+export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean; limit?: number }) {
     return request(`${API_BASE}/users/players/options`, {
         method: 'POST',
+        data,
+    });
+}
+
+export async function updatePlayerWorkMode(id: number, data: { workMode: 'ONLINE' | 'OFFLINE' }) {
+    return request(`${API_BASE}/users/players/${id}/work-mode`, {
+        method: 'PATCH',
         data,
     });
 }
@@ -971,6 +978,119 @@ export async function getRevenueOverview(params?: { startAt?: string; endAt?: st
     return request<RevenueOverviewRes>(`${API_BASE}/dashboard/revenue/overview`, {
         method: 'GET',
         params,
+    });
+}
+
+export interface FinanceDailySourceItem {
+    source: string;
+    label: string;
+    orderCount: number;
+    receivableAmount: number;
+    paidAmount: number;
+    settlementBaseAmount?: number;
+    grossProfitAmount?: number;
+}
+
+export interface FinanceDailyOverviewRow {
+    axis: string;
+    orderCount: number;
+    receivableAmountTotal: number;
+    paidAmountTotal: number;
+    settlementBaseAmountTotal?: number;
+    grossProfitAmountTotal: number;
+    orderTotalCost?: number;
+    sourceItems?: FinanceDailySourceItem[];
+}
+
+export interface FinanceDailyOverviewRes {
+    range: { startDate?: string; endDate?: string };
+    rows: FinanceDailyOverviewRow[];
+    summary?: {
+        orderCount: number;
+        receivableAmountTotal: number;
+        paidAmountTotal: number;
+        settlementBaseAmountTotal?: number;
+        grossProfitAmountTotal: number;
+    };
+}
+
+export async function postFinanceDailyOverview(data: { startDate?: string; endDate?: string }) {
+    return request<FinanceDailyOverviewRes>(`${API_BASE}/finance/dashboard/daily-overview`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export interface FinanceReconciliationDetailRow {
+    orderId: number;
+    autoSerial: string;
+    paymentTime: string;
+    paidAmount: number;
+    dispatcherLabel: string;
+    dispatcherUserType: string;
+    orderSource: string;
+    orderSourceLabel: string;
+}
+
+export interface FinanceReconciliationDispatcherRow {
+    dispatcherId: number | null;
+    dispatcherName: string;
+    dispatcherUserType: string;
+    dispatcherLabel: string;
+    orderCount: number;
+    paidAmountTotal: number;
+}
+
+export interface FinanceReconciliationDayRow {
+    axis: string;
+    allOrderCount: number;
+    allPaidAmountTotal: number;
+    manualReceiptOrderCount: number;
+    manualReceiptAmountTotal: number;
+    dispatcherItems: FinanceReconciliationDispatcherRow[];
+    detailRows: FinanceReconciliationDetailRow[];
+}
+
+export interface FinanceReconciliationRes {
+    range: { startDate?: string; endDate?: string };
+    summary: {
+        allOrderCount: number;
+        allPaidAmountTotal: number;
+        manualReceiptOrderCount: number;
+        manualReceiptAmountTotal: number;
+    };
+    rows: FinanceReconciliationDayRow[];
+}
+
+export async function postFinanceReconciliation(data: { startDate?: string; endDate?: string }) {
+    return request<FinanceReconciliationRes>(`${API_BASE}/finance/dashboard/reconciliation`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export interface OrderShiftOverviewRes {
+    date: string;
+    currentDispatcherOrderCount: number;
+    currentDispatcherPaidAmount: number;
+    currentDispatcherSourceItems?: FinanceDailySourceItem[];
+    otherCsOrderCount: number;
+    otherCsPaidAmount: number;
+    otherCsSourceItems?: FinanceDailySourceItem[];
+    totalOrderCount: number;
+    totalReceivableAmount: number;
+    totalPaidAmount: number;
+    wechatRealTimeAmount: number;
+}
+
+export async function postOrderShiftOverview(data: {
+    date: string;
+    dispatcherId?: number;
+    currentOrderId?: number;
+}) {
+    return request<OrderShiftOverviewRes>(`${API_BASE}/finance/dashboard/shift-overview`, {
+        method: 'POST',
+        data,
     });
 }
 

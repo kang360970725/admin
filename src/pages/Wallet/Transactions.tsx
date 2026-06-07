@@ -74,6 +74,17 @@ export default function WalletTransactions() {
         return getEnumText('WalletBizType', row.bizType);
     };
 
+    const isReversedSourceTx = (row: WalletTransactionRow) =>
+        String(row.status || '') === 'REVERSED' &&
+        ['SETTLEMENT_EARNING', 'SETTLEMENT_EARNING_BASE', 'SETTLEMENT_EARNING_CARRY', 'SETTLEMENT_EARNING_CS', 'SETTLEMENT_BOMB_LOSS'].includes(
+            String(row.bizType || ''),
+        );
+
+    const getAmountSign = (row: WalletTransactionRow) => {
+        if (isReversedSourceTx(row)) return '-';
+        return row.direction === 'IN' ? '+' : '-';
+    };
+
     const columns: any = [
         {
             title: '流向',
@@ -105,6 +116,9 @@ export default function WalletTransactions() {
             render: (_: any, r: WalletTransactionRow) => {
                 const label = resolveBizTypeLabel(r);
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
+                if (String(r.status || '') === 'REVERSED' && ['SETTLEMENT_EARNING', 'SETTLEMENT_EARNING_BASE', 'SETTLEMENT_EARNING_CARRY', 'SETTLEMENT_EARNING_CS', 'SETTLEMENT_BOMB_LOSS'].includes(String(r.bizType || ''))) {
+                    return <Tag color="default">{label}（已冲正）</Tag>;
+                }
                 return <Tag color={color}>{label}</Tag>;
             },
         },
@@ -116,11 +130,12 @@ export default function WalletTransactions() {
             align: 'right',
             search: false,
             render: (v: any, r: WalletTransactionRow) => {
-                const isIn = r.direction === 'IN';
                 const n = Number(v ?? 0);
+                const sign = getAmountSign(r);
+                const color = sign === '+' ? '#52c41a' : '#ff4d4f';
                 return (
-                    <span style={{ color: isIn ? '#52c41a' : '#ff4d4f', fontWeight: 500 }}>
-            {isIn ? '+' : '-'}
+                    <span style={{ color, fontWeight: 500 }}>
+            {sign}
                         {Number.isFinite(n) ? n.toFixed(1) : '0.0'}
           </span>
                 );
@@ -147,6 +162,7 @@ export default function WalletTransactions() {
             search: false,
             align: 'right',
             render: (_: any, row: WalletTransactionRow) => {
+                if (String(row.status || '') === 'REVERSED') return <span style={{ color: '#999' }}>已冲正</span>;
                 const a = (row as any).availableAfter;
                 const f = (row as any).frozenAfter;
                 if (a === null || a === undefined || f === null || f === undefined) return '-';
@@ -206,8 +222,9 @@ export default function WalletTransactions() {
                     for (const row of pageData) {
                         const amt = Number(row.amount ?? 0);
                         if (!Number.isFinite(amt)) continue;
-                        if (row.direction === 'IN') inSum += amt;
-                        if (row.direction === 'OUT') outSum += amt;
+                        const sign = getAmountSign(row);
+                        if (sign === '+') inSum += amt;
+                        if (sign === '-') outSum += amt;
                     }
 
                     const net = inSum - outSum;
