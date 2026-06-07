@@ -49,7 +49,6 @@ import {
     getEnumDicts,
     getOrderDetail,
     getPlayerOptions,
-    getUserById,
     markOrderPaid,
     recalculateOrderSettlements,
     refundOrder, rollbackWrongSettlementReversals,
@@ -1061,6 +1060,29 @@ const OrderDetailPage: React.FC = () => {
     const [receiptTextStaff, setReceiptTextStaff] = useState('');
     const [receiptImgCustomer, setReceiptImgCustomer] = useState<string | null>(null);
 
+    const getParticipantRatingName = (player: any) => {
+        const userId = Number(player?.userId ?? player?.user?.id);
+        return String(
+            player?.user?.staffRating?.name ||
+            staffProfiles?.[userId]?.staffRating?.name ||
+            '',
+        ).trim();
+    };
+
+    const renderParticipantIdentity = (player: any) => {
+        const u = player?.user || {};
+        const name = u?.name || u?.nickname || '未命名';
+        const phone = u?.phone || '-';
+        const ratingName = getParticipantRatingName(player);
+
+        return (
+            <Space size={8} wrap>
+                <Typography.Text strong>{`${name}（${phone}）`}</Typography.Text>
+                {ratingName ? <Tag color="gold" style={{borderRadius: 999}}>{ratingName}</Tag> : null}
+            </Space>
+        );
+    };
+
     const copyText = async (text: string) => {
         try {
             await navigator?.clipboard?.writeText?.(text);
@@ -1085,12 +1107,7 @@ const OrderDetailPage: React.FC = () => {
 
         const formatPlayerLine = (player: any) => {
             const name = player?.user?.name || player?.user?.nickname || player?.user?.phone || player?.userId || '陪玩';
-            const userId = Number(player?.userId ?? player?.user?.id);
-            const ratingName = String(
-                player?.user?.staffRating?.name ||
-                staffProfiles?.[userId]?.staffRating?.name ||
-                '',
-            ).trim();
+            const ratingName = getParticipantRatingName(player);
             return ratingName ? `${name}（${ratingName}）` : `${name}`;
         };
 
@@ -1296,26 +1313,17 @@ const OrderDetailPage: React.FC = () => {
         const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
         const current = detail?.currentDispatch ? [detail.currentDispatch] : [];
         const allDispatches = [...current, ...dispatches];
-        const userIds = new Set<number>();
+        const next: Record<number, any> = {};
 
         allDispatches.forEach((d: any) => {
             const parts = Array.isArray(d?.participants) ? d.participants : [];
             parts.forEach((p: any) => {
                 const uid = Number(p?.userId ?? p?.user?.id);
-                if (Number.isFinite(uid) && uid > 0) userIds.add(uid);
+                if (!Number.isFinite(uid) || uid <= 0) return;
+                if (!next[uid]) {
+                    next[uid] = p?.user || {};
+                }
             });
-        });
-
-        const missingIds = Array.from(userIds).filter((id) => !staffProfiles[id]);
-        if (!missingIds.length) return;
-
-        const results = await Promise.allSettled(missingIds.map((id) => getUserById(id)));
-        const next: Record<number, any> = {};
-        results.forEach((res, idx) => {
-            if (res.status !== 'fulfilled') return;
-            const user = res.value as any;
-            const id = missingIds[idx];
-            next[id] = user;
         });
         if (Object.keys(next).length) {
             setStaffProfiles((prev) => ({...prev, ...next}));
@@ -1550,10 +1558,7 @@ const OrderDetailPage: React.FC = () => {
         {
             title: '打手',
             dataIndex: 'user',
-            render: (_: any, row: any) => {
-                const u = row.user;
-                return `${u?.name || '未命名'}（${u?.phone || '-'}）`;
-            },
+            render: (_: any, row: any) => renderParticipantIdentity(row),
         },
         {title: '接单时间', dataIndex: 'acceptedAt', render: (v: any) => (v ? new Date(v).toLocaleString() : '-')},
         {title: '保底进度（万）', dataIndex: 'progressBaseWan', render: (v: any) => (v == null ? '-' : v)},
@@ -1639,9 +1644,10 @@ const OrderDetailPage: React.FC = () => {
                 if (map.has(userId)) continue;
                 const name = p?.user?.name || p?.user?.realName || `打手#${userId}`;
                 const phone = p?.user?.phone ? `(${p.user.phone})` : '';
+                const ratingName = getParticipantRatingName(p);
                 map.set(userId, {
                     value: userId,
-                    label: `${name}${phone}`,
+                    label: `${name}${phone}${ratingName ? ` / ${ratingName}` : ''}`,
                 });
             }
         }
@@ -1702,10 +1708,7 @@ const OrderDetailPage: React.FC = () => {
         {
             title: '打手',
             dataIndex: 'user',
-            render: (_: any, row: any) => {
-                const u = row.user;
-                return `${u?.name || '未命名'}（${u?.phone || '-'}）`;
-            },
+            render: (_: any, row: any) => renderParticipantIdentity(row),
         },
         {title: '接单时间', dataIndex: 'acceptedAt', render: (v: any) => (v ? new Date(v).toLocaleString() : '-')},
         {title: '保底进度（万）', dataIndex: 'progressBaseWan', render: (v: any) => (v == null ? '-' : v)},
@@ -2034,7 +2037,6 @@ const OrderDetailPage: React.FC = () => {
                                     <Space direction="vertical" size={10} style={{width: '100%'}}>
                                         {data.length ? (
                                             data.map((row: any) => {
-                                                const u = row?.user || {};
                                                 const key = `${row.dispatchId}_${row.userId}`;
                                                 const s = settlementMap.get(key);
                                                 const v = s?.finalEarnings;
@@ -2055,9 +2057,7 @@ const OrderDetailPage: React.FC = () => {
                                                                 justifyContent: 'space-between',
                                                                 width: '100%'
                                                             }}>
-                                                                <Typography.Text strong>
-                                                                    {u?.name || '未命名'}（{u?.phone || '-'}）
-                                                                </Typography.Text>
+                                                                {renderParticipantIdentity(row)}
                                                                 <Tag
                                                                     style={{borderRadius: 999}}>{row?.acceptedAt ? '已接' : '未接'}</Tag>
                                                             </Space>
