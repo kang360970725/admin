@@ -109,6 +109,16 @@ const normalizeList = (res: any): any[] => {
     return [];
 };
 
+const getPlayerWorkStateMeta = (player: PlayerManageItem) => {
+    if (player.workMode === 'OFFLINE') {
+        return { text: '离线', color: 'default' as const };
+    }
+    if (String(player.workStatus || '').toUpperCase() === 'WORKING') {
+        return { text: '接单中', color: 'blue' as const };
+    }
+    return { text: '空闲', color: 'green' as const };
+};
+
 // 简易防抖：减少移动端搜索抖动请求
 const useDebouncedFn = (fn: (...args: any[]) => void, delay = 250) => {
     const timer = useRef<number | null>(null);
@@ -201,7 +211,7 @@ export default function CSWorkbenchPage() {
     const fetchPlayers = async (kw?: string) => {
         setPlayerLoading(true);
         try {
-            const res = await getPlayerOptions({ keyword: kw || '', onlyIdle: true });
+            const res = await getPlayerOptions({ keyword: kw || '', onlyIdle: true, onlyOnline: true });
             const arr = normalizeList(res);
             const map: Record<number, string> = {};
             const options: OptionItem[] = safeArray(arr).map((u: any) => ({
@@ -1415,7 +1425,8 @@ export default function CSWorkbenchPage() {
                             <Col xs={24} md={12}>
                                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                                     <Text type="secondary">
-                                        在线 {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => p.workMode === 'ONLINE').length : 0} / 总数{' '}
+                                        在线 {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => p.workMode === 'ONLINE').length : 0} / 接单中{' '}
+                                        {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => String(p.workStatus || '').toUpperCase() === 'WORKING').length : 0} / 总数{' '}
                                         {Array.isArray(onlinePlayers) ? onlinePlayers.length : 0}
                                     </Text>
                                     <Text type="secondary">可上下线、可刷新状态</Text>
@@ -1426,6 +1437,7 @@ export default function CSWorkbenchPage() {
                         <Row gutter={[12, 12]}>
                             {visibleOnlinePlayers.map((player) => {
                                 const isOnline = player.workMode !== 'OFFLINE';
+                                const workStateMeta = getPlayerWorkStateMeta(player);
                                 return (
                                     <Col key={player.id} xs={24} md={12} lg={8}>
                                         <Card
@@ -1445,14 +1457,14 @@ export default function CSWorkbenchPage() {
                                                             {player.phone || '-'} · {player.ratingName || '-'}
                                                         </div>
                                                     </div>
-                                                    <Tag color={isOnline ? 'green' : 'default'}>{isOnline ? '在线' : '离线'}</Tag>
+                                                    <Tag color={workStateMeta.color}>{workStateMeta.text}</Tag>
                                                 </Space>
 
                                                 <Space size={8} wrap>
                                                     <Tag>今日接单 {player.todayHandledCount ?? 0}</Tag>
-                                                    {player.offlineJoinedAt ? (
+                                                    {player.workMode === 'OFFLINE' && player.offlineJoinedAt ? (
                                                         <Tag color="default">
-                                                            {isOnline ? '在线中' : `离线 ${dayjs(player.offlineJoinedAt).format('MM-DD HH:mm')}`}
+                                                            离线 {dayjs(player.offlineJoinedAt).format('MM-DD HH:mm')}
                                                         </Tag>
                                                     ) : null}
                                                 </Space>

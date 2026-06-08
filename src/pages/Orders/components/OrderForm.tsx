@@ -163,7 +163,7 @@ export default function OrderUpsertModal(props: {
         if (!showPlayers) return;
         setPlayerLoading(true);
         try {
-            const res = await getPlayerOptions?.({ keyword: keyword || '', onlyIdle: true });
+            const res = await getPlayerOptions?.({ keyword: keyword || '', onlyIdle: true, onlyOnline: true });
             const list: any[] = Array.isArray(res) ? res : (res?.data ?? []);
 
             const map: Record<number, string> = {};

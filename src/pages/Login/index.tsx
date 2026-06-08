@@ -1,11 +1,93 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {LockOutlined, UserOutlined} from '@ant-design/icons';
 import {LoginForm, ProFormText} from '@ant-design/pro-components';
-import {Alert, message, Typography} from 'antd';
+import {Alert, Checkbox, Form, message, Typography} from 'antd';
 import {useModel, useNavigate} from 'umi';
 import {login} from '@/services/api';
 
 const {Text} = Typography;
+const REMEMBER_LOGIN_KEY = 'bc_login_remember_credentials';
+const REMEMBER_SECRET_KEY = 'bc_login_remember_secret';
+const CRED_TEXT = new TextEncoder();
+const CRED_DECODER = new TextDecoder();
+
+type RememberedLogin = {
+    phone: string;
+    password: string;
+    remember: boolean;
+};
+
+function bytesToBase64(bytes: Uint8Array) {
+    let binary = '';
+    bytes.forEach((b) => {
+        binary += String.fromCharCode(b);
+    });
+    return btoa(binary);
+}
+
+function base64ToBytes(base64: string) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+async function getRememberKey() {
+    if (typeof window === 'undefined' || !window.crypto?.subtle) {
+        throw new Error('当前浏览器不支持本地加密存储');
+    }
+    let rawKey = localStorage.getItem(REMEMBER_SECRET_KEY);
+    if (!rawKey) {
+        const keyBytes = window.crypto.getRandomValues(new Uint8Array(32));
+        rawKey = bytesToBase64(keyBytes);
+        localStorage.setItem(REMEMBER_SECRET_KEY, rawKey);
+    }
+    const keyBytes = base64ToBytes(rawKey);
+    return window.crypto.subtle.importKey('raw', keyBytes, {name: 'AES-GCM'}, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptText(plain: string) {
+    const key = await getRememberKey();
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await window.crypto.subtle.encrypt(
+        {name: 'AES-GCM', iv},
+        key,
+        CRED_TEXT.encode(String(plain ?? '')),
+    );
+    return `${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(encrypted))}`;
+}
+
+async function decryptText(cipherText: string) {
+    const [ivB64, dataB64] = String(cipherText || '').split('.');
+    if (!ivB64 || !dataB64) return '';
+    const key = await getRememberKey();
+    const decrypted = await window.crypto.subtle.decrypt(
+        {name: 'AES-GCM', iv: base64ToBytes(ivB64)},
+        key,
+        base64ToBytes(dataB64),
+    );
+    return CRED_DECODER.decode(decrypted);
+}
+
+async function loadRememberedLogin(): Promise<RememberedLogin> {
+    if (typeof window === 'undefined') return { phone: '', password: '', remember: false };
+    try {
+        const raw = localStorage.getItem(REMEMBER_LOGIN_KEY);
+        if (!raw) return { phone: '', password: '', remember: false };
+        const parsed = JSON.parse(raw);
+        const phone = parsed?.phoneCipher ? await decryptText(String(parsed.phoneCipher)) : String(parsed?.phone || '');
+        const password = parsed?.passwordCipher ? await decryptText(String(parsed.passwordCipher)) : String(parsed?.password || '');
+        return {
+            phone,
+            password,
+            remember: Boolean(parsed?.remember),
+        };
+    } catch {
+        return { phone: '', password: '', remember: false };
+    }
+}
 
 function getErrorMessage(err: any) {
     const msg = err?.response?.data?.message;
@@ -19,9 +101,33 @@ function getErrorMessage(err: any) {
 export default function LoginPage() {
     const navigate = useNavigate();
     const {initialState, setInitialState} = useModel('@@initialState');
+    const [loginForm] = Form.useForm();
+    const initOnceRef = useRef(false);
 
     const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState('');
+    const [rememberCredentials, setRememberCredentials] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        const init = async () => {
+            if (initOnceRef.current) return;
+            initOnceRef.current = true;
+            const rememberedLogin = await loadRememberedLogin();
+            if (cancelled) return;
+            if (rememberedLogin.remember) {
+                setRememberCredentials(true);
+                loginForm.setFieldsValue({
+                    phone: rememberedLogin.phone,
+                    password: rememberedLogin.password,
+                });
+            }
+        };
+        void init();
+        return () => {
+            cancelled = true;
+        };
+    }, [loginForm]);
 
     const handleSubmit = async (values: any) => {
         setFormError('');
@@ -45,6 +151,18 @@ export default function LoginPage() {
 
 
             localStorage.setItem('token', response.access_token);
+
+            if (rememberCredentials) {
+                const phoneCipher = await encryptText(String(values?.phone || ''));
+                const passwordCipher = await encryptText(String(values?.password || ''));
+                localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({
+                    phoneCipher,
+                    passwordCipher,
+                    remember: true,
+                }));
+            } else {
+                localStorage.removeItem(REMEMBER_LOGIN_KEY);
+            }
 
             let userInfo = response.user;
             if (initialState?.fetchUserInfo) {
@@ -101,6 +219,7 @@ export default function LoginPage() {
                     </div>
 
                     <LoginForm
+                        form={loginForm}
                         title={false}
                         subTitle={false}
                         onFinish={handleSubmit}
@@ -122,7 +241,6 @@ export default function LoginPage() {
                                 className="bc-alert"
                             />
                         ) : null}
-
                         <ProFormText
                             name="phone"
                             fieldProps={{
@@ -150,6 +268,16 @@ export default function LoginPage() {
                             rules={[{required: true, message: '请输入密码！'}]}
                         />
 
+                        <div style={{marginTop: -4, marginBottom: 8}}>
+                            <Checkbox
+                                checked={rememberCredentials}
+                                onChange={(e) => setRememberCredentials(e.target.checked)}
+                                style={{color: 'rgba(255,255,255,0.72)'}}
+                            >
+                                记住账号密码
+                            </Checkbox>
+                        </div>
+
                         <div className="bc-foot">
                             <span className="bc-foot-left">忘记密码请联系管理员</span>
                             <span className="bc-foot-right">BlueCat © {new Date().getFullYear()}</span>
@@ -172,6 +300,7 @@ export default function LoginPage() {
                         </div>
 
                         <LoginForm
+                            form={loginForm}
                             title={false}
                             subTitle={false}
                             onFinish={handleSubmit}
@@ -193,7 +322,6 @@ export default function LoginPage() {
                                     className="bc-alert"
                                 />
                             ) : null}
-
                             <ProFormText
                                 name="phone"
                                 fieldProps={{
@@ -220,6 +348,16 @@ export default function LoginPage() {
                                 placeholder="密码"
                                 rules={[{required: true, message: '请输入密码！'}]}
                             />
+
+                            <div style={{marginTop: -4, marginBottom: 8}}>
+                            <Checkbox
+                                checked={rememberCredentials}
+                                onChange={(e) => setRememberCredentials(e.target.checked)}
+                                style={{color: 'rgba(255,255,255,0.72)'}}
+                            >
+                                记住账号密码
+                            </Checkbox>
+                            </div>
 
                             <div className="bc-m-foot">
                                 <Text style={{color: 'rgba(255,255,255,0.55)', fontSize: 12}}>

@@ -445,7 +445,7 @@ const MiniappHomeConfigPage: React.FC = () => {
                           <Text type="secondary">{f.label}：</Text>
                           {f.key === 'coverImage' && row?.[f.key] ? (
                             <div>
-                              <img src={String(row?.[f.key])} alt="banner-cover" style={{ width: 140, height: 56, objectFit: 'cover', borderRadius: 4 }} />
+                              <img src={String(row?.[f.key])} alt="banner-cover" style={{ width: 140, height: 53, objectFit: 'cover', borderRadius: 4 }} />
                             </div>
                           ) : (
                             <div>{String(row?.[f.key] ?? '-')}</div>
@@ -606,7 +606,7 @@ const MiniappHomeConfigPage: React.FC = () => {
         <Form form={itemForm} layout="vertical">
           {activeKey === 'banners' && (
             <div style={{ marginBottom: 12 }}>
-              <Text type="secondary">封面图建议比例 5:2，推荐尺寸 1500 × 600（至少 750 × 300），避免文字与主体被裁切。</Text>
+              <Text type="secondary">封面图建议比例 16:6，推荐尺寸 1280 × 480（至少 640 × 240），避免文字与主体被裁切。</Text>
             </div>
           )}
           <Row gutter={12}>
@@ -744,7 +744,7 @@ const MiniappHomeConfigPage: React.FC = () => {
                         <img
                           src={String(itemForm.getFieldValue('coverImage'))}
                           alt="banner-cover-preview"
-                          style={{ width: 220, height: 88, objectFit: 'cover', borderRadius: 4 }}
+                          style={{ width: 240, height: 90, objectFit: 'cover', borderRadius: 4 }}
                         />
                       ) : null}
                     </Space>

@@ -575,7 +575,7 @@ export async function getPublicMiniappHomeConfig() {
 }
 
 // 空闲打手下拉（支持 keyword；默认 onlyIdle=true）
-export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean; limit?: number }) {
+export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean; limit?: number; onlyOnline?: boolean; paginate?: boolean; page?: number }) {
     return request(`${API_BASE}/users/players/options`, {
         method: 'POST',
         data,
@@ -2139,6 +2139,7 @@ export async function recalculateOrderSettlements(data: {
     reason?: string;
     scope?: string;
     allowWalletSync?: boolean;
+    settlementBaseAmount?: number;
     modePlayAllocList?: any[];
     playerEvaluations?: any[];
     orderTipEnabled?: boolean;

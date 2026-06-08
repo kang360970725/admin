@@ -113,6 +113,7 @@ const OrderDetailPage: React.FC = () => {
     const [toolsLoading, setToolsLoading] = useState(false);
     const [toolsResult, setToolsResult] = useState<any>(null);
     const [toolsRemark, setToolsRemark] = useState<string>('');
+    const [recalcSettlementBaseAmount, setRecalcSettlementBaseAmount] = useState<number | null>(null);
 
     // ✅ 工具流程：先重新结算（不动钱包）=> 再钱包对齐预览 => 再执行钱包对齐
     const [toolsStep, setToolsStep] = useState<'INIT' | 'RECALCED' | 'PREVIEWED'>('INIT');
@@ -352,6 +353,7 @@ const OrderDetailPage: React.FC = () => {
                 : [],
         });
         initRecalcModePlayAlloc()
+        setRecalcSettlementBaseAmount(getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT'));
         setToolsOpen(true);
 
     };
@@ -615,8 +617,10 @@ const OrderDetailPage: React.FC = () => {
     const runRecalcPreview = async () => {
         if (!order?.id) return;
 
-        // ✅ 口径：按订单结单时确认的收益基数
-        const paidBase = getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT');
+        // ✅ 口径：可手动修改重算结算金额；不填则按订单当前结算金额/实付兜底
+        const repairSettlementBaseAmount = toNum(
+            recalcSettlementBaseAmount ?? getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT'),
+        );
 
         // ✅ 玩法单：重算必须携带每轮金额（无论 need 与否）
         let modePlayAllocList: any[] | undefined = undefined;
@@ -634,7 +638,7 @@ const OrderDetailPage: React.FC = () => {
 
             if (recalcModePlayAlloc?.need) {
                 // ✅ need=true：必须人工输入并校验
-                const v = validateModePlayAlloc(rows as any, paidBase);
+                const v = validateModePlayAlloc(rows as any, repairSettlementBaseAmount);
                 if (!v.ok) {
                     message.warning(v.err || '玩法单分轮收入校验未通过');
                     return;
@@ -646,7 +650,7 @@ const OrderDetailPage: React.FC = () => {
             } else {
                 // ✅ need=false：自动按轮次均分 paidBase（最后一轮吃尾差）
                 const n = rows.length;
-                const totalCents = Math.round(paidBase * 100);
+                const totalCents = Math.round(repairSettlementBaseAmount * 100);
                 const base = Math.floor(totalCents / n);
                 const remainder = totalCents - base * n;
 
@@ -686,6 +690,7 @@ const OrderDetailPage: React.FC = () => {
                 scope: 'COMPLETED_AND_ARCHIVED',
                 dryRun: true,
                 applyRepair: false,
+                settlementBaseAmount: repairSettlementBaseAmount,
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
                 playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
@@ -715,8 +720,10 @@ const OrderDetailPage: React.FC = () => {
             return;
         }
 
-        // ✅ 口径：按订单结单时确认的收益基数
-        const paidBase = getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT');
+        // ✅ 口径：可手动修改重算结算金额；不填则按订单当前结算金额/实付兜底
+        const repairSettlementBaseAmount = toNum(
+            recalcSettlementBaseAmount ?? getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT'),
+        );
 
         // ✅ 玩法单：应用时也携带每轮金额（无论 need 与否）
         let modePlayAllocList: any[] | undefined = undefined;
@@ -732,7 +739,7 @@ const OrderDetailPage: React.FC = () => {
             }
 
             if (recalcModePlayAlloc?.need) {
-                const v = validateModePlayAlloc(rows as any, paidBase);
+                const v = validateModePlayAlloc(rows as any, repairSettlementBaseAmount);
                 if (!v.ok) {
                     message.warning(v.err || '玩法单分轮收入校验未通过');
                     return;
@@ -744,7 +751,7 @@ const OrderDetailPage: React.FC = () => {
             } else {
                 // need=false：自动按轮次均分 paidBase（最后一轮吃尾差）
                 const n = rows.length;
-                const totalCents = Math.round(paidBase * 100);
+                const totalCents = Math.round(repairSettlementBaseAmount * 100);
                 const base = Math.floor(totalCents / n);
                 const remainder = totalCents - base * n;
 
@@ -768,6 +775,7 @@ const OrderDetailPage: React.FC = () => {
                 applyRepair: true,
                 dryRun: false,
                 scope: 'COMPLETED_AND_ARCHIVED',
+                settlementBaseAmount: repairSettlementBaseAmount,
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
                 playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
@@ -802,7 +810,17 @@ const OrderDetailPage: React.FC = () => {
         mode: 'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT' = 'SETTLEMENT_BASE_AMOUNT',
     ) => {
         const cashAmount = toNum(detail?.isGifted !== true ? detail?.paidAmount : detail?.receivableAmount);
-        const settlementBaseAmount = toNum(detail?.settlementBaseAmount ?? detail?.paidAmount ?? detail?.receivableAmount);
+        const settlementBaseAmount = (() => {
+            const explicit = toNum(detail?.settlementBaseAmount);
+            if (explicit > 0) return explicit;
+            const paid = toNum(detail?.paidAmount);
+            if (paid > 0) return paid;
+            const receivable = toNum(detail?.receivableAmount);
+            if (receivable > 0) return receivable;
+            const original = toNum(detail?.originalAmount);
+            if (original > 0) return original;
+            return 0;
+        })();
         return mode === 'PAID_AMOUNT' ? cashAmount : settlementBaseAmount;
     };
 
@@ -1339,7 +1357,7 @@ const OrderDetailPage: React.FC = () => {
     const fetchPlayers = async (keyword?: string) => {
         setPlayerLoading(true);
         try {
-            const res = await getPlayerOptions({keyword: keyword || '', onlyIdle: true});
+            const res = await getPlayerOptions({keyword: keyword || '', onlyIdle: true, onlyOnline: true});
             const list = Array.isArray(res) ? res : res?.data ?? [];
             setPlayerOptions(
                 list.map((u: any) => ({
@@ -2382,7 +2400,17 @@ const OrderDetailPage: React.FC = () => {
                         {isHourly ? <Tag style={{marginLeft: 8}}>小时单可补收</Tag> : null}
                     </Descriptions.Item>
                     <Descriptions.Item label="结算金额">
-                        ¥{order?.settlementBaseAmount ?? order?.paidAmount ?? order?.receivableAmount ?? '-'}
+                        ¥{(() => {
+                            const explicit = toNum(order?.settlementBaseAmount);
+                            if (explicit > 0) return explicit;
+                            const paid = toNum(order?.paidAmount);
+                            if (paid > 0) return paid;
+                            const receivable = toNum(order?.receivableAmount);
+                            if (receivable > 0) return receivable;
+                            const original = toNum(order?.originalAmount);
+                            if (original > 0) return original;
+                            return '-';
+                        })()}
                     </Descriptions.Item>
 
                     <Descriptions.Item label="订单保底（万）">
@@ -3007,7 +3035,17 @@ const OrderDetailPage: React.FC = () => {
                     projectId: order?.projectId,
                     receivableAmount: order?.receivableAmount,
                     paidAmount: order?.paidAmount,
-                    settlementAmount: order?.settlementBaseAmount ?? order?.paidAmount ?? order?.receivableAmount,
+                    settlementAmount: (() => {
+                        const explicit = toNum(order?.settlementBaseAmount);
+                        if (explicit > 0) return explicit;
+                        const paid = toNum(order?.paidAmount);
+                        if (paid > 0) return paid;
+                        const receivable = toNum(order?.receivableAmount);
+                        if (receivable > 0) return receivable;
+                        const original = toNum(order?.originalAmount);
+                        if (original > 0) return original;
+                        return 0;
+                    })(),
                     customerGameId: order?.customerGameId,
                     orderTime: order?.orderTime,
                     paymentTime: order?.paymentTime,
@@ -3095,13 +3133,14 @@ const OrderDetailPage: React.FC = () => {
             <Drawer
                 open={toolsOpen}
                 title="工具：重新结算 / 钱包对齐"
-                placement="bottom"
-                height={isMobile ? '78vh' : 520}
+                placement="right"
+                width={isMobile ? '100vw' : 640}
                 onClose={() => {
                     setToolsOpen(false)
                     setDebugJsonEnabled(false);
                 }}
                 destroyOnClose
+                bodyStyle={{padding: 16, overflow: 'auto'}}
             >
                 <Space direction="vertical" size={12} style={{width: '100%'}}>
                     <Card size="small" style={{borderRadius: 14}} bodyStyle={{padding: 12}}>
@@ -3122,6 +3161,28 @@ const OrderDetailPage: React.FC = () => {
                                 rows={3}
                                 placeholder="用于审计追溯：例如“客户投诉核对后修复结算/补收后重新计算”等"
                             />
+                            <div>
+                                <Typography.Text strong>重算结算金额</Typography.Text>
+                                <Typography.Text type="secondary" style={{display: 'block', marginBottom: 8, fontSize: 12}}>
+                                    为空时按订单当前结算金额兜底；老数据 0/空值则按实付金额兜底。
+                                </Typography.Text>
+                                <InputNumber
+                                    style={{width: '100%'}}
+                                    min={0}
+                                    precision={2}
+                                    step={1}
+                                    value={recalcSettlementBaseAmount as any}
+                                    placeholder={`默认：${getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT').toFixed(2)}`}
+                                    onChange={(v) => {
+                                        setRecalcSettlementBaseAmount(v == null ? null : Number(v));
+                                        setRepairPreview(null);
+                                        setRecalcResult(null);
+                                        setToolsResult(null);
+                                        setToolsStep('INIT');
+                                    }}
+                                    addonAfter="¥"
+                                />
+                            </div>
                             {isModePlay ? (
                                 <Card size="small"
                                       style={{borderRadius: 12, background: '#fffbe6', border: '1px solid #ffe58f'}}
@@ -3663,7 +3724,17 @@ const OrderDetailPage: React.FC = () => {
                         </Typography.Text>
                         {(() => {
                             const paidAmount = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
-                            const settlementBaseAmount = toNum(order?.settlementBaseAmount ?? order?.paidAmount ?? order?.receivableAmount);
+                            const settlementBaseAmount = (() => {
+                                const explicit = toNum(order?.settlementBaseAmount);
+                                if (explicit > 0) return explicit;
+                                const paid = toNum(order?.paidAmount);
+                                if (paid > 0) return paid;
+                                const receivable = toNum(order?.receivableAmount);
+                                if (receivable > 0) return receivable;
+                                const original = toNum(order?.originalAmount);
+                                if (original > 0) return original;
+                                return 0;
+                            })();
 
                             return (
                                 <Radio.Group

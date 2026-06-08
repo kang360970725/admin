@@ -75,7 +75,7 @@ const NewOrderPage: React.FC = () => {
     const fetchPlayers = async (keyword?: string) => {
         setPlayerLoading(true);
         try {
-            const res = await getPlayerOptions({ keyword: keyword || '', onlyIdle: true });
+            const res = await getPlayerOptions({ keyword: keyword || '', onlyIdle: true, onlyOnline: true });
             const list = Array.isArray(res) ? res : (res?.data ?? []);
             const options: OptionItem[] = list.map((u: any) => ({
                 value: Number(u.id),
