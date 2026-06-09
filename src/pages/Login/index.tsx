@@ -17,6 +17,16 @@ type RememberedLogin = {
     remember: boolean;
 };
 
+type RememberedLoginStorage = RememberedLogin & {
+    mode?: 'plain' | 'encrypted';
+    phoneCipher?: string;
+    passwordCipher?: string;
+};
+
+function canUseRememberEncryption() {
+    return typeof window !== 'undefined' && window.isSecureContext && !!window.crypto?.subtle;
+}
+
 function bytesToBase64(bytes: Uint8Array) {
     let binary = '';
     bytes.forEach((b) => {
@@ -35,7 +45,7 @@ function base64ToBytes(base64: string) {
 }
 
 async function getRememberKey() {
-    if (typeof window === 'undefined' || !window.crypto?.subtle) {
+    if (!canUseRememberEncryption()) {
         throw new Error('当前浏览器不支持本地加密存储');
     }
     let rawKey = localStorage.getItem(REMEMBER_SECRET_KEY);
@@ -60,6 +70,9 @@ async function encryptText(plain: string) {
 }
 
 async function decryptText(cipherText: string) {
+    if (!canUseRememberEncryption()) {
+        return '';
+    }
     const [ivB64, dataB64] = String(cipherText || '').split('.');
     if (!ivB64 || !dataB64) return '';
     const key = await getRememberKey();
@@ -76,9 +89,28 @@ async function loadRememberedLogin(): Promise<RememberedLogin> {
     try {
         const raw = localStorage.getItem(REMEMBER_LOGIN_KEY);
         if (!raw) return { phone: '', password: '', remember: false };
-        const parsed = JSON.parse(raw);
-        const phone = parsed?.phoneCipher ? await decryptText(String(parsed.phoneCipher)) : String(parsed?.phone || '');
-        const password = parsed?.passwordCipher ? await decryptText(String(parsed.passwordCipher)) : String(parsed?.password || '');
+        const parsed: RememberedLoginStorage = JSON.parse(raw);
+        if (parsed?.mode === 'plain') {
+            return {
+                phone: String(parsed?.phone || ''),
+                password: String(parsed?.password || ''),
+                remember: Boolean(parsed?.remember),
+            };
+        }
+        if (parsed?.phoneCipher || parsed?.passwordCipher) {
+            if (!canUseRememberEncryption()) {
+                return { phone: '', password: '', remember: false };
+            }
+            const phone = parsed?.phoneCipher ? await decryptText(String(parsed.phoneCipher)) : '';
+            const password = parsed?.passwordCipher ? await decryptText(String(parsed.passwordCipher)) : '';
+            return {
+                phone,
+                password,
+                remember: Boolean(parsed?.remember),
+            };
+        }
+        const phone = String(parsed?.phone || '');
+        const password = String(parsed?.password || '');
         return {
             phone,
             password,
@@ -153,15 +185,28 @@ export default function LoginPage() {
             localStorage.setItem('token', response.access_token);
 
             if (rememberCredentials) {
-                const phoneCipher = await encryptText(String(values?.phone || ''));
-                const passwordCipher = await encryptText(String(values?.password || ''));
-                localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({
-                    phoneCipher,
-                    passwordCipher,
-                    remember: true,
-                }));
+                if (canUseRememberEncryption()) {
+                    const phoneCipher = await encryptText(String(values?.phone || ''));
+                    const passwordCipher = await encryptText(String(values?.password || ''));
+                    localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({
+                        mode: 'encrypted',
+                        phoneCipher,
+                        passwordCipher,
+                        remember: true,
+                    }));
+                    localStorage.removeItem(REMEMBER_SECRET_KEY);
+                } else {
+                    localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({
+                        mode: 'plain',
+                        phone: String(values?.phone || ''),
+                        password: String(values?.password || ''),
+                        remember: true,
+                    }));
+                    localStorage.removeItem(REMEMBER_SECRET_KEY);
+                }
             } else {
                 localStorage.removeItem(REMEMBER_LOGIN_KEY);
+                localStorage.removeItem(REMEMBER_SECRET_KEY);
             }
 
             let userInfo = response.user;
