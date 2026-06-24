@@ -10,6 +10,7 @@ interface CreateUserModalProps {
     onCancel: () => void;
     onSuccess: () => void;
     availableRatings?: any[];
+    staffTagOptions?: Array<{ label: string; value: string }>;
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({
@@ -17,6 +18,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
     onCancel,
     onSuccess,
     availableRatings = [],
+    staffTagOptions = [],
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
@@ -217,27 +219,14 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
                     {isStaff && (
                         <Form.Item
-                            label="押金阈值"
-                            name="depositLimit"
-                            initialValue={2000}
-                            rules={[
-                                { required: true, message: '请输入押金阈值' },
-                                {
-                                    validator(_, value) {
-                                        if (value < 500) {
-                                            return Promise.reject(new Error('押金阈值不得低于500'));
-                                        }
-                                        return Promise.resolve();
-                                    },
-                                },
-                            ]}
+                            label="员工标签"
+                            name="staffTags"
                         >
-                            <InputNumber
-                                style={{ width: '100%' }}
-                                min={500}
-                                step={100}
-                                precision={0}
-                                addonAfter="元"
+                            <Select
+                                mode="multiple"
+                                allowClear
+                                options={staffTagOptions}
+                                placeholder="请选择员工标签"
                             />
                         </Form.Item>
                     )}

@@ -28,6 +28,12 @@ const WithdrawalsPage: React.FC = () => {
     // ✅ 新增统计状态
     const [pendingCount, setPendingCount] = useState<number>(0);
     const [pendingAmount, setPendingAmount] = useState<number>(0);
+    const [todayReviewSummary, setTodayReviewSummary] = useState<any>({
+        approvedAmount: 0,
+        approvedCount: 0,
+        paidAmount: 0,
+        paidCount: 0,
+    });
 
     const columns: any = [
         {
@@ -145,6 +151,25 @@ const WithdrawalsPage: React.FC = () => {
                             valueStyle={{ color: '#cf1322' }}
                         />
                     </Col>
+                    <Col>
+                        <Statistic
+                            title="今日审核通过总计"
+                            value={todayReviewSummary.approvedAmount}
+                            precision={2}
+                            prefix="¥"
+                        />
+                        <div style={{ color: '#666', fontSize: 12 }}>笔数：{todayReviewSummary.approvedCount}</div>
+                    </Col>
+                    <Col>
+                        <Statistic
+                            title="今日审核放款总计"
+                            value={todayReviewSummary.paidAmount}
+                            precision={2}
+                            prefix="¥"
+                            valueStyle={{ color: '#389e0d' }}
+                        />
+                        <div style={{ color: '#666', fontSize: 12 }}>笔数：{todayReviewSummary.paidCount}</div>
+                    </Col>
                 </Row>
             </Card>
 
@@ -163,6 +188,12 @@ const WithdrawalsPage: React.FC = () => {
                     if (!Array.isArray(res)) {
                         setPendingCount((res as any)?.count || 0);
                         setPendingAmount((res as any)?.totalAmount || 0);
+                        setTodayReviewSummary((res as any)?.todayReviewSummary || {
+                            approvedAmount: 0,
+                            approvedCount: 0,
+                            paidAmount: 0,
+                            paidCount: 0,
+                        });
                     }
 
                     return { data: list as any, success: true };

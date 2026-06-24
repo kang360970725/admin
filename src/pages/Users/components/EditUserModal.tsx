@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { DatePicker, Form, Input, InputNumber, message, Modal, Select, Tag } from 'antd';
+import { Button, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Tag } from 'antd';
 import dayjs from 'dayjs';
-import { updateUser, User } from '@/services/api';
+import { resetUserWithdrawQrCode, updateUser, User } from '@/services/api';
 
 const { Option } = Select;
 
@@ -11,6 +11,7 @@ interface EditUserModalProps {
     onCancel: () => void;
     onSuccess: () => void;
     availableRatings?: any[];
+    staffTagOptions?: Array<{ label: string; value: string }>;
 }
 
 const EditUserModal: React.FC<EditUserModalProps> = ({
@@ -19,9 +20,11 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     onCancel,
     onSuccess,
     availableRatings = [],
+    staffTagOptions = [],
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
+    const [resetQrLoading, setResetQrLoading] = React.useState(false);
     const [userType, setUserType] = useState('REGISTERED_USER');
     const [workMode, setWorkMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
 
@@ -62,7 +65,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 rating: user.rating,
                 balance: user.balance,
                 needResetPwd: user.needResetPwd,
-                depositLimit: user.depositLimit ?? 2000,
+                staffTags: Array.isArray(user.staffTags) ? user.staffTags : [],
                 workMode: currentWorkMode,
                 offlineJoinedAt: user.offlineJoinedAt ? dayjs(user.offlineJoinedAt) : null,
             });
@@ -72,7 +75,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     const handleOk = async () => {
         try {
             const values = await form.validateFields();
-            const currentDeposit = Number(user?.walletAccount?.depositBalance ?? 0);
 
             const buildPayload = () => {
                 const payload: any = { ...values };
@@ -91,31 +93,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                 return payload;
             };
-
-            if (values.depositLimit !== undefined && values.depositLimit < currentDeposit) {
-                Modal.confirm({
-                    title: '押金阈值低于当前押金',
-                    content: `当前押金 ¥${currentDeposit}，调整为 ¥${values.depositLimit} 将退还 ¥${
-                        currentDeposit - values.depositLimit
-                    } 到用户钱包，是否继续？`,
-                    okText: '确认调整',
-                    cancelText: '取消',
-                    onOk: async () => {
-                        try {
-                            setLoading(true);
-                            await updateUser(user!.id, buildPayload());
-                            form.resetFields();
-                            onSuccess();
-                        } catch (error: any) {
-                            message.error(error?.response?.data?.message || '更新用户信息失败');
-                        } finally {
-                            setLoading(false);
-                        }
-                    },
-                });
-
-                return;
-            }
 
             setLoading(true);
 
@@ -146,6 +123,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
     const isStaff = userType === 'STAFF';
     const currentRating = user?.staffRating;
+    const hasWithdrawQrCode = Boolean(user?.withdrawQrCodeKey);
 
     return (
         <Modal
@@ -271,30 +249,58 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 <Tag color="blue">¥{Number(user?.walletAccount?.depositBalance ?? 0)}</Tag>
                             </Form.Item>
                             <Form.Item
-                                label="押金阈值"
-                                name="depositLimit"
-                                rules={[
-                                    { required: true, message: '请输入押金阈值' },
-                                    {
-                                        validator(_, value) {
-                                            if (value < 500) {
-                                                return Promise.reject(new Error('押金阈值不得低于500'));
-                                            }
-                                            return Promise.resolve();
-                                        },
-                                    },
-                                ]}
+                                label="员工标签"
+                                name="staffTags"
                             >
-                                <InputNumber
-                                    style={{ width: '100%' }}
-                                    min={500}
-                                    step={100}
-                                    precision={0}
-                                    addonAfter="元"
+                                <Select
+                                    mode="multiple"
+                                    allowClear
+                                    options={staffTagOptions}
+                                    placeholder="请选择员工标签"
                                 />
                             </Form.Item>
                         </>
                     )}
+                </div>
+
+                <div style={{ marginBottom: 16, padding: 12, border: '1px solid #f0f0f0', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                        <div>
+                            <div style={{ fontWeight: 500 }}>收款码</div>
+                            <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                {hasWithdrawQrCode
+                                    ? `已上传${user?.withdrawQrCodeUploadedAt ? ` · ${dayjs(user.withdrawQrCodeUploadedAt).format('YYYY-MM-DD HH:mm:ss')}` : ''}`
+                                    : '未上传'}
+                            </div>
+                        </div>
+                        <Popconfirm
+                            title="清理当前收款码并允许重新上传？"
+                            description="清理后用户需要重新上传收款码。"
+                            okText="确认清理"
+                            cancelText="取消"
+                            disabled={!hasWithdrawQrCode}
+                            onConfirm={async () => {
+                                if (!user?.id) return;
+                                try {
+                                    setResetQrLoading(true);
+                                    await resetUserWithdrawQrCode(user.id, {
+                                        remark: '会员管理编辑页清理收款码，允许重新上传',
+                                    });
+                                    message.success('已清理收款码，用户可重新上传');
+                                    form.resetFields();
+                                    onSuccess();
+                                } catch (error: any) {
+                                    message.error(error?.response?.data?.message || '清理收款码失败');
+                                } finally {
+                                    setResetQrLoading(false);
+                                }
+                            }}
+                        >
+                            <Button loading={resetQrLoading} disabled={!hasWithdrawQrCode}>
+                                重新上传收款码
+                            </Button>
+                        </Popconfirm>
+                    </div>
                 </div>
 
                 {isStaff && (
@@ -348,7 +354,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         <div>
                             <Tag color="blue">{currentRating.name}</Tag>
                             <span style={{ marginLeft: 8 }}>
-                                分红比例: {(currentRating.rate * 100).toFixed(0)}% | 适用范围:{' '}
+                                分红比例: {(Number(currentRating.rate || 0) * 100).toFixed(0)}% | 适用范围:{' '}
                                 {currentRating.scope === 'BOTH'
                                     ? '线上线下'
                                     : currentRating.scope === 'ONLINE'
@@ -362,6 +368,14 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 <Form.Item label="头像URL" name="avatar">
                     <Input placeholder="请输入头像URL地址" />
                 </Form.Item>
+
+                {isStaff && (
+                    <div style={{ color: '#666', fontSize: 12, lineHeight: '20px' }}>
+                        <div>当前规则押金：¥{Number(user?.matchedDepositAmount ?? user?.depositLimit ?? 0)}</div>
+                        <div>首次提现限制：¥{Number(user?.matchedFirstWithdrawMinBalance ?? 1000)}</div>
+                        <div>退店冷却期：{Number(user?.matchedQuitCoolingDays ?? 180)} 天</div>
+                    </div>
+                )}
             </Form>
         </Modal>
     );

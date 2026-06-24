@@ -37,12 +37,29 @@ export interface User {
     level: number;
     balance: number;
     needResetPwd: boolean;
+    withdrawQrCodeKey?: string | null;
+    withdrawQrCodeUploadedAt?: string | null;
     lastLoginAt?: string;
     createdAt: string;
     updatedAt: string;
     depositLimit: string;
+    staffTags?: string[];
+    matchedDepositAmount?: number;
+    matchedFirstWithdrawMinBalance?: number;
+    matchedQuitCoolingDays?: number;
+    matchedDepositForfeitDays?: number;
+    matchedStaffRule?: StaffRuleItem | null;
+    walletAccount?: {
+        walletUid?: string;
+        availableBalance?: number;
+        frozenBalance?: number;
+        depositBalance?: number;
+    };
     workMode?: 'ONLINE' | 'OFFLINE';
     offlineJoinedAt?: string | null;
+    staffEmploymentStatus?: 'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED';
+    staffCooldownUntil?: string | null;
+    staffExitedAt?: string | null;
     memberProfile?: {
         memberCode?: string;
         levelCode?: string;
@@ -65,6 +82,104 @@ export interface User {
         lastBindAt?: string | null;
         lastLoginAt?: string | null;
     }>;
+    reviewStats?: {
+        averageScore?: number | null;
+        reviewCount?: number;
+    };
+    recentReviews?: Array<{
+        orderId?: number;
+        score?: number;
+        ratingLabel?: string;
+        reviewRemark?: string;
+        createdAt?: string;
+        evaluatorName?: string;
+    }>;
+    memberGameCards?: MemberGameCard[];
+}
+
+export interface StaffRuleTag {
+    code: string;
+    name: string;
+    enabled?: boolean;
+    sort?: number;
+}
+
+export interface StaffRuleItem {
+    id: string;
+    name: string;
+    enabled?: boolean;
+    priority?: number;
+    tagCodes: string[];
+    depositAmount: number;
+    firstWithdrawMinBalance: number;
+    quitCoolingDays: number;
+    depositForfeitDays: number;
+    refundWhenDepositInsufficient?: boolean;
+}
+
+export interface StaffRuleEngineConfig {
+    tags: StaffRuleTag[];
+    rules: StaffRuleItem[];
+}
+
+export interface StaffExitPreview {
+    userId: number;
+    staffTags: string[];
+    matchedStaffRule?: StaffRuleItem | null;
+    joinedAt?: string;
+    inShopDays: number;
+    quitCoolingDays: number;
+    depositForfeitDays: number;
+    isDepositForfeit: boolean;
+    availableBalance: number;
+    frozenBalance: number;
+    depositBalance: number;
+    refundDepositAmount: number;
+    forfeitDepositAmount: number;
+    releaseAmount: number;
+    clearAmount: number;
+    depositAmountRule: number;
+    firstWithdrawMinBalance: number;
+    refundWhenDepositInsufficient: boolean;
+    blacklistAllowed: boolean;
+    suggestedExitMode: 'RELEASE_TO_AVAILABLE' | 'CLEAR_ALL';
+}
+
+export interface MemberGameCard {
+    id: number;
+    gameCategoryId: string;
+    gameCategoryName: string;
+    gameUniqueId: string;
+    gameNickname?: string;
+    isPrimary: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface MemberGameCardListResponse {
+    categories: Array<{
+        id: string;
+        name: string;
+    }>;
+    cards: MemberGameCard[];
+    rules?: {
+        maxCardsPerGame?: number;
+        allowEdit?: boolean;
+        allowDelete?: boolean;
+    };
+}
+
+export interface GetUsersParams {
+    page?: number;
+    limit?: number;
+    search?: string;
+    userType?: string;
+    status?: string;
+    scene?: string;
+    anonymousOnly?: boolean | string;
+    includeStaffMembers?: boolean | string;
+    loginInactiveDays?: number;
+    acceptInactiveDays?: number;
 }
 
 export interface PaginationResponse {
@@ -98,7 +213,7 @@ export async function getCurrentUser() {
 }
 
 // 用户管理 API
-export async function getUsers(params: any): Promise<PaginationResponse> {
+export async function getUsers(params: GetUsersParams): Promise<PaginationResponse> {
     return request<PaginationResponse>(`${API_BASE}/users`, {
         method: 'GET',
         params,
@@ -158,9 +273,83 @@ export async function adjustMemberPoints(data: { userId: number; points: number;
     });
 }
 
+export async function adjustMemberGrowth(data: { userId: number; growthValue: number; remark?: string }) {
+    return request(`${API_BASE}/member/growth/adjust`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function manualMemberRecharge(data: {
+    userId: number;
+    planId?: number;
+    amount?: number;
+    bonusAmount?: number;
+    giftPoints?: number;
+    giftGrowthValue?: number;
+    couponBenefits?: Array<{ templateId: number; count: number }>;
+    remark?: string;
+}) {
+    return request(`${API_BASE}/member/recharge/manual`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function getUserById(id: number): Promise<User> {
     return request<User>(`${API_BASE}/users/${id}`, {
         method: 'GET',
+    });
+}
+
+export async function getUserMemberGameCards(id: number): Promise<MemberGameCardListResponse> {
+    return request<MemberGameCardListResponse>(`${API_BASE}/users/${id}/member-game-cards`, {
+        method: 'GET',
+    });
+}
+
+export async function createUserMemberGameCard(
+    id: number,
+    data: { gameCategoryId: string; gameUniqueId: string; gameNickname?: string; isPrimary?: boolean },
+): Promise<MemberGameCard> {
+    return request<MemberGameCard>(`${API_BASE}/users/${id}/member-game-cards`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function setUserMemberGameCardPrimary(id: number, cardId: number): Promise<MemberGameCard> {
+    return request<MemberGameCard>(`${API_BASE}/users/${id}/member-game-cards/${cardId}/set-primary`, {
+        method: 'POST',
+    });
+}
+
+export async function deleteUserMemberGameCard(id: number, cardId: number): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>(`${API_BASE}/users/${id}/member-game-cards/${cardId}`, {
+        method: 'DELETE',
+    });
+}
+
+export async function exitStaffShop(
+    id: number,
+    data: { mode: 'RELEASE_TO_AVAILABLE' | 'CLEAR_ALL'; addToBlacklist?: boolean },
+) {
+    return request(`${API_BASE}/users/${id}/staff-exit`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getStaffExitPreview(id: number) {
+    return request<StaffExitPreview>(`${API_BASE}/users/${id}/staff-exit-preview`, {
+        method: 'POST',
+    });
+}
+
+export async function clearStaffAssets(id: number, data: { addToBlacklist?: boolean; remark: string }) {
+    return request(`${API_BASE}/users/${id}/staff-clear`, {
+        method: 'POST',
+        data,
     });
 }
 
@@ -174,6 +363,13 @@ export async function createUser(data: any): Promise<User> {
 export async function updateUser(id: number, data: any): Promise<User> {
     return request<User>(`${API_BASE}/users/${id}`, {
         method: 'PATCH',
+        data,
+    });
+}
+
+export async function resetUserWithdrawQrCode(id: number, data?: { remark?: string }): Promise<User> {
+    return request<User>(`${API_BASE}/users/${id}/withdraw-qr-code/reset`, {
+        method: 'POST',
         data,
     });
 }
@@ -488,6 +684,27 @@ export async function completeDispatch(dispatchId: number, data: any) {
     });
 }
 
+export async function adminAcceptDispatch(dispatchId: number, data?: { remark?: string }) {
+    return request(`${API_BASE}/orders/dispatch/admin-accept`, {
+        method: 'POST',
+        data: { dispatchId, ...(data || {}) },
+    });
+}
+
+export async function rollbackDispatchToAccepted(dispatchId: number, data?: { remark?: string }) {
+    return request(`${API_BASE}/orders/dispatch/rollback-to-accepted`, {
+        method: 'POST',
+        data: { dispatchId, ...(data || {}) },
+    });
+}
+
+export async function rollbackDispatchToArchived(dispatchId: number, data?: { remark?: string }) {
+    return request(`${API_BASE}/orders/dispatch/rollback-to-archived`, {
+        method: 'POST',
+        data: { dispatchId, ...(data || {}) },
+    });
+}
+
 /** 我的接单记录：POST /orders/my-dispatches */
 // export async function getMyDispatches(data: any) {
 //     return request(`${API_BASE}/orders/my-dispatches`, {
@@ -619,7 +836,8 @@ export async function updateCouponTemplateStatus(data: { id: number; status: str
 }
 
 export async function grantUserCoupon(data: {
-    userId: number;
+    userId?: number;
+    userIds?: number[];
     templateId: number;
     count?: number;
     expiresAt?: string;
@@ -635,6 +853,7 @@ export async function getUserCoupons(data: {
     limit?: number;
     userId?: number;
     templateId?: number;
+    keyword?: string;
     status?: string;
     orderId?: number;
 }) {
@@ -898,6 +1117,7 @@ export async function getWalletHolds(params: {
 
 export interface WalletReplayPreview {
     userId: number;
+    mode: 'legacy' | 'full';
     range: { startAt: string | null; endAt: string | null };
     openingBalance: { available: number; frozen: number; total: number };
     currentBalance: { available: number; frozen: number; total: number };
@@ -943,6 +1163,21 @@ export interface WalletReplayPreview {
         deltaAvailable: number;
         deltaFrozen: number;
     }>;
+    negativeRows: Array<{
+        id: number;
+        createdAt: string;
+        bizType: string;
+        status: string;
+        direction: 'IN' | 'OUT';
+        amount: number;
+        sourceType?: string | null;
+        sourceId?: number | null;
+        orderId?: number | null;
+        settlementId?: number | null;
+        dispatchId?: number | null;
+        replayAvailableAfter: number;
+        replayFrozenAfter: number;
+    }>;
 }
 
 export async function getWalletReplayPreview(params: {
@@ -950,6 +1185,7 @@ export async function getWalletReplayPreview(params: {
     startAt?: string;
     endAt?: string;
     limitMismatches?: number;
+    mode?: 'legacy' | 'full';
 }) {
     return request<WalletReplayPreview>(`${API_BASE}/wallet/replay-preview`, {
         method: 'GET',
@@ -1241,6 +1477,8 @@ export async function getWithdrawInfo() {
         availableBalance: number;
         depositBalance: number;
         depositLimit: number;
+        firstWithdrawMinBalance: number;
+        matchedStaffRule?: StaffRuleItem | null;
         workMode?: 'ONLINE' | 'OFFLINE';
     }>(`${API_BASE}/wallet/withdrawals/withdraw-info`, {
         method: 'GET',
@@ -1295,6 +1533,20 @@ export interface SystemConfigItem {
     enabled: boolean;
     createdAt: string;
     updatedAt: string;
+}
+
+export async function getStaffRuleEngineConfig() {
+    return request<StaffRuleEngineConfig>(`${API_BASE}/system-configs/staff-rule-engine/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertStaffRuleEngineConfig(config: StaffRuleEngineConfig) {
+    return request<SystemConfigItem>(`${API_BASE}/system-configs/staff-rule-engine/upsert`, {
+        method: 'POST',
+        data: { config },
+    });
 }
 
 export interface AppVersionRecord {
@@ -2058,6 +2310,65 @@ export async function refundOrderById(orderId: number, opts?: { remark?: string 
     return refundOrder({ id: orderId, remark: opts?.remark });
 }
 
+export interface ComplaintWorkOrder {
+    id: number;
+    ticketNo: string;
+    orderId: number;
+    userId: number;
+    status: string;
+    reason: string;
+    description?: string | null;
+    paymentChannel?: string | null;
+    refundSupported: boolean;
+    refundUnsupportedReason?: string | null;
+    suggestedRefundAmount?: number | null;
+    approvedRefundAmount?: number | null;
+    reviewRemark?: string | null;
+    refundRemark?: string | null;
+    reviewedBy?: number | null;
+    reviewedAt?: string | null;
+    refundedBy?: number | null;
+    refundedAt?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+    order?: {
+        id: number;
+        orderNo: string;
+        serviceName: string;
+        coverImage?: string;
+        amount: number;
+        status: string;
+        createdAt?: string;
+        customerName?: string;
+        customerPhone?: string;
+        paymentChannel?: string;
+        paymentStatus?: string;
+        paidAt?: string | null;
+    } | null;
+}
+
+export async function getComplaintWorkOrders(params?: { page?: number; limit?: number; status?: string; keyword?: string }) {
+    return request<{ data: ComplaintWorkOrder[]; total: number; page: number; limit: number; totalPages: number }>(`${API_BASE}/orders/complaints`, {
+        method: 'GET',
+        params,
+    });
+}
+
+export async function reviewComplaintWorkOrder(id: number, data: { action: 'APPROVE' | 'REJECT'; reviewRemark?: string; approvedRefundAmount?: number }) {
+    return request<ComplaintWorkOrder>(`${API_BASE}/orders/complaints/${id}/review`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function refundComplaintWorkOrder(id: number, data: { refundAmount?: number; refundRemark?: string }) {
+    return request<ComplaintWorkOrder>(`${API_BASE}/orders/complaints/${id}/refund`, {
+        method: 'POST',
+        data,
+    });
+}
+
+
 
 // ---------------------- Orders / Dispatch Fix (Archived) ----------------------
 // 存单后修复：单个参与者进度修正（后端一次只支持一个 participantId）
@@ -2179,8 +2490,13 @@ export async function getWithdrawQrCodeUrl() {
 /**
  * 获取平台钱包统计信息
  */
-export async function getWalletStatistics() {
-    return request<{ url: string | null }>(`${API_BASE}/wallet/statistics`, {
+export async function getStaffWalletStatistics() {
+    return request<{
+        totalAvailableBalance: number;
+        totalFrozenBalance: number;
+        totalDepositBalance: number;
+        totalBalance: number;
+    }>(`${API_BASE}/users/staff/wallet-statistics`, {
         method: 'GET',
     });
 }

@@ -8,6 +8,7 @@ import {
     Col,
     Collapse,
     Descriptions,
+    Divider,
     Drawer,
     FloatButton,
     Form,
@@ -44,7 +45,10 @@ import OrderUpsertModal from './components/OrderForm';
 
 import {
     adjustSettlementFinalEarnings,
+    adminAcceptDispatch,
     assignDispatch,
+    archiveDispatch,
+    completeDispatch,
     confirmCompleteOrder,
     getEnumDicts,
     getOrderDetail,
@@ -52,6 +56,8 @@ import {
     markOrderPaid,
     recalculateOrderSettlements,
     refundOrder, rollbackWrongSettlementReversals,
+    rollbackDispatchToAccepted,
+    rollbackDispatchToArchived,
     updateArchivedProgressTotal,
     updateDispatchParticipants,
     updateOrder,
@@ -89,6 +95,19 @@ const OrderDetailPage: React.FC = () => {
     const [dispatchSubmitting, setDispatchSubmitting] = useState(false);
     const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
     const [dispatchRemark, setDispatchRemark] = useState<string>('');
+    const [finishOpen, setFinishOpen] = useState(false);
+    const [finishMode, setFinishMode] = useState<'ARCHIVE' | 'COMPLETE'>('ARCHIVE');
+    const [finishSubmitting, setFinishSubmitting] = useState(false);
+    const [guaranteedCompleteRemainingWan, setGuaranteedCompleteRemainingWan] = useState<number | null>(null);
+    const [tick, setTick] = useState(Date.now());
+    const [finishForm] = Form.useForm();
+    const watchedTotalProgressWan = Form.useWatch('totalProgressWan', finishForm);
+    const watchedDeductMinutesOption = Form.useWatch('deductMinutesOption', finishForm);
+    const watchedDeductMinutesCustom = Form.useWatch('deductMinutesCustom', finishForm);
+    const [forceActionOpen, setForceActionOpen] = useState(false);
+    const [forceActionSubmitting, setForceActionSubmitting] = useState(false);
+    const [forceActionMode, setForceActionMode] = useState<'ADMIN_ACCEPT' | 'ROLLBACK_ACCEPTED' | 'ROLLBACK_ARCHIVED'>('ADMIN_ACCEPT');
+    const [forceActionRemark, setForceActionRemark] = useState('');
 
     // paidAmount modal (hourly only)
     const [paidModalOpen, setPaidModalOpen] = useState(false);
@@ -304,6 +323,234 @@ const OrderDetailPage: React.FC = () => {
             message.error(e?.response?.data?.message || '反修复冲正流水失败');
         } finally {
             setMarkPaidSubmitting(false);
+        }
+    };
+
+    const openForceAction = (mode: 'ADMIN_ACCEPT' | 'ROLLBACK_ACCEPTED' | 'ROLLBACK_ARCHIVED') => {
+        setForceActionMode(mode);
+        setForceActionRemark('');
+        setForceActionOpen(true);
+    };
+
+    const submitForceAction = async () => {
+        if (!currentDispatch?.id) return;
+        const remark = String(forceActionRemark || '').trim();
+        if (!remark) {
+            message.warning('请填写处理原因');
+            return;
+        }
+
+        try {
+            setForceActionSubmitting(true);
+            if (forceActionMode === 'ADMIN_ACCEPT') {
+                await adminAcceptDispatch(Number(currentDispatch.id), { remark });
+                message.success('已代为接单');
+            } else if (forceActionMode === 'ROLLBACK_ACCEPTED') {
+                await rollbackDispatchToAccepted(Number(currentDispatch.id), { remark });
+                message.success('已回退到接单中');
+            } else {
+                await rollbackDispatchToArchived(Number(currentDispatch.id), { remark });
+                message.success('已回退到存单');
+            }
+            setForceActionOpen(false);
+            await loadDetail();
+        } catch (e: any) {
+            message.error(
+                e?.response?.data?.message
+                || (forceActionMode === 'ADMIN_ACCEPT' ? '代接单失败' : '回退失败'),
+            );
+        } finally {
+            setForceActionSubmitting(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!finishOpen) return;
+        const timer = window.setInterval(() => setTick(Date.now()), 30_000);
+        return () => window.clearInterval(timer);
+    }, [finishOpen]);
+
+    const openFinish = async (row: any, mode: 'ARCHIVE' | 'COMPLETE') => {
+        setFinishMode(mode);
+
+        let ps = participantsActive(row);
+        if (!ps || ps.length === 0) {
+            try {
+                const orderDetail = await getOrderDetail(Number(order?.id));
+                const dispatches = Array.isArray(orderDetail?.dispatches) ? orderDetail.dispatches : [];
+                const thisRound = dispatches.find((d: any) => Number(d?.id) === Number(row?.id));
+                const parts = thisRound?.participants || [];
+                ps = (Array.isArray(parts) ? parts : []).filter((p: any) => p?.isActive !== false && !p?.rejectedAt);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        const safePs = Array.isArray(ps) ? ps : [];
+        finishForm.setFieldsValue({
+            remark: '',
+            deductMinutesOption: undefined,
+            deductMinutesCustom: undefined,
+            totalProgressWan: 0,
+            progresses: safePs.map((p: any) => ({
+                userId: Number(p.userId),
+                progressBaseWan: 0,
+            })),
+        });
+
+        if (isGuaranteed && mode === 'COMPLETE') {
+            try {
+                const detail = await getOrderDetail(Number(order?.id));
+                const base = Number(detail?.baseAmountWan ?? 0);
+                const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+                let archivedProgress = 0;
+                for (const d of dispatches) {
+                    if (String(d?.status) !== 'ARCHIVED') continue;
+                    const parts = Array.isArray(d?.participants) ? d.participants : [];
+                    for (const p of parts) archivedProgress += Number(p?.progressBaseWan ?? 0);
+                }
+                const remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
+                setGuaranteedCompleteRemainingWan(remaining);
+                finishForm.setFieldsValue({ totalProgressWan: remaining });
+            } catch (e) {
+                console.error(e);
+                setGuaranteedCompleteRemainingWan(null);
+            }
+        } else {
+            setGuaranteedCompleteRemainingWan(null);
+        }
+
+        setTick(Date.now());
+        setFinishOpen(true);
+    };
+
+    const submitFinish = async () => {
+        const runSubmit = async (modeToRun: 'ARCHIVE' | 'COMPLETE', values: any) => {
+            if (!currentDispatch?.id) return;
+
+            setFinishSubmitting(true);
+            try {
+                const ps = participantsActive(currentDispatch);
+                const count = ps.length || 1;
+
+                let progresses = finishForm.getFieldValue('progresses');
+                if (!Array.isArray(progresses) || progresses.length === 0) {
+                    progresses = ps.map((p: any) => ({ userId: Number(p.userId), progressBaseWan: 0 }));
+                }
+
+                if (isGuaranteed && modeToRun === 'ARCHIVE') {
+                    const total = Number(values.totalProgressWan);
+                    if (!Number.isFinite(total)) {
+                        message.error('存单请填写保底进度');
+                        return;
+                    }
+                    const each = total / count;
+                    progresses = ps.map((p: any) => ({ userId: Number(p.userId), progressBaseWan: each }));
+                }
+
+                if (isGuaranteed && modeToRun === 'COMPLETE') {
+                    progresses = undefined;
+                }
+
+                const payload: any = {
+                    remark: values.remark || undefined,
+                    progresses: progresses || undefined,
+                };
+
+                if (isHourly) {
+                    const opt = String(values.deductMinutesOption || '');
+                    const startAt = getHourlyStartAt(currentDispatch);
+                    const totalMinutes = Math.max(0, dayjs().diff(startAt, 'minute'));
+                    let deductMinutesValue = 0;
+
+                    if (/^M\d+$/.test(opt)) {
+                        deductMinutesValue = Number(opt.slice(1)) || 0;
+                    } else if (opt === 'CUSTOM') {
+                        deductMinutesValue = Math.max(0, Math.floor(Number(values.deductMinutesCustom || 0)));
+                    } else if (opt === 'ALL') {
+                        deductMinutesValue = totalMinutes;
+                    }
+
+                    deductMinutesValue = Math.max(0, Math.min(totalMinutes, Math.floor(deductMinutesValue)));
+                    const billableMinutes = Math.max(0, totalMinutes - deductMinutesValue);
+                    const billableHours = billableMinutes > 0 ? calcHourlyChargeHours(billableMinutes).hours : 0;
+
+                    let deductMinutesEnum: any = undefined;
+                    if (/^M(10|20|30|40|50|60)$/.test(opt)) {
+                        deductMinutesEnum = opt;
+                    }
+
+                    payload.deductMinutes = deductMinutesEnum;
+                    payload.deductMinutesValue = deductMinutesValue;
+                    payload.billableMinutes = billableMinutes;
+                    payload.billableHours = billableHours;
+                    payload.progresses = progresses;
+                }
+
+                if (modeToRun === 'ARCHIVE') {
+                    await archiveDispatch(Number(currentDispatch.id), payload);
+                    message.success('已存单');
+                } else {
+                    await completeDispatch(Number(currentDispatch.id), payload);
+                    message.success('已结单');
+                }
+
+                setFinishOpen(false);
+                await loadDetail();
+            } finally {
+                setFinishSubmitting(false);
+            }
+        };
+
+        try {
+            const values = await finishForm.validateFields();
+            if (!currentDispatch?.id) return;
+
+            if (isGuaranteed && finishMode === 'ARCHIVE') {
+                const total = Number(values.totalProgressWan);
+                if (!Number.isFinite(total)) {
+                    message.error('存单请填写保底进度');
+                    return;
+                }
+
+                let remaining = 0;
+                try {
+                    const detail = await getOrderDetail(Number(order?.id));
+                    const base = Number(detail?.baseAmountWan ?? 0);
+                    const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+                    let archivedProgress = 0;
+                    for (const d of dispatches) {
+                        if (String(d?.status) !== 'ARCHIVED') continue;
+                        const parts = Array.isArray(d?.participants) ? d.participants : [];
+                        for (const p of parts) archivedProgress += Number(p?.progressBaseWan ?? 0);
+                    }
+                    remaining = Number.isFinite(base) ? Math.max(0, base - archivedProgress) : 0;
+                } catch (e) {
+                    remaining = 0;
+                }
+
+                if (total >= remaining && remaining > 0) {
+                    Modal.confirm({
+                        title: '进度已达到/超出剩余保底',
+                        content:
+                            `你录入的进度为 ${total} 万，已 ≥ 当前剩余保底 ${remaining} 万。\n` +
+                            `若继续，将直接结单并走结单逻辑。\n` +
+                            `确认继续吗？`,
+                        okText: '确认结单',
+                        cancelText: '返回修改',
+                        onOk: async () => {
+                            await runSubmit('COMPLETE', values);
+                        },
+                    });
+                    return;
+                }
+            }
+
+            await runSubmit(finishMode, values);
+        } catch (e: any) {
+            if (e?.errorFields) return;
+            message.error(e?.response?.data?.message || (finishMode === 'ARCHIVE' ? '存单失败' : '结单失败'));
+            setFinishSubmitting(false);
         }
     };
 
@@ -1185,6 +1432,7 @@ const OrderDetailPage: React.FC = () => {
         );
         const paidAmount = Number(o?.paidAmount ?? finalPayableAmount ?? 0);
         const orderSourceLabel = String(o?.orderSourceLabel || o?.orderSource || '-');
+        const receiptMeta = (o?.latestPayment?.notifyRaw as any)?.receiptMeta || {};
         const financeLines = [
             `商品小计：¥${Number.isFinite(originalAmount) ? originalAmount.toFixed(2) : '0.00'}`,
         ];
@@ -1192,6 +1440,14 @@ const OrderDetailPage: React.FC = () => {
             financeLines.push(`人工调整：${manualAdjustAmount > 0 ? '+ ' : '- '}¥${Math.abs(manualAdjustAmount).toFixed(2)}`);
         }
         financeLines.push(`实付金额：¥${Number.isFinite(paidAmount) ? paidAmount.toFixed(2) : finalPayableAmount.toFixed(2)}`);
+        if (String(o?.latestPayment?.channel || '').trim().toUpperCase() === 'BALANCE') {
+            const deducted = Number(receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
+            const balanceAfter = Number(receiptMeta?.memberBalanceAfter ?? 0);
+            const rewardPointsPreview = Number(receiptMeta?.rewardPointsPreview ?? 0);
+            financeLines.push(`储值扣除：¥${deducted.toFixed(2)}`);
+            financeLines.push(`储值余额：¥${balanceAfter.toFixed(2)}`);
+            financeLines.push(`预计增加积分：${rewardPointsPreview}`);
+        }
 
         const customerText = [
             `下单项目：${projectName}`,
@@ -1267,6 +1523,27 @@ const OrderDetailPage: React.FC = () => {
         return !dispatchDisabledReason;
     }, [dispatchDisabledReason]);
 
+    const canAdminAcceptCurrentDispatch = useMemo(() => {
+        return String(currentDispatch?.status || '') === 'WAIT_ACCEPT' && Number(currentDispatch?.id || 0) > 0;
+    }, [currentDispatch]);
+
+    const canRollbackCurrentDispatchToAccepted = useMemo(() => {
+        return String(currentDispatch?.status || '') === 'ARCHIVED'
+            && String(order?.status || '') === 'ARCHIVED'
+            && Number(currentDispatch?.id || 0) > 0;
+    }, [currentDispatch, order]);
+
+    const canRollbackCurrentDispatchToArchived = useMemo(() => {
+        return String(currentDispatch?.status || '') === 'COMPLETED'
+            && String(order?.status || '') === 'COMPLETED_PENDING_CONFIRM'
+            && Number(currentDispatch?.id || 0) > 0;
+    }, [currentDispatch, order]);
+
+    const canCustomerServiceFinishCurrentDispatch = useMemo(() => {
+        const status = String(currentDispatch?.status || '');
+        return Number(currentDispatch?.id || 0) > 0 && ['WAIT_ACCEPT', 'ACCEPTED'].includes(status);
+    }, [currentDispatch]);
+
     const openAdjust = (settlement: any) => {
         setCurrentSettlement(settlement);
         adjustForm.setFieldsValue({
@@ -1304,6 +1581,35 @@ const OrderDetailPage: React.FC = () => {
     const isHourly = billingMode === 'HOURLY'; //小时单
     const isGuaranteed = billingMode === 'GUARANTEED'; //保底单
     const isModePlay = billingMode === 'MODE_PLAY';  //玩法单
+
+    const participantsActive = (dispatchRow: any) => {
+        const ps = dispatchRow?.participants || dispatchRow?.order?.currentDispatch?.participants || [];
+        return (Array.isArray(ps) ? ps : []).filter((p: any) => p?.isActive !== false && !p?.rejectedAt);
+    };
+
+    const getHourlyStartAt = (dispatchRow: any) => {
+        const d = dispatchRow || {};
+        const orderRow = d?.order || {};
+        const cd = orderRow?.currentDispatch || {};
+        const acceptedAllAt = d?.acceptedAllAt || cd?.acceptedAllAt;
+        if (acceptedAllAt) return dayjs(acceptedAllAt);
+        if (d?.assignedAt) return dayjs(d.assignedAt);
+        if (orderRow?.orderTime) return dayjs(orderRow.orderTime);
+        if (orderRow?.createdAt) return dayjs(orderRow.createdAt);
+        return dayjs();
+    };
+
+    const calcHourlyChargeHours = (diffMinutesRaw: number) => {
+        const diffMinutes = Math.max(0, Math.floor(Number(diffMinutesRaw || 0)));
+        const baseHours = Math.floor(diffMinutes / 60);
+        const rem = diffMinutes % 60;
+        let add = 0;
+        if (rem >= 18 && rem <= 45) add = 0.5;
+        else if (rem > 45) add = 1;
+        let hours = baseHours + add;
+        if (hours < 0.5) hours = 0.5;
+        return { diffMinutes, hours };
+    };
 
     const t = (group: keyof DictMap, key: any, fallback?: string) => {
         const k = String(key ?? '');
@@ -1957,6 +2263,63 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         </Col>
                     ) : null}
+                    {canAdminAcceptCurrentDispatch ? (
+                        <Col span={12}>
+                            <Button
+                                block
+                                style={{height: 44, borderRadius: 14}}
+                                onClick={() => openForceAction('ADMIN_ACCEPT')}
+                            >
+                                客服代接单
+                            </Button>
+                        </Col>
+                    ) : null}
+                    {canCustomerServiceFinishCurrentDispatch ? (
+                        <Col span={12}>
+                            <Button
+                                block
+                                style={{height: 44, borderRadius: 14}}
+                                onClick={() => openFinish(currentDispatch, 'ARCHIVE')}
+                            >
+                                客服存单
+                            </Button>
+                        </Col>
+                    ) : null}
+                    {canCustomerServiceFinishCurrentDispatch ? (
+                        <Col span={12}>
+                            <Button
+                                block
+                                style={{height: 44, borderRadius: 14}}
+                                onClick={() => openFinish(currentDispatch, 'COMPLETE')}
+                            >
+                                客服结单
+                            </Button>
+                        </Col>
+                    ) : null}
+                    {canRollbackCurrentDispatchToAccepted ? (
+                        <Col span={12}>
+                            <Button
+                                block
+                                danger
+                                style={{height: 44, borderRadius: 14}}
+                                onClick={() => openForceAction('ROLLBACK_ACCEPTED')}
+                            >
+                                回退到接单中
+                            </Button>
+                        </Col>
+                    ) : null}
+                    {canRollbackCurrentDispatchToArchived ? (
+                        <Col span={12}>
+                            <Button
+                                block
+                                danger
+                                style={{height: 44, borderRadius: 14}}
+                                onClick={() => openForceAction('ROLLBACK_ARCHIVED')}
+                            >
+                                回退到存单
+                            </Button>
+                        </Col>
+                    ) : null}
                 </Row>
 
                 <Space size={8} wrap>
@@ -2358,6 +2721,31 @@ const OrderDetailPage: React.FC = () => {
                         {String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
                             <Button type="primary" icon={<CheckCircleOutlined/>} onClick={openConfirmComplete}>
                                 确认结单
+                            </Button>
+                        ) : null}
+                        {canAdminAcceptCurrentDispatch ? (
+                            <Button onClick={() => openForceAction('ADMIN_ACCEPT')}>
+                                客服代接单
+                            </Button>
+                        ) : null}
+                        {canCustomerServiceFinishCurrentDispatch ? (
+                            <Button onClick={() => openFinish(currentDispatch, 'ARCHIVE')}>
+                                客服存单
+                            </Button>
+                        ) : null}
+                        {canCustomerServiceFinishCurrentDispatch ? (
+                            <Button onClick={() => openFinish(currentDispatch, 'COMPLETE')}>
+                                客服结单
+                            </Button>
+                        ) : null}
+                        {canRollbackCurrentDispatchToAccepted ? (
+                            <Button danger onClick={() => openForceAction('ROLLBACK_ACCEPTED')}>
+                                回退到接单中
+                            </Button>
+                        ) : null}
+                        {canRollbackCurrentDispatchToArchived ? (
+                            <Button danger onClick={() => openForceAction('ROLLBACK_ARCHIVED')}>
+                                回退到存单
                             </Button>
                         ) : null}
 
@@ -2887,6 +3275,171 @@ const OrderDetailPage: React.FC = () => {
                     ) : null}
                 </Modal>
             )}
+
+            {/* 小时单补收：修改实付金额 */}
+            <Modal
+                open={finishOpen}
+                title={finishMode === 'ARCHIVE' ? '客服存单' : '客服结单'}
+                onCancel={() => setFinishOpen(false)}
+                onOk={submitFinish}
+                confirmLoading={finishSubmitting}
+                destroyOnClose
+                width={isMobile ? '96vw' : 720}
+            >
+                <Form form={finishForm} layout="vertical">
+                    {currentDispatch && isHourly ? (
+                        <>
+                            <Divider style={{ marginTop: 0 }}>小时单</Divider>
+                            {(() => {
+                                const startAt = getHourlyStartAt(currentDispatch);
+                                const nowAt = dayjs(tick);
+                                const diffMinutesRaw = nowAt.diff(startAt, 'minute');
+                                const { diffMinutes, hours } = calcHourlyChargeHours(diffMinutesRaw);
+                                const opt = String(watchedDeductMinutesOption || '');
+                                let deductMinutes = 0;
+
+                                if (/^M\d+$/.test(opt)) {
+                                    deductMinutes = Number(opt.slice(1)) || 0;
+                                } else if (opt === 'CUSTOM') {
+                                    deductMinutes = Number(watchedDeductMinutesCustom || 0) || 0;
+                                } else if (opt === 'ALL') {
+                                    deductMinutes = diffMinutes;
+                                }
+
+                                deductMinutes = Math.max(0, Math.min(diffMinutes, Math.floor(deductMinutes)));
+                                const afterMinutes = Math.max(0, diffMinutes - deductMinutes);
+                                let afterHours = 0;
+                                if (afterMinutes > 0) {
+                                    afterHours = calcHourlyChargeHours(afterMinutes).hours;
+                                }
+
+                                return (
+                                    <div style={{ marginBottom: 10, lineHeight: 1.9 }}>
+                                        <div style={{ color: 'rgba(0,0,0,.45)' }}>
+                                            接单时间：<Tag>{startAt.format('YYYY-MM-DD HH:mm')}</Tag>
+                                        </div>
+                                        <div style={{ color: 'rgba(0,0,0,.45)' }}>
+                                            当前时间：<Tag>{nowAt.format('YYYY-MM-DD HH:mm')}</Tag>
+                                        </div>
+                                        <div style={{ marginTop: 6 }}>
+                                            <Tag color="gold">已进行</Tag>
+                                            <span style={{ fontWeight: 700 }}>{diffMinutes}</span> 分钟
+                                            <span style={{ marginLeft: 10 }} />
+                                            <Tag color="blue">计费时长</Tag>
+                                            <span style={{ fontWeight: 800, fontSize: 16 }}>{hours}</span> 小时
+                                        </div>
+                                        <div style={{ marginTop: 6 }}>
+                                            <Tag color="red">本次减免</Tag>
+                                            <span style={{ fontWeight: 700 }}>{deductMinutes}</span> 分钟
+                                            <span style={{ marginLeft: 10 }} />
+                                            <Tag color="green">减免后</Tag>
+                                            <span style={{ fontWeight: 800, fontSize: 16 }}>{afterHours}</span> 小时
+                                            <span style={{ color: 'rgba(0,0,0,.45)', marginLeft: 6 }}>/ {afterMinutes} 分钟</span>
+                                        </div>
+                                        <div style={{ marginTop: 8, fontSize: 12, color: 'rgba(0,0,0,.45)' }}>
+                                            规则：0-18分钟不计算；18-45分钟计0.5小时；大于45分钟计1小时；非全免时最低计时0.5小时
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <Form.Item name="deductMinutesOption" label="减免选项（可选）">
+                                <Select
+                                    allowClear
+                                    placeholder="选择减免时长（或全免/自定义）"
+                                    options={[
+                                        { label: '减免 10 分钟', value: 'M10' },
+                                        { label: '减免 20 分钟', value: 'M20' },
+                                        { label: '减免 30 分钟', value: 'M30' },
+                                        { label: '减免 60 分钟', value: 'M60' },
+                                        { label: '全免（扣到 0）', value: 'ALL' },
+                                        { label: '手动输入分钟数', value: 'CUSTOM' },
+                                    ]}
+                                />
+                            </Form.Item>
+
+                            {String(watchedDeductMinutesOption || '') === 'CUSTOM' ? (
+                                <Form.Item
+                                    name="deductMinutesCustom"
+                                    label="自定义减免时长(分钟)"
+                                    rules={[{ required: true, message: '请输入自定义减免分钟' }]}
+                                >
+                                    <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="例如：90" />
+                                </Form.Item>
+                            ) : null}
+                        </>
+                    ) : null}
+
+                    {currentDispatch && isGuaranteed ? (
+                        <>
+                            <Divider style={{ marginTop: 0 }}>保底单</Divider>
+
+                            {finishMode === 'COMPLETE' ? (
+                                <Card size="small" style={{ marginBottom: 12 }}>
+                                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
+                                        本轮结单将按剩余保底兜底补齐。当前剩余：
+                                    </div>
+                                    <div style={{ fontSize: 18, fontWeight: 600 }}>
+                                        {guaranteedCompleteRemainingWan == null ? '-' : guaranteedCompleteRemainingWan} 万
+                                    </div>
+                                </Card>
+                            ) : (
+                                <Form.Item
+                                    name="totalProgressWan"
+                                    label="本轮总保底进度(万)"
+                                    rules={[{ required: true, message: '请填写本轮总保底进度' }]}
+                                >
+                                    <InputNumber style={{ width: '100%' }} />
+                                </Form.Item>
+                            )}
+
+                            {finishMode === 'ARCHIVE' ? (
+                                <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12, marginTop: -6 }}>
+                                    系统会按参与者人数均分：当前每人约 {(Number(watchedTotalProgressWan || 0) / (participantsActive(currentDispatch).length || 1)).toFixed(2)} 万
+                                </div>
+                            ) : null}
+                        </>
+                    ) : null}
+
+                    <Form.Item
+                        name="remark"
+                        label="处理原因"
+                        rules={[{ required: true, message: `请填写客服${finishMode === 'ARCHIVE' ? '存单' : '结单'}原因` }]}
+                    >
+                        <Input.TextArea rows={3} placeholder="异常说明/备注" />
+                    </Form.Item>
+                </Form>
+            </Modal>
+
+            <Modal
+                open={forceActionOpen}
+                title={
+                    forceActionMode === 'ADMIN_ACCEPT'
+                        ? '客服代接单'
+                        : forceActionMode === 'ROLLBACK_ACCEPTED'
+                            ? '回退到接单中'
+                            : '回退到存单'
+                }
+                onCancel={() => setForceActionOpen(false)}
+                onOk={submitForceAction}
+                confirmLoading={forceActionSubmitting}
+                destroyOnClose
+            >
+                <Form layout="vertical">
+                    <Form.Item
+                        label="处理原因"
+                        required
+                        extra="该原因会进入订单操作日志，用于审计追溯。"
+                    >
+                        <Input.TextArea
+                            rows={4}
+                            value={forceActionRemark}
+                            onChange={(e) => setForceActionRemark(e.target.value)}
+                            placeholder="请填写本次客服强制处理的具体原因"
+                        />
+                    </Form.Item>
+                </Form>
+            </Modal>
 
             {/* 小时单补收：修改实付金额 */}
             <Modal

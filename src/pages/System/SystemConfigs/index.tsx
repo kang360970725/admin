@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, Form, Input, message, Modal, Segmented, Select, Space, Switch, Tag, Typography } from 'antd';
+import { Alert, Button, Divider, Form, Input, message, Modal, Segmented, Select, Space, Switch, Tag, Typography } from 'antd';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { listSystemConfigs, SystemConfigItem, upsertSystemConfig } from '@/services/api';
@@ -32,6 +32,225 @@ const categoryMeta = {
 } as const;
 
 type CategoryKey = keyof typeof categoryMeta;
+
+type SubscribeTemplateSection = {
+  enabled?: boolean;
+  title?: string;
+  description?: string;
+  templateId?: string;
+  page?: string;
+  fields?: Record<string, string>;
+};
+
+type SubscribeTemplateConfig = {
+  orderProgress: SubscribeTemplateSection;
+  memberAsset: SubscribeTemplateSection;
+  afterSalesResult: SubscribeTemplateSection;
+  marketingActivity: SubscribeTemplateSection;
+};
+
+const SUBSCRIBE_TEMPLATE_CONFIG_KEY = 'wechat_mini_subscribe_message_templates';
+
+const subscribeTemplateFieldMeta = {
+  orderProgress: {
+    label: '订单进度提醒',
+    description: '建议用于待派单、待接单、服务中、待评价、已评价、退款等状态变化',
+    fields: [
+      { key: 'orderNo', label: '订单号字段' },
+      { key: 'projectName', label: '商品名称字段' },
+      { key: 'status', label: '状态字段' },
+      { key: 'updatedAt', label: '时间字段' },
+      { key: 'remark', label: '备注字段' },
+    ],
+  },
+  memberAsset: {
+    label: '会员资产变动提醒',
+    description: '建议用于积分到账、成长值变动、退款回退、钱包资产变化',
+    fields: [
+      { key: 'assetType', label: '资产类型字段' },
+      { key: 'changeAmount', label: '变动金额字段' },
+      { key: 'balanceAfter', label: '变动后余额字段' },
+      { key: 'updatedAt', label: '时间字段' },
+      { key: 'remark', label: '备注字段' },
+    ],
+  },
+  afterSalesResult: {
+    label: '售后/退款处理结果提醒',
+    description: '建议用于审核通过、审核驳回、退款完成等结果提醒',
+    fields: [
+      { key: 'orderNo', label: '订单号字段' },
+      { key: 'result', label: '处理结果字段' },
+      { key: 'refundAmount', label: '退款金额字段' },
+      { key: 'reviewedAt', label: '处理时间字段' },
+      { key: 'remark', label: '备注字段' },
+    ],
+  },
+  marketingActivity: {
+    label: '新玩法活动通知',
+    description: '建议用于活动上新、限时玩法、福利发放提醒',
+    fields: [
+      { key: 'activityName', label: '活动名称字段' },
+      { key: 'startAt', label: '开始时间字段' },
+      { key: 'benefit', label: '福利亮点字段' },
+      { key: 'remark', label: '补充说明字段' },
+    ],
+  },
+} as const;
+
+function getDefaultSubscribeTemplateConfig(): SubscribeTemplateConfig {
+  return {
+    orderProgress: {
+      enabled: false,
+      title: '订单进度提醒',
+      description: '用于提醒订单创建、派单、接单、完成、退款等进度变化',
+      templateId: '',
+      page: '/pages/order-details/index',
+      fields: {
+        orderNo: 'character_string1',
+        projectName: 'thing2',
+        status: 'thing3',
+        updatedAt: 'time4',
+        remark: 'thing5',
+      },
+    },
+    memberAsset: {
+      enabled: false,
+      title: '会员资产变动提醒',
+      description: '用于提醒积分到账、成长值变动、退款回退等会员资产变化',
+      templateId: '',
+      page: '/pages/membership/index',
+      fields: {
+        assetType: 'thing1',
+        changeAmount: 'thing2',
+        balanceAfter: 'thing3',
+        updatedAt: 'time4',
+        remark: 'thing5',
+      },
+    },
+    afterSalesResult: {
+      enabled: false,
+      title: '售后/退款处理结果提醒',
+      description: '用于提醒售后审核通过、审核驳回、退款完成等结果',
+      templateId: '',
+      page: '/pages/after-sales/index',
+      fields: {
+        orderNo: 'character_string1',
+        result: 'thing2',
+        refundAmount: 'amount3',
+        reviewedAt: 'time4',
+        remark: 'thing5',
+      },
+    },
+    marketingActivity: {
+      enabled: false,
+      title: '新玩法活动通知',
+      description: '用于通知新玩法上新、活动开售、福利提醒',
+      templateId: '',
+      page: '/pages/index/index',
+      fields: {
+        activityName: 'thing1',
+        startAt: 'time2',
+        benefit: 'thing3',
+        remark: 'thing4',
+      },
+    },
+  };
+}
+
+function parseSubscribeTemplateConfig(row: SystemConfigItem | null | undefined): SubscribeTemplateConfig {
+  const fallback = getDefaultSubscribeTemplateConfig();
+  const raw = String(row?.value ?? '').trim();
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw || '{}');
+    return {
+      orderProgress: {
+        ...fallback.orderProgress,
+        ...(parsed?.orderProgress || {}),
+        fields: { ...fallback.orderProgress.fields, ...(parsed?.orderProgress?.fields || {}) },
+      },
+      memberAsset: {
+        ...fallback.memberAsset,
+        ...(parsed?.memberAsset || {}),
+        fields: { ...fallback.memberAsset.fields, ...(parsed?.memberAsset?.fields || {}) },
+      },
+      afterSalesResult: {
+        ...fallback.afterSalesResult,
+        ...(parsed?.afterSalesResult || {}),
+        fields: { ...fallback.afterSalesResult.fields, ...(parsed?.afterSalesResult?.fields || {}) },
+      },
+      marketingActivity: {
+        ...fallback.marketingActivity,
+        ...(parsed?.marketingActivity || {}),
+        fields: { ...fallback.marketingActivity.fields, ...(parsed?.marketingActivity?.fields || {}) },
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function buildSubscribeTemplateConfigValue(values: any) {
+  const current = values?.subscribeTemplates || {};
+  const result = {
+    orderProgress: {
+      enabled: Boolean(current?.orderProgress?.enabled),
+      title: String(current?.orderProgress?.title || '').trim(),
+      description: String(current?.orderProgress?.description || '').trim(),
+      templateId: String(current?.orderProgress?.templateId || '').trim(),
+      page: String(current?.orderProgress?.page || '').trim(),
+      fields: {
+        orderNo: String(current?.orderProgress?.fields?.orderNo || '').trim(),
+        projectName: String(current?.orderProgress?.fields?.projectName || '').trim(),
+        status: String(current?.orderProgress?.fields?.status || '').trim(),
+        updatedAt: String(current?.orderProgress?.fields?.updatedAt || '').trim(),
+        remark: String(current?.orderProgress?.fields?.remark || '').trim(),
+      },
+    },
+    memberAsset: {
+      enabled: Boolean(current?.memberAsset?.enabled),
+      title: String(current?.memberAsset?.title || '').trim(),
+      description: String(current?.memberAsset?.description || '').trim(),
+      templateId: String(current?.memberAsset?.templateId || '').trim(),
+      page: String(current?.memberAsset?.page || '').trim(),
+      fields: {
+        assetType: String(current?.memberAsset?.fields?.assetType || '').trim(),
+        changeAmount: String(current?.memberAsset?.fields?.changeAmount || '').trim(),
+        balanceAfter: String(current?.memberAsset?.fields?.balanceAfter || '').trim(),
+        updatedAt: String(current?.memberAsset?.fields?.updatedAt || '').trim(),
+        remark: String(current?.memberAsset?.fields?.remark || '').trim(),
+      },
+    },
+    afterSalesResult: {
+      enabled: Boolean(current?.afterSalesResult?.enabled),
+      title: String(current?.afterSalesResult?.title || '').trim(),
+      description: String(current?.afterSalesResult?.description || '').trim(),
+      templateId: String(current?.afterSalesResult?.templateId || '').trim(),
+      page: String(current?.afterSalesResult?.page || '').trim(),
+      fields: {
+        orderNo: String(current?.afterSalesResult?.fields?.orderNo || '').trim(),
+        result: String(current?.afterSalesResult?.fields?.result || '').trim(),
+        refundAmount: String(current?.afterSalesResult?.fields?.refundAmount || '').trim(),
+        reviewedAt: String(current?.afterSalesResult?.fields?.reviewedAt || '').trim(),
+        remark: String(current?.afterSalesResult?.fields?.remark || '').trim(),
+      },
+    },
+    marketingActivity: {
+      enabled: Boolean(current?.marketingActivity?.enabled),
+      title: String(current?.marketingActivity?.title || '').trim(),
+      description: String(current?.marketingActivity?.description || '').trim(),
+      templateId: String(current?.marketingActivity?.templateId || '').trim(),
+      page: String(current?.marketingActivity?.page || '').trim(),
+      fields: {
+        activityName: String(current?.marketingActivity?.fields?.activityName || '').trim(),
+        startAt: String(current?.marketingActivity?.fields?.startAt || '').trim(),
+        benefit: String(current?.marketingActivity?.fields?.benefit || '').trim(),
+        remark: String(current?.marketingActivity?.fields?.remark || '').trim(),
+      },
+    },
+  };
+  return JSON.stringify(result, null, 2);
+}
 
 function resolveCategory(row: SystemConfigItem): CategoryKey {
   const key = String(row.key || '').trim();
@@ -85,12 +304,18 @@ const SystemConfigsPage: React.FC = () => {
   const openEdit = (row: SystemConfigItem) => {
     setEditing(row);
     setVisible(true);
-    form.setFieldsValue({
+    const nextValues: Record<string, any> = {
       key: row.key,
       value: formatConfigValue(row),
       valueType: row.valueType,
       remark: row.remark,
       enabled: row.enabled,
+    };
+    if (String(row.key || '').trim() === SUBSCRIBE_TEMPLATE_CONFIG_KEY) {
+      nextValues.subscribeTemplates = parseSubscribeTemplateConfig(row);
+    }
+    form.setFieldsValue({
+      ...nextValues,
     });
   };
 
@@ -236,8 +461,11 @@ const SystemConfigsPage: React.FC = () => {
         onOk={async () => {
           try {
             const values = await form.validateFields();
-            const trimmedValue = String(values.value ?? '').trim();
-            if (values.valueType === 'JSON') {
+            const isSubscribeTemplateConfig = String(values.key || '').trim() === SUBSCRIBE_TEMPLATE_CONFIG_KEY;
+            const trimmedValue = isSubscribeTemplateConfig
+              ? buildSubscribeTemplateConfigValue(values)
+              : String(values.value ?? '').trim();
+            if (values.valueType === 'JSON' && !isSubscribeTemplateConfig) {
               JSON.parse(trimmedValue || '{}');
             }
             setSubmitting(true);
@@ -277,10 +505,67 @@ const SystemConfigsPage: React.FC = () => {
 
           <Form.Item
             noStyle
-            shouldUpdate={(prev, next) => prev.valueType !== next.valueType}
+            shouldUpdate={(prev, next) => prev.valueType !== next.valueType || prev.key !== next.key}
           >
             {({ getFieldValue }) => {
               const valueType = getFieldValue('valueType');
+              const configKey = String(getFieldValue('key') || '').trim();
+              const isSubscribeTemplateConfig = configKey === SUBSCRIBE_TEMPLATE_CONFIG_KEY;
+              if (isSubscribeTemplateConfig) {
+                return (
+                  <>
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      message="这里维护微信小程序订阅消息模板"
+                      description="模板ID、跳转页、字段关键词需要和微信公众平台后台实际模板保持一致，否则发送会被微信拒绝。"
+                    />
+                    {(Object.keys(subscribeTemplateFieldMeta) as Array<keyof typeof subscribeTemplateFieldMeta>).map((sectionKey, index) => {
+                      const section = subscribeTemplateFieldMeta[sectionKey];
+                      return (
+                        <div key={sectionKey}>
+                          {index > 0 ? <Divider /> : null}
+                          <Space direction="vertical" size={4} style={{ width: '100%', marginBottom: 12 }}>
+                            <Text strong>{section.label}</Text>
+                            <Text type="secondary">{section.description}</Text>
+                          </Space>
+
+                          <Form.Item label="启用" name={['subscribeTemplates', sectionKey, 'enabled']} valuePropName="checked">
+                            <Switch />
+                          </Form.Item>
+
+                          <Form.Item label="模板标题" name={['subscribeTemplates', sectionKey, 'title']} rules={[{ required: true, message: '请输入模板标题' }]}>
+                            <Input placeholder="例如 订单进度提醒" />
+                          </Form.Item>
+
+                          <Form.Item label="模板说明" name={['subscribeTemplates', sectionKey, 'description']}>
+                            <Input placeholder="用于后台识别和维护" />
+                          </Form.Item>
+
+                          <Form.Item label="模板ID" name={['subscribeTemplates', sectionKey, 'templateId']}>
+                            <Input placeholder="微信公众平台订阅消息模板ID" />
+                          </Form.Item>
+
+                          <Form.Item label="跳转页面" name={['subscribeTemplates', sectionKey, 'page']}>
+                            <Input placeholder="/pages/order-details/index" />
+                          </Form.Item>
+
+                          {section.fields.map((field) => (
+                            <Form.Item
+                              key={`${sectionKey}-${field.key}`}
+                              label={field.label}
+                              name={['subscribeTemplates', sectionKey, 'fields', field.key]}
+                            >
+                              <Input placeholder="例如 thing2 / character_string1 / time4" />
+                            </Form.Item>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </>
+                );
+              }
               return (
                 <Form.Item label="配置值" name="value" rules={[{ required: true, message: '请输入配置值' }]}>
                   <Input.TextArea

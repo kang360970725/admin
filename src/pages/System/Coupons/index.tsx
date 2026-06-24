@@ -23,6 +23,7 @@ import {
   getCouponTemplates,
   getGameProjectOptions,
   getGoodsCategoryTree,
+  getUsers,
   getUserCoupons,
   grantUserCoupon,
   updateCouponTemplateStatus,
@@ -96,6 +97,10 @@ const CouponsPage: React.FC = () => {
   const [formGrant] = Form.useForm();
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectOptions, setProjectOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const [grantTemplateLoading, setGrantTemplateLoading] = useState(false);
+  const [grantTemplateOptions, setGrantTemplateOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const [grantUserLoading, setGrantUserLoading] = useState(false);
+  const [grantUserOptions, setGrantUserOptions] = useState<Array<{ label: string; value: number }>>([]);
   const [categoryTreeOptions, setCategoryTreeOptions] = useState<Array<{ title: string; value: string; key: string; children?: any[] }>>([]);
   const [projectTargetKeys, setProjectTargetKeys] = useState<string[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Record<string, { label: string; value: number }>>({});
@@ -149,6 +154,45 @@ const CouponsPage: React.FC = () => {
     }
   };
 
+  const loadGrantTemplates = async () => {
+    setGrantTemplateLoading(true);
+    try {
+      const res: any = await getCouponTemplates({ page: 1, limit: 200, status: 'ACTIVE' });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setGrantTemplateOptions(
+        list.map((item: any) => ({
+          value: Number(item.id),
+          label: `${item?.name || '未命名模板'} #${item?.id} · ${templateTypeDict[String(item?.type || '')] || item?.type || '-'}`,
+        })),
+      );
+    } catch (e) {
+      console.error(e);
+      setGrantTemplateOptions([]);
+    } finally {
+      setGrantTemplateLoading(false);
+    }
+  };
+
+  const loadGrantUsers = async (keyword?: string) => {
+    setGrantUserLoading(true);
+    try {
+      const kw = String(keyword || '').trim();
+      const res: any = await getUsers({ page: 1, limit: 50, keyword: kw || undefined });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setGrantUserOptions(
+        list.map((item: any) => ({
+          value: Number(item.id),
+          label: `${item?.name || item?.realName || '未命名'}（${item?.phone || '-'}） #${item?.id}`,
+        })),
+      );
+    } catch (e) {
+      console.error(e);
+      setGrantUserOptions([]);
+    } finally {
+      setGrantUserLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!createOpen) return;
     formCreate.setFieldValue('applicableTargetIds', []);
@@ -191,6 +235,12 @@ const CouponsPage: React.FC = () => {
     void loadData(1, limit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  useEffect(() => {
+    if (!grantOpen) return;
+    void loadGrantTemplates();
+    void loadGrantUsers();
+  }, [grantOpen]);
 
   const templateColumns = useMemo(
     () => [
@@ -287,10 +337,16 @@ const CouponsPage: React.FC = () => {
             />
             <Button type="primary" onClick={() => loadData(1, limit)}>查询</Button>
             <Button onClick={() => setCreateOpen(true)}>新建模板</Button>
-            <Button onClick={() => setGrantOpen(true)}>发券</Button>
+            <Button onClick={() => setGrantOpen(true)}>手动发券</Button>
           </Space>
         ) : (
           <Space wrap style={{ marginBottom: 12 }}>
+            <Input
+              placeholder="用户姓名/手机号"
+              allowClear
+              style={{ width: 220 }}
+              onChange={(e) => setCouponFilter((s: any) => ({ ...s, keyword: e.target.value || undefined }))}
+            />
             <InputNumber
               placeholder="用户ID"
               style={{ width: 160 }}
@@ -438,7 +494,7 @@ const CouponsPage: React.FC = () => {
                 titles={['商品列表', '已选商品']}
                 targetKeys={projectTargetKeys}
                 onChange={(nextTargetKeys) => {
-                  setProjectTargetKeys(nextTargetKeys);
+                  setProjectTargetKeys(nextTargetKeys.map((key) => String(key)));
                   const merged: Record<string, { label: string; value: number }> = { ...selectedProjects };
                   projectOptions.forEach((x) => {
                     merged[String(x.value)] = x;
@@ -464,7 +520,6 @@ const CouponsPage: React.FC = () => {
                   description: x.label,
                 }))}
                 render={(item) => item.title}
-                loading={projectLoading}
                 listStyle={{ width: 280, height: 320 }}
               />
             </Form.Item>
@@ -514,7 +569,7 @@ const CouponsPage: React.FC = () => {
             const v = await formGrant.validateFields();
             setSubmitting(true);
             await grantUserCoupon({
-              userId: Number(v.userId),
+              userIds: Array.isArray(v.userIds) ? v.userIds.map((item: any) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
               templateId: Number(v.templateId),
               count: Number(v.count || 1),
               expiresAt: v.expiresAt ? dayjs(v.expiresAt).toISOString() : undefined,
@@ -531,11 +586,27 @@ const CouponsPage: React.FC = () => {
         confirmLoading={submitting}
       >
         <Form form={formGrant} layout="vertical" initialValues={{ count: 1 }}>
-          <Form.Item name="userId" label="用户ID" rules={[{ required: true, message: '请输入用户ID' }]}>
-            <InputNumber min={1} style={{ width: '100%' }} />
+          <Form.Item name="userIds" label="发放用户" rules={[{ required: true, message: '请选择至少一个用户' }]}>
+            <Select
+              showSearch
+              mode="multiple"
+              placeholder="输入姓名、手机号后搜索用户"
+              filterOption={false}
+              options={grantUserOptions}
+              loading={grantUserLoading}
+              onSearch={(value) => {
+                void loadGrantUsers(value);
+              }}
+            />
           </Form.Item>
-          <Form.Item name="templateId" label="模板ID" rules={[{ required: true, message: '请输入模板ID' }]}>
-            <InputNumber min={1} style={{ width: '100%' }} />
+          <Form.Item name="templateId" label="优惠券模板" rules={[{ required: true, message: '请选择模板' }]}>
+            <Select
+              showSearch
+              placeholder="选择已生效的优惠券模板"
+              optionFilterProp="label"
+              options={grantTemplateOptions}
+              loading={grantTemplateLoading}
+            />
           </Form.Item>
           <Form.Item name="count" label="发放数量">
             <InputNumber min={1} max={200} style={{ width: '100%' }} />

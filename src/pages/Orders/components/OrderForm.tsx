@@ -28,7 +28,7 @@ import {
     Space,
 } from 'antd';
 import dayjs from 'dayjs';
-import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions } from '@/services/api';
+import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions, getUsers } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 
 type ProjectItem = {
@@ -59,7 +59,9 @@ export type OrderUpsertValues = {
     orderQuantity?: number;
 
     customerGameId?: string;
+    customerUserId?: number;
     orderSource?: string;
+    paymentChannel?: string;
 
     orderTime?: any;
     paymentTime?: any;
@@ -115,6 +117,9 @@ export default function OrderUpsertModal(props: {
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
+    const [memberLoading, setMemberLoading] = useState(false);
+    const [memberOptions, setMemberOptions] = useState<Array<{ label: string; value: number }>>([]);
+    const [memberMetaMap, setMemberMetaMap] = useState<Record<number, { name: string; phone: string; balance: number }>>({});
     const [playerPickerOpen, setPlayerPickerOpen] = useState(false);
     const [playerPickerKeyword, setPlayerPickerKeyword] = useState('');
     const [orderSourceOptions, setOrderSourceOptions] = useState<Array<{ label: string; value: string }>>([]);
@@ -213,6 +218,39 @@ export default function OrderUpsertModal(props: {
         }
     };
 
+    const fetchMembers = async (keyword?: string) => {
+        setMemberLoading(true);
+        try {
+            const res: any = await getUsers({
+                page: 1,
+                limit: 20,
+                search: keyword || '',
+                scene: 'MEMBER',
+            });
+            const list = Array.isArray(res?.data) ? res.data : [];
+            const nextMeta: Record<number, { name: string; phone: string; balance: number }> = {};
+            const nextOptions = list.map((item: any) => {
+                const id = Number(item?.id || 0);
+                const name = String(item?.name || '未命名会员').trim();
+                const phone = String(item?.phone || '').trim();
+                const balance = Number(item?.wallet?.availableBalance ?? 0);
+                nextMeta[id] = { name, phone, balance };
+                return {
+                    value: id,
+                    label: `${name}${phone ? `（${phone}）` : ''} · 储值¥${balance.toFixed(2)}`,
+                };
+            });
+            setMemberMetaMap((prev) => ({ ...prev, ...nextMeta }));
+            setMemberOptions(nextOptions);
+        } catch (e) {
+            console.error(e);
+            message.error('获取会员列表失败');
+            setMemberOptions([]);
+        } finally {
+            setMemberLoading(false);
+        }
+    };
+
     // 小时单：金额=单价*下单数量（小时）
     const recalcHourlyAmount = (pid?: number, qty?: number) => {
         const id = Number(pid);
@@ -295,6 +333,7 @@ export default function OrderUpsertModal(props: {
                     : 1,
             isGifted: Boolean(initialValues?.isGifted ?? false),
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
+            paymentChannel: initialValues?.paymentChannel || 'MANUAL',
             settlementAmount:
                 initialValues?.settlementAmount != null
                     ? Number(initialValues.settlementAmount)
@@ -307,6 +346,7 @@ export default function OrderUpsertModal(props: {
 
         void fetchProjects('');
         void fetchPlayers('');
+        void fetchMembers('');
         void fetchOrderSources();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
@@ -373,6 +413,10 @@ export default function OrderUpsertModal(props: {
                 message.error('非后台客服或管理自主创建的订单，未收款前不可派单');
                 return;
             }
+            if (isPaid && String(v?.paymentChannel || '').trim().toUpperCase() === 'BALANCE' && !(Number(v?.customerUserId) > 0)) {
+                message.error('使用会员储值收款时，必须选择会员用户');
+                return;
+            }
 
             const payload: OrderUpsertValues = {
                 ...(v as any),
@@ -390,7 +434,9 @@ export default function OrderUpsertModal(props: {
                 orderQuantity: Number(v?.orderQuantity ?? 1),
 
                 customerGameId: v?.customerGameId?.trim?.() || undefined,
+                customerUserId: v?.customerUserId != null && v?.customerUserId !== '' ? Number(v?.customerUserId) : undefined,
                 orderSource: v?.orderSource ? String(v.orderSource).trim() : undefined,
+                paymentChannel: v?.paymentChannel ? String(v.paymentChannel).trim() : undefined,
 
                 orderTime: v?.orderTime ? dayjs(v.orderTime).toISOString() : now.toISOString(),
                 paymentTime: v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString(),
@@ -444,6 +490,9 @@ export default function OrderUpsertModal(props: {
     const canSelectPlayersWhenUnpaid =
         Boolean(watchedIsGifted) || String(watchedOrderSource || '').trim() === 'CUSTOMER_SERVICE_MANUAL';
     const watchedPlayerIds = Form.useWatch('playerIds', form) || [];
+    const watchedCustomerUserId = Number(Form.useWatch('customerUserId', form) ?? 0);
+    const watchedPaymentChannel = String(Form.useWatch('paymentChannel', form) || '').trim().toUpperCase();
+    const selectedMember = watchedCustomerUserId > 0 ? memberMetaMap?.[watchedCustomerUserId] : null;
 
     const updatePlayerSelection = (nextIds: number[]) => {
         const limitedIds = nextIds.slice(0, MAX_PLAYERS);
@@ -507,6 +556,31 @@ export default function OrderUpsertModal(props: {
                 <Divider style={{ marginTop: 0, marginBottom: 12 }} />
 
                 <Row gutter={[16, 12]}>
+                    <Col {...compactColProps}>
+                        <Form.Item name="paymentChannel" label="收款方式">
+                            <Select
+                                placeholder="默认线下收款"
+                                allowClear={false}
+                                options={[
+                                    { label: '线下收款', value: 'MANUAL' },
+                                    { label: '会员储值', value: 'BALANCE' },
+                                ]}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col {...fullColProps}>
+                        <Form.Item name="customerUserId" label="关联会员">
+                            <Select
+                                placeholder="可选：搜索会员手机号或姓名"
+                                showSearch
+                                filterOption={false}
+                                onSearch={(v) => fetchMembers(v)}
+                                options={memberOptions}
+                                loading={memberLoading}
+                                allowClear
+                            />
+                        </Form.Item>
+                    </Col>
                     <Col {...fullColProps}>
                         <Form.Item name="projectId" label="项目" rules={[{ required: true, message: '请选择项目' }]}>
                             <Select
@@ -568,7 +642,7 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    <Col {...fullColProps}>
+                    <Col {...compactColProps}>
                         <Form.Item name="orderSource" label="订单渠道来源" rules={[{ required: true, message: '请选择订单渠道来源' }]}>
                             <Select
                                 placeholder="请选择订单渠道来源"
@@ -605,6 +679,23 @@ export default function OrderUpsertModal(props: {
                             <Checkbox>已付款</Checkbox>
                         </Form.Item>
                     </Col>
+                    {watchedIsPaid && watchedPaymentChannel === 'BALANCE' ? (
+                        <Col {...fullColProps}>
+                            <div style={{
+                                marginTop: -4,
+                                padding: '10px 12px',
+                                borderRadius: 10,
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                color: '#475569',
+                                fontSize: 12,
+                            }}>
+                                {selectedMember
+                                    ? `当前会员：${selectedMember.name}${selectedMember.phone ? `（${selectedMember.phone}）` : ''}，可用储值余额 ¥${selectedMember.balance.toFixed(2)}`
+                                    : '使用会员储值时，请先选择对应会员。'}
+                            </div>
+                        </Col>
+                    ) : null}
 
                     {/* 新建可选派单 */}
                     {showPlayers ? (

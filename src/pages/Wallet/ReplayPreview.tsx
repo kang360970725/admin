@@ -1,10 +1,11 @@
 import * as React from 'react';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Button, Card, Col, DatePicker, Form, InputNumber, Row, Space, Statistic, Tag, message } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Form, InputNumber, Radio, Row, Space, Statistic, Tag, message } from 'antd';
 import dayjs from 'dayjs';
 import { getWalletReplayPreview, type WalletReplayPreview } from '@/services/api';
 
 type MismatchRow = WalletReplayPreview['mismatchRows'][number];
+type NegativeRow = WalletReplayPreview['negativeRows'][number];
 
 export default function WalletReplayPreviewPage() {
   const [form] = Form.useForm();
@@ -23,6 +24,7 @@ export default function WalletReplayPreviewPage() {
         startAt: range?.[0] ? range[0].startOf('day').toISOString() : undefined,
         endAt: range?.[1] ? range[1].endOf('day').toISOString() : undefined,
         limitMismatches: 200,
+        mode: values.mode || 'full',
       });
       setResult(data || null);
     } catch (e: any) {
@@ -75,15 +77,51 @@ export default function WalletReplayPreviewPage() {
     },
   ];
 
+  const negativeColumns: any[] = [
+    { title: '流水ID', dataIndex: 'id', width: 90 },
+    {
+      title: '时间',
+      dataIndex: 'createdAt',
+      width: 170,
+      render: (v: string) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '--'),
+    },
+    { title: '类型', dataIndex: 'bizType', width: 160 },
+    { title: '状态', dataIndex: 'status', width: 100 },
+    { title: '方向', dataIndex: 'direction', width: 80 },
+    {
+      title: '金额',
+      dataIndex: 'amount',
+      width: 100,
+      render: (v: number) => Number(v || 0).toFixed(2),
+    },
+    {
+      title: '回放后可用/冻结',
+      dataIndex: 'replayAfter',
+      width: 190,
+      render: (_: any, r: NegativeRow) =>
+        `${Number(r.replayAvailableAfter || 0).toFixed(2)} / ${Number(r.replayFrozenAfter || 0).toFixed(2)}`,
+    },
+  ];
+
   return (
     <PageContainer>
       <Card style={{ marginBottom: 16 }}>
-        <Form form={form} layout="inline" initialValues={{ userId: undefined }}>
+        <Form form={form} layout="inline" initialValues={{ userId: undefined, mode: 'full' }}>
           <Form.Item name="userId" label="打手用户ID" rules={[{ required: true, message: '请输入用户ID' }]}>
             <InputNumber min={1} precision={0} placeholder="例如 10086" style={{ width: 180 }} />
           </Form.Item>
           <Form.Item name="range" label="时间范围">
             <DatePicker.RangePicker showTime />
+          </Form.Item>
+          <Form.Item name="mode" label="回放口径">
+            <Radio.Group
+              optionType="button"
+              buttonStyle="solid"
+              options={[
+                { label: '完整回放', value: 'full' },
+                { label: '旧口径', value: 'legacy' },
+              ]}
+            />
           </Form.Item>
           <Form.Item>
             <Space>
@@ -105,6 +143,18 @@ export default function WalletReplayPreviewPage() {
 
       {result && (
         <>
+          <Alert
+            type={result.mode === 'full' ? 'warning' : 'info'}
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={result.mode === 'full' ? '当前为完整回放口径' : '当前为旧口径'}
+            description={
+              result.mode === 'full'
+                ? '完整回放会把提现预扣、提现打款、提现释放、收益解冻全部纳入余额回放，可用于核查冻结余额被占用、负余额时刻和提现缺口。'
+                : '旧口径会忽略提现预扣、提现打款、提现释放和收益解冻，仅适合历史结算口径对比，不适合排查提现冻结事故。'
+            }
+          />
+
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={8}>
               <Card>
@@ -193,6 +243,17 @@ export default function WalletReplayPreviewPage() {
               </Space>
             </div>
           </Card>
+
+          <ProTable<NegativeRow>
+            rowKey="id"
+            search={false}
+            options={false}
+            pagination={{ pageSize: 20 }}
+            columns={negativeColumns}
+            dataSource={result.negativeRows || []}
+            toolBarRender={false}
+            headerTitle="负余额时刻（Top N）"
+          />
 
           <ProTable<MismatchRow>
             rowKey="id"

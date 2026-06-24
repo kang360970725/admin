@@ -20,6 +20,7 @@ import {
     getWithdrawQrCodeUrl,
     uploadWithdrawQrCode,
 } from '@/services/api';
+import dayjs from 'dayjs';
 
 const {Text} = Typography;
 
@@ -203,23 +204,56 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const columns: any = [
         {title: '申请单号', dataIndex: 'requestNo', width: 160, search: false},
         {
+            title: '状态',
+            dataIndex: 'status',
+            width: 120,
+            search: false,
+            render: (_: any, row: any) => {
+                const s = String(row?.status || '');
+                if (s === 'PENDING_REVIEW') return <Tag color="processing">待审核</Tag>;
+                if (s === 'APPROVED') return <Tag color="success">已通过</Tag>;
+                if (s === 'REJECTED') return <Tag color="error">已驳回</Tag>;
+                if (s === 'PAYING') return <Tag color="warning">打款中</Tag>;
+                if (s === 'PAID') return <Tag color="success">已打款</Tag>;
+                if (s === 'FAILED') return <Tag color="error">打款失败</Tag>;
+                if (s === 'CANCELED') return <Tag>已取消</Tag>;
+                return <Tag>{row?.statusText || s || '-'}</Tag>;
+            },
+        },
+        {
             title: '金额',
             dataIndex: 'amount',
             width: 120,
             search: false,
-            render: (_, row) => <span>{Number((row as any).amount || 0).toFixed(2)}</span>,
+            render: (_: any, row: any) => <span>{Number((row as any).amount || 0).toFixed(2)}</span>,
         },
         {
             title: '渠道',
             dataIndex: 'channel',
             width: 100,
             search: false,
-            render: (_, row) =>
+            render: (_: any, row: any) =>
                 (row as any).channel === 'WECHAT' ? <Tag>微信</Tag> : <Tag>人工</Tag>,
         },
         {title: '审批备注', dataIndex: 'reviewRemark', search: false, ellipsis: true},
         {title: '失败原因', dataIndex: 'failReason', search: false, ellipsis: true},
-        {title: '申请时间', dataIndex: 'createdAt', width: 220, search: false},
+        {
+            title: '申请时间',
+            dataIndex: 'createdAt',
+            width: 180,
+            search: false,
+            render: (_: any, row: any) => row?.createdAt ? dayjs(row.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-',
+        },
+        {
+            title: '审核时间',
+            dataIndex: 'reviewTime',
+            width: 180,
+            search: false,
+            render: (_: any, row: any) => {
+                const v = row?.reviewTime || row?.reviewedAt;
+                return v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-';
+            },
+        },
     ];
 
     return (
@@ -318,7 +352,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
                         const idempotencyKey = genIdempotencyKey();
 
-                        const res = await applyWithdrawal({
+                        const res: any = await applyWithdrawal({
                             userId,
                             amount,
                             idempotencyKey,
@@ -500,7 +534,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                         rules={[
                             {required: true, message: '请输入提现金额'},
                             {
-                                validator: async (_, v) => {
+                                validator: async (_: any, v: any) => {
                                     const n = Number(v);
                                     if (!Number.isFinite(n) || n <= 0) throw new Error('提现金额非法');
                                     if (n % 10 !== 0) throw new Error('提现金额必须是 10 的整数');
@@ -595,7 +629,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             }}
                             rules={[
                                 {
-                                    validator: async (_, v) => {
+                                    validator: async (_: any, v: any) => {
                                         const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
                                         const partialMinPay = Number(offlineFeeGuard?.partialMinPay || 100);
                                         const enforce = Boolean(offlineFeeGuard?.bill?.enforceFullPayment);

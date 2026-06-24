@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {LockOutlined, UserOutlined} from '@ant-design/icons';
 import {LoginForm, ProFormText} from '@ant-design/pro-components';
-import {Alert, Checkbox, Form, message, Typography} from 'antd';
+import {Alert, Checkbox, Form, message, Modal, Typography} from 'antd';
 import {useModel, useNavigate} from 'umi';
 import {login} from '@/services/api';
 
@@ -130,6 +130,23 @@ function getErrorMessage(err: any) {
     return '登录失败，请检查手机号和密码';
 }
 
+function isBlockingLoginCode(code?: unknown) {
+    const value = String(code || '').trim();
+    return value === 'ACCOUNT_FROZEN' || value === 'ACCOUNT_DISABLED';
+}
+
+function showBlockingLoginModal(code?: unknown, messageText?: unknown) {
+    const text = String(messageText || '').trim() || '登录失败，请联系管理员';
+    const isFrozen = String(code || '').trim() === 'ACCOUNT_FROZEN';
+    Modal.error({
+        title: isFrozen ? '账户已冻结' : '账号已禁用',
+        content: text,
+        centered: true,
+        maskClosable: false,
+        okText: '知道了',
+    });
+}
+
 export default function LoginPage() {
     const navigate = useNavigate();
     const {initialState, setInitialState} = useModel('@@initialState');
@@ -171,13 +188,20 @@ export default function LoginPage() {
             // ✅ 方案1：业务失败走这里（不会进 catch）
             if (response?.success === false) {
                 const text = response?.message || '手机号或密码错误';
-                message.error(text);
+                setFormError(text);
+                if (isBlockingLoginCode(response?.code)) {
+                    showBlockingLoginModal(response?.code, text);
+                } else {
+                    message.error(text);
+                }
                 return;
             }
 
             // ✅ 兼容：如果以后后端忘记带 success，也能兜住
             if (!response?.access_token) {
-                message.error(response?.message || '登录失败：未返回 token');
+                const text = response?.message || '登录失败：未返回 token';
+                setFormError(text);
+                message.error(text);
                 return;
             }
 
@@ -235,7 +259,12 @@ export default function LoginPage() {
             console.error('登录错误:', error);
             const text = getErrorMessage(error);
             setFormError(text);
-            message.error(text);
+            const code = error?.response?.data?.code;
+            if (isBlockingLoginCode(code)) {
+                showBlockingLoginModal(code, text);
+            } else {
+                message.error(text);
+            }
             return false;
         } finally {
             setSubmitting(false);

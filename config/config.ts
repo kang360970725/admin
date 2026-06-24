@@ -252,6 +252,7 @@ export default defineConfig({
       access: 'canViewOrdersList',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
+        { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrdersList' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },
