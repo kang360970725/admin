@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, Button, Divider, Form, Input, message, Modal, Segmented, Select, Space, Switch, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Divider, Form, Input, InputNumber, message, Modal, Segmented, Select, Space, Switch, Tag, Typography } from 'antd';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { listSystemConfigs, SystemConfigItem, upsertSystemConfig } from '@/services/api';
+import { listSystemConfigs, StaffRuleEngineConfig, SystemConfigItem, upsertStaffRuleEngineConfig, upsertSystemConfig } from '@/services/api';
 
 const { Text } = Typography;
 
@@ -50,6 +50,7 @@ type SubscribeTemplateConfig = {
 };
 
 const SUBSCRIBE_TEMPLATE_CONFIG_KEY = 'wechat_mini_subscribe_message_templates';
+const STAFF_RULE_ENGINE_CONFIG_KEY = 'staff_rule_engine_v1';
 
 const subscribeTemplateFieldMeta = {
   orderProgress: {
@@ -252,6 +253,57 @@ function buildSubscribeTemplateConfigValue(values: any) {
   return JSON.stringify(result, null, 2);
 }
 
+function getDefaultStaffRuleEngineConfig(): StaffRuleEngineConfig {
+  return {
+    tags: [],
+    rules: [],
+  };
+}
+
+function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): StaffRuleEngineConfig {
+  const fallback = getDefaultStaffRuleEngineConfig();
+  const raw = String(row?.value ?? '').trim();
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw || '{}');
+    return {
+      tags: Array.isArray(parsed?.tags) ? parsed.tags : [],
+      rules: Array.isArray(parsed?.rules) ? parsed.rules : [],
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
+  const current = values?.staffRuleEngine || {};
+  const tags = Array.isArray(current?.tags)
+    ? current.tags.map((item: any, index: number) => ({
+        code: String(item?.code || '').trim().toLowerCase(),
+        name: String(item?.name || '').trim(),
+        enabled: item?.enabled !== false,
+        sort: Number.isFinite(Number(item?.sort)) ? Number(item.sort) : index + 1,
+      }))
+    : [];
+  const rules = Array.isArray(current?.rules)
+    ? current.rules.map((item: any, index: number) => ({
+        id: String(item?.id || '').trim(),
+        name: String(item?.name || '').trim(),
+        enabled: item?.enabled !== false,
+        priority: Number.isFinite(Number(item?.priority)) ? Number(item.priority) : 0,
+        tagCodes: Array.isArray(item?.tagCodes)
+          ? item.tagCodes.map((tag: any) => String(tag || '').trim().toLowerCase()).filter(Boolean)
+          : [],
+        depositAmount: Number(item?.depositAmount ?? 0),
+        firstWithdrawMinBalance: Number(item?.firstWithdrawMinBalance ?? 0),
+        quitCoolingDays: Number(item?.quitCoolingDays ?? 0),
+        depositForfeitDays: Number(item?.depositForfeitDays ?? 0),
+        refundWhenDepositInsufficient: true,
+      }))
+    : [];
+  return { tags, rules };
+}
+
 function resolveCategory(row: SystemConfigItem): CategoryKey {
   const key = String(row.key || '').trim();
   if (key.startsWith('wechat_mini_')) return 'WECHAT';
@@ -262,6 +314,14 @@ function resolveCategory(row: SystemConfigItem): CategoryKey {
 }
 
 function formatConfigValue(row: SystemConfigItem) {
+  if (String(row.key || '').trim() === STAFF_RULE_ENGINE_CONFIG_KEY) {
+    try {
+      const parsed = parseStaffRuleEngineConfig(row);
+      return `标签 ${parsed.tags.length} 个，规则 ${parsed.rules.length} 条`;
+    } catch {
+      return '员工标签与提现/退店规则配置';
+    }
+  }
   const raw = String(row.value ?? '');
   if (row.valueType !== 'JSON') return raw || '-';
   try {
@@ -313,6 +373,9 @@ const SystemConfigsPage: React.FC = () => {
     };
     if (String(row.key || '').trim() === SUBSCRIBE_TEMPLATE_CONFIG_KEY) {
       nextValues.subscribeTemplates = parseSubscribeTemplateConfig(row);
+    }
+    if (String(row.key || '').trim() === STAFF_RULE_ENGINE_CONFIG_KEY) {
+      nextValues.staffRuleEngine = parseStaffRuleEngineConfig(row);
     }
     form.setFieldsValue({
       ...nextValues,
@@ -462,20 +525,27 @@ const SystemConfigsPage: React.FC = () => {
           try {
             const values = await form.validateFields();
             const isSubscribeTemplateConfig = String(values.key || '').trim() === SUBSCRIBE_TEMPLATE_CONFIG_KEY;
+            const isStaffRuleEngineConfig = String(values.key || '').trim() === STAFF_RULE_ENGINE_CONFIG_KEY;
             const trimmedValue = isSubscribeTemplateConfig
               ? buildSubscribeTemplateConfigValue(values)
+              : isStaffRuleEngineConfig
+                ? ''
               : String(values.value ?? '').trim();
-            if (values.valueType === 'JSON' && !isSubscribeTemplateConfig) {
+            if (values.valueType === 'JSON' && !isSubscribeTemplateConfig && !isStaffRuleEngineConfig) {
               JSON.parse(trimmedValue || '{}');
             }
             setSubmitting(true);
-            await upsertSystemConfig({
-              key: values.key,
-              value: values.valueType === 'JSON' ? JSON.stringify(JSON.parse(trimmedValue || '{}'), null, 2) : trimmedValue,
-              valueType: values.valueType,
-              remark: String(values.remark ?? '').trim(),
-              enabled: Boolean(values.enabled),
-            });
+            if (isStaffRuleEngineConfig) {
+              await upsertStaffRuleEngineConfig(buildStaffRuleEngineConfigValue(values));
+            } else {
+              await upsertSystemConfig({
+                key: values.key,
+                value: values.valueType === 'JSON' ? JSON.stringify(JSON.parse(trimmedValue || '{}'), null, 2) : trimmedValue,
+                valueType: values.valueType,
+                remark: String(values.remark ?? '').trim(),
+                enabled: Boolean(values.enabled),
+              });
+            }
             message.success('配置已更新');
             setVisible(false);
             setEditing(null);
@@ -511,6 +581,7 @@ const SystemConfigsPage: React.FC = () => {
               const valueType = getFieldValue('valueType');
               const configKey = String(getFieldValue('key') || '').trim();
               const isSubscribeTemplateConfig = configKey === SUBSCRIBE_TEMPLATE_CONFIG_KEY;
+              const isStaffRuleEngineConfig = configKey === STAFF_RULE_ENGINE_CONFIG_KEY;
               if (isSubscribeTemplateConfig) {
                 return (
                   <>
@@ -563,6 +634,161 @@ const SystemConfigsPage: React.FC = () => {
                         </div>
                       );
                     })}
+                  </>
+                );
+              }
+              if (isStaffRuleEngineConfig) {
+                const tagOptions = (getFieldValue(['staffRuleEngine', 'tags']) || [])
+                  .filter((item: any) => String(item?.code || '').trim())
+                  .map((item: any) => ({
+                    label: `${String(item?.name || '').trim() || String(item?.code || '').trim()}（${String(item?.code || '').trim()}）`,
+                    value: String(item?.code || '').trim().toLowerCase(),
+                  }));
+                return (
+                  <>
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      message="这里维护员工标签与提现/退店规则"
+                      description="运营只需要填写标签名称、勾选适用标签，并配置押金、首次提现门槛、退店冷却期和押金不退天数。规则优先级数字越大越优先命中。"
+                    />
+
+                    <Card size="small" title="员工标签" style={{ marginBottom: 16 }}>
+                      <Form.List name={['staffRuleEngine', 'tags']}>
+                        {(fields, { add, remove }) => (
+                          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                            {fields.map((field, index) => (
+                              <Card
+                                key={field.key}
+                                size="small"
+                                type="inner"
+                                title={`标签 ${index + 1}`}
+                                extra={<a onClick={() => remove(field.name)}>删除</a>}
+                              >
+                                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                                  <Form.Item
+                                    label="标签名称"
+                                    name={[field.name, 'name']}
+                                    rules={[{ required: true, message: '请输入标签名称' }]}
+                                  >
+                                    <Input placeholder="例如：线上高端、大神、金牌陪玩" />
+                                  </Form.Item>
+                                  <Form.Item
+                                    label="标签编码"
+                                    name={[field.name, 'code']}
+                                    rules={[{ required: true, message: '请输入标签编码' }]}
+                                    extra="建议使用英文字母或拼音缩写，系统会自动转成小写。"
+                                  >
+                                    <Input placeholder="例如：vip_online / high_rank" />
+                                  </Form.Item>
+                                  <Space size={16} wrap>
+                                    <Form.Item label="是否启用" name={[field.name, 'enabled']} valuePropName="checked" initialValue={true}>
+                                      <Switch />
+                                    </Form.Item>
+                                    <Form.Item label="排序" name={[field.name, 'sort']} initialValue={index + 1}>
+                                      <InputNumber min={1} precision={0} style={{ width: 120 }} />
+                                    </Form.Item>
+                                  </Space>
+                                </Space>
+                              </Card>
+                            ))}
+                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1 })}>新增标签</Button>
+                          </Space>
+                        )}
+                      </Form.List>
+                    </Card>
+
+                    <Card size="small" title="提现 / 退店规则">
+                      <Form.List name={['staffRuleEngine', 'rules']}>
+                        {(fields, { add, remove }) => (
+                          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                            {fields.map((field, index) => (
+                              <Card
+                                key={field.key}
+                                size="small"
+                                type="inner"
+                                title={`规则 ${index + 1}`}
+                                extra={<a onClick={() => remove(field.name)}>删除</a>}
+                              >
+                                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                                  <Form.Item
+                                    label="规则名称"
+                                    name={[field.name, 'name']}
+                                    rules={[{ required: true, message: '请输入规则名称' }]}
+                                  >
+                                    <Input placeholder="例如：线上高端规则" />
+                                  </Form.Item>
+                                  <Form.Item
+                                    label="规则标识"
+                                    name={[field.name, 'id']}
+                                    rules={[{ required: true, message: '请输入规则标识' }]}
+                                    extra="建议使用英文字母或拼音缩写，便于后续排查。"
+                                  >
+                                    <Input placeholder="例如：vip_online_rule" />
+                                  </Form.Item>
+                                  <Form.Item
+                                    label="适用员工标签"
+                                    name={[field.name, 'tagCodes']}
+                                    rules={[{ required: true, message: '请选择至少一个员工标签' }]}
+                                  >
+                                    <Select
+                                      mode="multiple"
+                                      allowClear
+                                      options={tagOptions}
+                                      placeholder="请选择这条规则适用的员工标签"
+                                    />
+                                  </Form.Item>
+                                  <Space size={16} wrap>
+                                    <Form.Item label="是否启用" name={[field.name, 'enabled']} valuePropName="checked" initialValue={true}>
+                                      <Switch />
+                                    </Form.Item>
+                                    <Form.Item label="优先级" name={[field.name, 'priority']} initialValue={0}>
+                                      <InputNumber min={0} precision={0} style={{ width: 120 }} />
+                                    </Form.Item>
+                                  </Space>
+                                  <Space size={16} wrap>
+                                    <Form.Item
+                                      label="押金金额"
+                                      name={[field.name, 'depositAmount']}
+                                      rules={[{ required: true, message: '请输入押金金额' }]}
+                                    >
+                                      <InputNumber min={0} precision={2} style={{ width: 160 }} addonBefore="¥" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      label="首次提现最低保留"
+                                      name={[field.name, 'firstWithdrawMinBalance']}
+                                      rules={[{ required: true, message: '请输入首次提现最低保留金额' }]}
+                                    >
+                                      <InputNumber min={0} precision={2} style={{ width: 180 }} addonBefore="¥" />
+                                    </Form.Item>
+                                  </Space>
+                                  <Space size={16} wrap>
+                                    <Form.Item
+                                      label="退店冷却期"
+                                      name={[field.name, 'quitCoolingDays']}
+                                      rules={[{ required: true, message: '请输入退店冷却天数' }]}
+                                    >
+                                      <InputNumber min={0} precision={0} style={{ width: 160 }} addonAfter="天" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      label="押金不退限制"
+                                      name={[field.name, 'depositForfeitDays']}
+                                      rules={[{ required: true, message: '请输入押金不退天数' }]}
+                                    >
+                                      <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                                    </Form.Item>
+                                  </Space>
+                                </Space>
+                              </Card>
+                            ))}
+                            <Button onClick={() => add({ enabled: true, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, quitCoolingDays: 0, depositForfeitDays: 0, tagCodes: [] })}>
+                              新增规则
+                            </Button>
+                          </Space>
+                        )}
+                      </Form.List>
+                    </Card>
                   </>
                 );
               }

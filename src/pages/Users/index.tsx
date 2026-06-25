@@ -992,6 +992,7 @@ export default function UsersPage() {
             key: 'action',
             search: false,
             width: 200,
+            fixed: 'right',
             render: (_, record) => (
                 <Space>
                     {sceneConfig.key === 'MEMBER' ? (
