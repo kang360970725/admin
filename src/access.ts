@@ -33,6 +33,15 @@ export default function access(initialState: { currentUser?: API.CurrentUser } |
     canViewInternalUsers,
     canViewAllUsers,
     canViewStaffRatings: has('staff-ratings:page'),
+    canSeeAdmin: isAdmin,
+    canCreateUser: isAdmin,
+    canDeleteUser: isAdmin,
+    canEditUser: isAdmin,
+    canChangeLevel: isAdmin,
+    canResetPassword: isAdmin,
+    canCreateRating: isAdmin,
+    canEditRating: isAdmin,
+    canDeleteRating: isAdmin,
 
     // 陪玩中心
     canViewMyOrders: has('staff:my-orders:page'),

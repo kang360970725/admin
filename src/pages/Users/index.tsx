@@ -880,19 +880,23 @@ export default function UsersPage() {
             ),
         },
         {
-            title: '账号状态',
-            dataIndex: 'status',
-            key: 'status',
+            title: sceneConfig.key === 'STAFF' ? '员工状态' : '账号状态',
+            dataIndex: sceneConfig.key === 'STAFF' ? 'staffEmploymentStatus' : 'status',
+            key: sceneConfig.key === 'STAFF' ? 'staffEmploymentStatus' : 'status',
             width: 80,
-            // ✅ 搜索栏改成下拉
             valueType: 'select',
-            valueEnum: {
-                ACTIVE: { text: '正常' },
-                FROZEN: { text: '冻结' },
-                DISABLED: { text: '禁用' },
-            },
+            valueEnum: sceneConfig.key === 'STAFF'
+                ? {
+                    ACTIVE: { text: '正常' },
+                    FROZEN: { text: '冻结' },
+                    EXITED: { text: '退店' },
+                    BLACKLISTED: { text: '黑名单' },
+                }
+                : {
+                    ACTIVE: { text: '正常' },
+                    DISABLED: { text: '禁用' },
+                },
 
-            // ✅ 默认筛选“正常”
             initialValue: 'ACTIVE',
             render: (_, record) => (
                 <Badge

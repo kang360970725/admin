@@ -58,6 +58,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 email: user.email,
                 userType: currentUserType,
                 status: user.status,
+                staffEmploymentStatus: user.staffEmploymentStatus || 'ACTIVE',
                 realName: user.realName,
                 idCard: user.idCard,
                 avatar: user.avatar,
@@ -165,7 +166,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         >
                             <Select placeholder="请选择账号状态">
                                 <Option value="ACTIVE">正常</Option>
-                                <Option value="FROZEN">冻结</Option>
                                 <Option value="DISABLED">停用</Option>
                             </Select>
                         </Form.Item>
@@ -245,6 +245,18 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                     {isStaff && (
                         <>
+                            <Form.Item
+                                label="员工在职状态"
+                                name="staffEmploymentStatus"
+                                rules={[{ required: true, message: '请选择员工在职状态' }]}
+                            >
+                                <Select placeholder="请选择员工在职状态">
+                                    <Option value="ACTIVE">正常</Option>
+                                    <Option value="FROZEN">冻结</Option>
+                                    <Option value="EXITED">退店</Option>
+                                    <Option value="BLACKLISTED">黑名单</Option>
+                                </Select>
+                            </Form.Item>
                             <Form.Item label="当前已交押金">
                                 <Tag color="blue">¥{Number(user?.walletAccount?.depositBalance ?? 0)}</Tag>
                             </Form.Item>
