@@ -92,7 +92,7 @@ const getStaffEmploymentTag = (record: any) => {
     if (status === 'FROZEN') {
         return <Tag color="orange">冻结中</Tag>;
     }
-    return <Tag color="default">退店用户</Tag>;
+    return <Tag color="default">已退店</Tag>;
 };
 
 export default function UsersPage() {
@@ -889,7 +889,7 @@ export default function UsersPage() {
                 ? {
                     ACTIVE: { text: '正常' },
                     FROZEN: { text: '冻结' },
-                    EXITED: { text: '退店' },
+                    EXITED: { text: '已退店' },
                     BLACKLISTED: { text: '黑名单' },
                 }
                 : {
@@ -920,7 +920,7 @@ export default function UsersPage() {
                                         ? '冻结中'
                                         : String(record?.staffEmploymentStatus || 'ACTIVE') === 'BLACKLISTED'
                                             ? '黑名单'
-                                            : '退店'
+                                            : '已退店'
                             )
                             : userStatusMap[record.status as keyof typeof userStatusMap]?.text
                     }
