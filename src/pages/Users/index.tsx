@@ -901,13 +901,27 @@ export default function UsersPage() {
             render: (_, record) => (
                 <Badge
                     status={
-                        record?.userType === 'STAFF' && String(record?.staffEmploymentStatus || 'ACTIVE') !== 'ACTIVE'
-                            ? 'default'
+                        record?.userType === 'STAFF'
+                            ? (
+                                String(record?.staffEmploymentStatus || 'ACTIVE') === 'ACTIVE'
+                                    ? 'success'
+                                    : String(record?.staffEmploymentStatus || 'ACTIVE') === 'FROZEN'
+                                        ? 'warning'
+                                        : 'default'
+                            ) as any
                             : userStatusMap[record.status as keyof typeof userStatusMap]?.status as any
                     }
                     text={
-                        record?.userType === 'STAFF' && String(record?.staffEmploymentStatus || 'ACTIVE') !== 'ACTIVE'
-                            ? (String(record?.staffEmploymentStatus || 'ACTIVE') === 'FROZEN' ? '冻结中' : '停用')
+                        record?.userType === 'STAFF'
+                            ? (
+                                String(record?.staffEmploymentStatus || 'ACTIVE') === 'ACTIVE'
+                                    ? '正常'
+                                    : String(record?.staffEmploymentStatus || 'ACTIVE') === 'FROZEN'
+                                        ? '冻结中'
+                                        : String(record?.staffEmploymentStatus || 'ACTIVE') === 'BLACKLISTED'
+                                            ? '黑名单'
+                                            : '退店'
+                            )
                             : userStatusMap[record.status as keyof typeof userStatusMap]?.text
                     }
                 />

@@ -57,7 +57,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 name: user.name,
                 email: user.email,
                 userType: currentUserType,
-                status: user.status,
+                status: currentUserType === 'STAFF' && user.status === 'FROZEN' ? 'ACTIVE' : user.status,
                 staffEmploymentStatus: user.staffEmploymentStatus || 'ACTIVE',
                 realName: user.realName,
                 idCard: user.idCard,
