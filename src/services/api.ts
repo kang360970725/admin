@@ -1939,6 +1939,20 @@ export async function payOfflineFeeBill(data: { billId: number; amount: number; 
     });
 }
 
+export async function waiveOfflineFeeBill(data: { billId: number; remark?: string }) {
+    return request(`${API_BASE}/offline-fees/bills/waive`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function refundOfflineFeeBill(data: { billId: number; remark?: string }) {
+    return request(`${API_BASE}/offline-fees/bills/refund`, {
+        method: 'POST',
+        data,
+    });
+}
+
 // ---------------------- Notification / Announcement API ----------------------
 
 export interface SystemAnnouncementItem {

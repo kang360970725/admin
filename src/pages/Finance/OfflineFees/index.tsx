@@ -12,8 +12,10 @@ import {
   listOfflineStaffOptions,
   manualCreateOfflineFeeBill,
   payOfflineFeeBill,
+  refundOfflineFeeBill,
   remindOfflineFeeBill,
   updateOfflineFeeBill,
+  waiveOfflineFeeBill,
 } from '@/services/api';
 
 const money = (v: any) => Number(v ?? 0).toFixed(2);
@@ -141,9 +143,11 @@ const OfflineFeesPage: React.FC = () => {
       {
         title: '操作',
         valueType: 'option',
-        width: 240,
+        width: 320,
         render: (_, row) => {
           const canPay = Number(row.remainingAmount || 0) > 0;
+          const paidAmount = Number(row.paidAmount || 0);
+          const isWaived = String(row.status || '') === 'WAIVED';
 
           return [
             <a
@@ -183,6 +187,42 @@ const OfflineFeesPage: React.FC = () => {
             >
               <a>催收</a>
             </Popconfirm>,
+            paidAmount > 0 ? (
+              <Popconfirm
+                key="refund"
+                title="确认回退已缴金额？"
+                description={`将回退 ¥${money(row.paidAmount)} 到员工钱包可用余额`}
+                onConfirm={async () => {
+                  try {
+                    await refundOfflineFeeBill({ billId: row.id });
+                    message.success('已回退已缴金额');
+                    actionRef.current?.reload();
+                  } catch (e: any) {
+                    message.error(e?.data?.message || e?.message || '回退失败');
+                  }
+                }}
+              >
+                <a>回退已缴</a>
+              </Popconfirm>
+            ) : null,
+            !isWaived && paidAmount <= 0 ? (
+              <Popconfirm
+                key="waive"
+                title="确认废除该账单？"
+                description="废除后该账单不再参与催缴和校验"
+                onConfirm={async () => {
+                  try {
+                    await waiveOfflineFeeBill({ billId: row.id });
+                    message.success('账单已废除');
+                    actionRef.current?.reload();
+                  } catch (e: any) {
+                    message.error(e?.data?.message || e?.message || '废除失败');
+                  }
+                }}
+              >
+                <a>废除账单</a>
+              </Popconfirm>
+            ) : null,
             !canPay ? <Tag key="done" color="success">已结清</Tag> : null,
           ].filter(Boolean);
         },
