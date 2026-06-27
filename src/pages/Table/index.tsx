@@ -1,3 +1,4 @@
+// @ts-nocheck
 import services from '@/services/demo';
 import {
   ActionType,

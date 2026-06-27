@@ -135,7 +135,7 @@ const OrderDetailPage: React.FC = () => {
     const [recalcSettlementBaseAmount, setRecalcSettlementBaseAmount] = useState<number | null>(null);
 
     // ✅ 工具流程：先重新结算（不动钱包）=> 再钱包对齐预览 => 再执行钱包对齐
-    const [toolsStep, setToolsStep] = useState<'INIT' | 'RECALCED' | 'PREVIEWED'>('INIT');
+    const [toolsStep, setToolsStep] = useState<'INIT' | 'RECALCED' | 'PREVIEWED' | 'APPLIED'>('INIT');
     const [recalcResult, setRecalcResult] = useState<any>(null);
     const [walletPreview, setWalletPreview] = useState<any>(null);
     const [walletApplyResult, setWalletApplyResult] = useState<any>(null);
@@ -813,7 +813,7 @@ const OrderDetailPage: React.FC = () => {
             const participantIds = active.map((p: any) => Number(p?.userId)).filter((n: number) => Number.isFinite(n) && n > 0);
             const participantNames = active.map((p: any) => p?.user?.name || `#${p?.userId ?? ''}`);
             const firstStored = participantIds
-                .map((playerUserId) => evalMap.get(`${Number(d.id)}_${Number(playerUserId)}`))
+                .map((playerUserId: number) => evalMap.get(`${Number(d.id)}_${Number(playerUserId)}`))
                 .find(Boolean);
 
             return {
@@ -1077,7 +1077,7 @@ const OrderDetailPage: React.FC = () => {
         const ids = parts
             .map((p: any) => Number(p?.userId))
             .filter((n: number) => Number.isFinite(n) && n > 0);
-        return Array.from(new Set(ids)).sort((a, b) => a - b);
+        return (Array.from(new Set<number>(ids)) as number[]).sort((a, b) => a - b);
     };
 
     const getParticipantDisplayName = (p: any): string => {
@@ -1099,7 +1099,7 @@ const OrderDetailPage: React.FC = () => {
                     .map((p: any) => Number(p?.userId))
                     .filter((n: number) => Number.isFinite(n) && n > 0);
 
-                const uniqueIds = Array.from(new Set(pids)).sort((a, b) => a - b);
+                const uniqueIds = (Array.from(new Set<number>(pids)) as number[]).sort((a, b) => a - b);
 
                 const names = parts
                     .filter((p: any) => uniqueIds.includes(Number(p?.userId)))
@@ -3135,8 +3135,10 @@ const OrderDetailPage: React.FC = () => {
     );
 
     return (
-        <PageContainer title={isMobile ? false : undefined}
-                       contentStyle={isMobile ? {padding: 0, maxWidth: '100%'} : undefined}>
+        <PageContainer
+            title={isMobile ? false : undefined}
+            style={isMobile ? {padding: 0, maxWidth: '100%'} : undefined}
+        >
             {isMobile ? MobileView : DesktopView}
 
             {/* 派单 / 更新参与者：PC 用 Modal；Mobile 用 Drawer bottom sheet */}
@@ -4173,7 +4175,7 @@ const OrderDetailPage: React.FC = () => {
                                     <Button
                                         size="small"
                                         onClick={() => {
-                                            setModePlayAlloc((prev) => {
+                                            setModePlayAlloc((prev: any) => {
                                                 if (!prev) return prev;
                                                     return {
                                                         ...prev,
@@ -4224,11 +4226,11 @@ const OrderDetailPage: React.FC = () => {
                                                     placeholder="可输入负数，如 -10.00"
                                                     onChange={(val) => {
                                                         const nv = Number(val ?? 0);
-                                                        setModePlayAlloc((prev) => {
+                                                        setModePlayAlloc((prev: any) => {
                                                             if (!prev) return prev;
                                                             return {
                                                                 ...prev,
-                                                                rows: prev.rows.map((r) => (r.key === row.key ? {
+                                                                rows: prev.rows.map((r: any) => (r.key === row.key ? {
                                                                     ...r,
                                                                     income: nv
                                                                 } : r)),

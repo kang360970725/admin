@@ -50,13 +50,13 @@ const MyOrdersPage: React.FC = () => {
                 title: '项目',
                 dataIndex: ['order', 'project', 'name'],
                 ellipsis: true,
-                render: (_, row) =>
+                render: (_: any, row: any) =>
                     row?.order?.project?.name || row?.order?.projectSnapshot?.name || '-',
             },
             {
                 title: '订单类型',
                 dataIndex: ['order', 'projectSnapshot', 'billingMode'],
-                render: (_, row) => {
+                render: (_: any, row: any) => {
                     const billingMode =
                         row?.order?.projectSnapshot?.billingMode || row?.order?.project?.billingMode;
                     return <Tag>{t('BillingMode', billingMode, billingMode)}</Tag>;
@@ -67,7 +67,7 @@ const MyOrdersPage: React.FC = () => {
                 dataIndex: ['order', 'status'],
                 width: 120,
                 valueType: 'select',
-                render: (_, row) => {
+                render: (_: any, row: any) => {
                     const v = row?.order?.status;
                     return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
                         {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
@@ -79,7 +79,7 @@ const MyOrdersPage: React.FC = () => {
                 dataIndex: 'status',
                 width: 140,
                 valueType: 'select',
-                render: (_, row) => {
+                render: (_: any, row: any) => {
                     const v = row?.status;
                     return (
                         <Tag color={pickStatusColor({ group: 'DispatchStatus', key: v })}>
@@ -110,7 +110,7 @@ const MyOrdersPage: React.FC = () => {
             {
                 title: '接单时间',
                 dataIndex: 'updatedAt',
-                render: (_, row) => {
+                render: (_: any, row: any) => {
                     // participant.acceptedAt 如果你想更精准可改成“当前用户的 acceptedAt”
                     const ps = Array.isArray(row?.participants) ? row.participants : [];
                     const me = ps.find((p: any) => p?.acceptedAt);

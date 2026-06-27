@@ -831,14 +831,15 @@ export default function PerformanceDashboardPage() {
                         const sortField = Object.keys(sorter || {})?.[0];
                         const sortOrder = sortField ? (sorter as any)?.[sortField] : undefined;
 
-                        const res = await getPerformanceDashboardList({
+                        const requestParams = {
                             page: current ?? 1,
                             limit: pageSize ?? 20,
-                            keyword,
                             ...queryParams,
+                            keyword,
                             sortField,
                             sortOrder,
-                        });
+                        };
+                        const res = await getPerformanceDashboardList(requestParams);
 
                         return {
                             data: Array.isArray(res?.data) ? res.data : [],

@@ -80,7 +80,7 @@ const ChangeLevelModal: React.FC<ChangeLevelModalProps> = ({
                                     {currentRating.name}
                                 </Tag>
                                 <div style={{ color: '#666', fontSize: '12px', marginTop: '4px' }}>
-                                    分红比例: {(currentRating.rate * 100).toFixed(0)}% |
+                                    分红比例: {(Number(currentRating.rate ?? 0) * 100).toFixed(0)}% |
                                     适用范围: {currentRating.scope === 'BOTH' ? '线上线下' : currentRating.scope === 'ONLINE' ? '线上' : '线下'}
                                 </div>
                             </div>
@@ -137,7 +137,7 @@ const ChangeLevelModal: React.FC<ChangeLevelModalProps> = ({
                             {user.name} 将从{' '}
                             <strong>
                                 {currentRating ? currentRating.name : '无评级'}
-                                {currentRating && ` (${(currentRating.rate * 100).toFixed(0)}%)`}
+                                {currentRating && ` (${(Number(currentRating.rate ?? 0) * 100).toFixed(0)}%)`}
                             </strong>{' '}
                             调整为{' '}
                             <strong>

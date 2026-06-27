@@ -157,7 +157,10 @@ const ComplaintOrdersPage: React.FC = () => {
             dataIndex: 'createdAt',
             search: false,
             width: 170,
-            render: (v) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '--'),
+            render: (v) => {
+              const raw = typeof v === 'string' || typeof v === 'number' ? v : undefined;
+              return raw ? dayjs(raw).format('YYYY-MM-DD HH:mm') : '--';
+            },
           },
           {
             title: '操作',

@@ -140,7 +140,7 @@ const DutyCsSchedulesPage: React.FC = () => {
               startTime: toTimeValue(String(row.startTime)),
               endTime: toTimeValue(String(row.endTime)),
               enabled: row.enabled,
-              remark: row.remark,
+              remark: row.remark ?? undefined,
               shiftPreset: 'CUSTOM',
             });
           }}

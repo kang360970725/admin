@@ -45,7 +45,7 @@ export default function StaffRatingsPage() {
         }
     };
 
-    const columns = [
+    const columns: any[] = [
         {
             title: 'ID',
             dataIndex: 'id',
@@ -63,7 +63,7 @@ export default function StaffRatingsPage() {
             dataIndex: 'description',
             key: 'description',
             ellipsis: true,
-            render: (text: string) => (
+            render: (text: any) => (
                 <Tooltip title={text}>
                     <span>{text}</span>
                 </Tooltip>
@@ -74,9 +74,9 @@ export default function StaffRatingsPage() {
             dataIndex: 'scope',
             key: 'scope',
             width: 120,
-            render: (scope: keyof typeof scopeMap) => (
-                <Tag color={scopeMap[scope]?.color}>
-                    {scopeMap[scope]?.text}
+            render: (scope: any) => (
+                <Tag color={scopeMap[scope as keyof typeof scopeMap]?.color}>
+                    {scopeMap[scope as keyof typeof scopeMap]?.text}
                 </Tag>
             ),
         },
@@ -85,7 +85,7 @@ export default function StaffRatingsPage() {
             dataIndex: 'rate',
             key: 'rate',
             width: 100,
-            render: (rate: number) => `${(rate * 100).toFixed(0)}%`,
+            render: (rate: any) => `${(Number(rate || 0) * 100).toFixed(0)}%`,
         },
         {
             title: '状态',
@@ -93,10 +93,10 @@ export default function StaffRatingsPage() {
             key: 'status',
             width: 80,
             valueEnum: ratingStatusMap,
-            render: (status: keyof typeof ratingStatusMap) => (
+            render: (status: any) => (
                 <Badge
-                    status={ratingStatusMap[status]?.status as any}
-                    text={ratingStatusMap[status]?.text}
+                    status={ratingStatusMap[status as keyof typeof ratingStatusMap]?.status as any}
+                    text={ratingStatusMap[status as keyof typeof ratingStatusMap]?.text}
                 />
             ),
         },
@@ -110,7 +110,7 @@ export default function StaffRatingsPage() {
             title: '操作',
             key: 'action',
             width: 150,
-            render: (_, record) => (
+            render: (_: any, record: any) => (
                 <Space>
                     {!access.canEditRating && (
                         <Button type="link" size="small" onClick={() => handleEdit(record)}>

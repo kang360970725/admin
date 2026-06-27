@@ -45,7 +45,7 @@ const UserLogsPage: React.FC = () => {
                 valueType: 'dateTime',
                 width: 170,
                 search: false,
-                render: (_, row) => dayjs(row.createdAt).format('YYYY-MM-DD HH:mm:ss'),
+                render: (_: any, row: any) => dayjs(row.createdAt).format('YYYY-MM-DD HH:mm:ss'),
             },
             {
                 title: '操作人ID',
@@ -57,13 +57,13 @@ const UserLogsPage: React.FC = () => {
                 dataIndex: ['user', 'name'],
                 width: 120,
                 search: false,
-                render: (_, row) => row?.user?.name || '-',
+                render: (_: any, row: any) => row?.user?.name || '-',
             },
             {
                 title: '动作(action)',
                 dataIndex: 'action',
                 width: 180,
-                render: (_, row) => {
+                render: (_: any, row: any) => {
                     const code = row.action;
                     const label = actionDict?.[code];
                     return label ? `${label}（${code}）` : code; // ✅ fallback：字典缺失就显示 code
@@ -107,7 +107,7 @@ const UserLogsPage: React.FC = () => {
                 title: '操作',
                 valueType: 'option',
                 width: 120,
-                render: (_, row) => [
+                render: (_: any, row: any) => [
                     <Button
                         key="detail"
                         type="link"

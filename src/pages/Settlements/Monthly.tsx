@@ -44,7 +44,7 @@ const MonthlySettlementPage: React.FC = () => {
                         dataSource={data.players || []}
                         pagination={{ pageSize: 10 }}
                         columns={[
-                            { title: '陪玩', dataIndex: 'name', render: (_, r) => r.name || r.phone || '-' },
+                            { title: '陪玩', dataIndex: 'name', render: (_: any, r: any) => r?.name || r?.phone || '-' },
                             { title: '结算类型', dataIndex: 'settlementType', render: (t) => <Tag>{t}</Tag> },
                             { title: '总接单数', dataIndex: 'totalOrders' },
                             { title: '总收益', dataIndex: 'totalEarnings', render: (v) => <b>¥{Number(v).toFixed(2)}</b> },

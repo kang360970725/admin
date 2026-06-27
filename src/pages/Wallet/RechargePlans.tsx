@@ -51,7 +51,7 @@ export default function RechargePlansPage() {
             title: '操作',
             valueType: 'option',
             width: 100,
-            render: (_, record) => [
+            render: (_: any, record: any) => [
                 <Button
                     key="edit"
                     type="link"

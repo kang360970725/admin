@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Tree, Modal, Form, Input, Select, Space, message } from 'antd';
+import { Card, Button, Spin, Tree, Modal, Form, Input, Select, Space, message } from 'antd';
 import { getPermissionTree, createPermission, deletePermission } from '@/services/api';
 
 const { Option } = Select;
@@ -96,17 +96,18 @@ const PermissionManagement: React.FC = () => {
                     </Button>
                 }
             >
-                <Tree
-                    treeData={permissionTree}
-                    titleRender={titleRender}
-                    loading={loading}
-                    defaultExpandAll
-                    fieldNames={{
-                        title: 'name',
-                        key: 'id',
-                        children: 'children',
-                    }}
-                />
+                <Spin spinning={loading}>
+                    <Tree
+                        treeData={permissionTree}
+                        titleRender={titleRender}
+                        defaultExpandAll
+                        fieldNames={{
+                            title: 'name',
+                            key: 'id',
+                            children: 'children',
+                        }}
+                    />
+                </Spin>
             </Card>
 
             <Modal

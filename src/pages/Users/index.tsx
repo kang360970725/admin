@@ -513,7 +513,7 @@ export default function UsersPage() {
         }
     };
 
-    const columns = [
+    const columns: any[] = [
         {
             title: '搜索',
             dataIndex: 'search',
@@ -589,7 +589,7 @@ export default function UsersPage() {
 
             // ✅ 默认筛选“员工”
             initialValue: 'STAFF',
-            render: (_, record) => (
+            render: (_: any, record: any) => (
                 <Tag color={userTypeMap[record.userType as keyof typeof userTypeMap]?.color}>
                     {userTypeMap[record.userType as keyof typeof userTypeMap]?.text}
                 </Tag>
@@ -770,7 +770,7 @@ export default function UsersPage() {
             key: 'memberAssets',
             width: 180,
             search: false,
-            render: (_, record) => {
+            render: (_: any, record: any) => {
                 const profile = record?.memberProfile || {};
                 const points = Number(record?.memberPointAccount?.availablePoints ?? 0);
                 return (
@@ -827,7 +827,7 @@ export default function UsersPage() {
             key: 'wallet',
             width: 140,
             search: false,
-            render: (_, record) => {
+            render: (_: any, record: any) => {
 
                 const available = Number(record?.wallet?.availableBalance ?? 0);
                 const frozen = Number(record?.wallet?.frozenBalance ?? 0);
@@ -854,7 +854,7 @@ export default function UsersPage() {
             width: 120,
             search: false,
             hideInTable: sceneConfig.key === 'MEMBER',
-            render: (v, record) => (
+            render: (v: any, record: any) => (
                 <Tag color="gold">
                     ¥{Number(v ?? record?.depositLimit ?? 500)}
                 </Tag>
@@ -898,7 +898,7 @@ export default function UsersPage() {
                 },
 
             initialValue: 'ACTIVE',
-            render: (_, record) => (
+            render: (_: any, record: any) => (
                 <Badge
                     status={
                         record?.userType === 'STAFF'
@@ -993,7 +993,7 @@ export default function UsersPage() {
             search: false,
             width: 200,
             fixed: 'right',
-            render: (_, record) => (
+            render: (_: any, record: any) => (
                 <Space>
                     {sceneConfig.key === 'MEMBER' ? (
                         <Button type="link" size="small" onClick={() => openMemberDetail(record)}>
@@ -1047,7 +1047,7 @@ export default function UsersPage() {
                 </Space>
             ),
         },
-    ].filter(Boolean);
+    ].filter(Boolean) as any[];
 
     const handleToggleWithdraw = async (record: any, checked: boolean) => {
         try {

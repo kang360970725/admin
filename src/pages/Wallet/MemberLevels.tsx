@@ -46,7 +46,7 @@ export default function MemberLevelsPage() {
             title: '操作',
             valueType: 'option',
             width: 150,
-            render: (_, record) => [
+            render: (_: any, record: any) => [
                 <Button
                     key="edit"
                     type="link"

@@ -52,6 +52,7 @@ export type OrderUpsertValues = {
     receivableAmount: number; // 应收
     paidAmount: number; // 实收
     settlementAmount?: number; // 结算金额
+    settlementBaseAmount?: number;
 
     baseAmountWan?: number | null; // 订单保底（万）
 
@@ -60,6 +61,7 @@ export type OrderUpsertValues = {
 
     customerGameId?: string;
     customerUserId?: number;
+    userCouponId?: number;
     orderSource?: string;
     paymentChannel?: string;
 

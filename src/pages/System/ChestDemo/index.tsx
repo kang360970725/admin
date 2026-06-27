@@ -510,7 +510,7 @@ export default function ChestDemoPage() {
         ]}
       >
         <ProTable<any>
-          rowKey={(r: any, i: number) => `${r?.id || 'x'}-${i}`}
+          rowKey={(r: any, i?: number) => `${r?.id || 'x'}-${i ?? 0}`}
           search={false}
           options={false}
           pagination={false}

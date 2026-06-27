@@ -26,6 +26,7 @@ const {Text} = Typography;
 
 type Props = {
     availableBalance: number;
+    deposit?: number;
     onApplied?: () => void;
 };
 

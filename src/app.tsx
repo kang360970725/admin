@@ -27,13 +27,15 @@ const { Text } = Typography;
 interface CurrentUser {
     id: number;
     phone: string;
-    name: string;
+    name?: string;
+    username?: string;
     userType: string;
     level: number;
     balance: number;
     avatar?: string;
     permissions?: string[];
     needResetPwd?: boolean;
+    workStatus?: string;
 }
 
 interface VersionManifest {
@@ -261,7 +263,8 @@ export async function getInitialState(): Promise<{
 /**
  * ✅ Layout：PC 维持 ProLayout；/m/* 移动端走“纯内容页”
  */
-export const layout: RuntimeConfig['layout'] = ({ location }) => {
+export const layout: RuntimeConfig['layout'] = (props: any) => {
+    const { location } = props || {};
     const pathname = location?.pathname || window.location.pathname;
     const isMobileShell = pathname.startsWith('/m');
     const isMobile = useIsMobile(768);

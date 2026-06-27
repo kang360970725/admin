@@ -1,4 +1,4 @@
-export default function access(initialState: { currentUser?: API.CurrentUser } | undefined) {
+export default function access(initialState: { currentUser?: any } | undefined) {
   const { currentUser } = initialState ?? {};
 
   const permissions = currentUser?.permissions || [];

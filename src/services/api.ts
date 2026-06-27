@@ -173,6 +173,7 @@ export interface GetUsersParams {
     page?: number;
     limit?: number;
     search?: string;
+    keyword?: string;
     userType?: string;
     status?: string;
     scene?: string;
@@ -1296,6 +1297,11 @@ export interface FinanceReconciliationRes {
         manualReceiptAmountTotal: number;
     };
     rows: FinanceReconciliationDayRow[];
+    data?: {
+        range?: { startDate?: string; endDate?: string };
+        summary?: FinanceReconciliationRes['summary'];
+        rows?: FinanceReconciliationDayRow[];
+    };
 }
 
 export async function postFinanceReconciliation(data: { startDate?: string; endDate?: string }) {
@@ -1359,6 +1365,7 @@ export interface WalletWithdrawalRequest {
     channelTradeNo?: string | null;
     callbackRaw?: string | null;
     failReason?: string | null;
+    message?: string | null;
 
     createdAt: string;
     updatedAt: string;
@@ -1410,7 +1417,7 @@ export async function postWithdrawalsList(data: {
     createdAtFrom?: string;
     createdAtTo?: string;
 }) {
-    return request<{ total: number; list: WalletWithdrawalRequest[]; page: number; pageSize: number }>(
+    return request<{ total: number; list: WalletWithdrawalRequest[]; page: number; pageSize: number; summary?: any }>(
         `${API_BASE}/wallet/withdrawals/list`,
         { method: 'POST', data },
     );

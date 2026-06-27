@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Table, Button, Space, message, Modal, Form, Input, Tree, Transfer } from 'antd';
-import { getRoles, createRole, updateRole, deleteRole } from '@/services/role';
-import { getPermissionTree } from '@/services/permission';
+import { getRoles, createRole, updateRole, deleteRole, getPermissionTree } from '@/services/api';
 
 const RoleManagement: React.FC = () => {
     const [roles, setRoles] = useState([]);
@@ -36,6 +35,22 @@ const RoleManagement: React.FC = () => {
         setModalVisible(true);
     };
 
+    const handleDelete = (record: any) => {
+        Modal.confirm({
+            title: '确认删除',
+            content: `确定删除角色“${record?.name || ''}”吗？`,
+            onOk: async () => {
+                try {
+                    await deleteRole(record.id);
+                    message.success('删除成功');
+                    loadData();
+                } catch {
+                    message.error('删除失败');
+                }
+            },
+        });
+    };
+
     const handleSubmit = async (values: any) => {
         try {
             const data = { ...values, permissionIds: selectedPermissions };
@@ -60,7 +75,7 @@ const RoleManagement: React.FC = () => {
         { title: '用户数', dataIndex: ['_count', 'users'] },
         {
             title: '操作',
-            render: (_, record) => (
+            render: (_: any, record: any) => (
                 <Space>
                     <Button type="link" onClick={() => handleEdit(record)}>编辑</Button>
                     <Button type="link" danger onClick={() => handleDelete(record)}>删除</Button>

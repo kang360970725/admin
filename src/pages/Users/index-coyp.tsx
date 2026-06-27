@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useRef, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';

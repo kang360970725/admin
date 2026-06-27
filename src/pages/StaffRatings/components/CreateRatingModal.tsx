@@ -107,7 +107,7 @@ const CreateRatingModal: React.FC<CreateRatingModalProps> = ({
                         min={1}
                         max={100}
                         formatter={value => `${value}%`}
-                        parser={value => value!.replace('%', '')}
+                        parser={(value) => Number(String(value || '').replace('%', '')) as 1 | 100}
                         placeholder="请输入1-100之间的数字"
                         style={{ width: '100%' }}
                     />

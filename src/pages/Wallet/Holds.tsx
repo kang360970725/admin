@@ -22,7 +22,7 @@ export default function WalletHolds() {
                 RELEASED: { text: '已解冻' },
                 CANCELLED: { text: '已取消' },
             },
-            render: (_, r) => {
+            render: (_: any, r: any) => {
                 const s = r.status;
                 if (s === 'FROZEN') return <Tag color="orange">冻结</Tag>;
                 if (s === 'RELEASED') return <Tag color="green">已解冻</Tag>;
@@ -35,21 +35,21 @@ export default function WalletHolds() {
             dataIndex: 'unlockAt',
             width: 160,
             search: false,
-            render: (_, r) => (r.unlockAt ? dayjs(r.unlockAt).format('YYYY-MM-DD HH:mm') : '--'),
+            render: (_: any, r: any) => (r.unlockAt ? dayjs(r.unlockAt).format('YYYY-MM-DD HH:mm') : '--'),
         },
         {
             title: '创建时间',
             dataIndex: 'createdAt',
             width: 160,
             search: false,
-            render: (_, r) => (r.createdAt ? dayjs(r.createdAt).format('YYYY-MM-DD HH:mm') : '--'),
+            render: (_: any, r: any) => (r.createdAt ? dayjs(r.createdAt).format('YYYY-MM-DD HH:mm') : '--'),
         },
         {
             title: '释放时间',
             dataIndex: 'releasedAt',
             width: 160,
             search: false,
-            render: (_, r) => (r.releasedAt ? dayjs(r.releasedAt).format('YYYY-MM-DD HH:mm') : '--'),
+            render: (_: any, r: any) => (r.releasedAt ? dayjs(r.releasedAt).format('YYYY-MM-DD HH:mm') : '--'),
         },
     ];
 

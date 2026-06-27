@@ -54,6 +54,7 @@ export function useOrderReconcile(order: any): {
     earningsSummary: EarningsSummary;
     walletEarningsSummary: WalletEarningsSummary | null;
     reconcileHint: ReconcileHint | null;
+    reconcileHintByUser: any[];
     settlementTotal: number; // 结算参考总额（给后续按人拆分做铺垫）
 } {
     // ✅ 结算参考总额
@@ -224,5 +225,11 @@ export function useOrderReconcile(order: any): {
         reconcileHint,
         reconcileHintByUser,
         settlementTotal,
+    } as {
+        earningsSummary: typeof earningsSummary;
+        walletEarningsSummary: typeof walletEarningsSummary;
+        reconcileHint: typeof reconcileHint;
+        reconcileHintByUser: typeof reconcileHintByUser;
+        settlementTotal: typeof settlementTotal;
     };
 }
