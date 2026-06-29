@@ -3,11 +3,13 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { Alert, Button, Card, Col, DatePicker, Form, InputNumber, Radio, Row, Space, Statistic, Tag, message } from 'antd';
 import dayjs from 'dayjs';
 import { getWalletReplayPreview, type WalletReplayPreview } from '@/services/api';
+import { useLocation } from '@umijs/max';
 
 type MismatchRow = WalletReplayPreview['mismatchRows'][number];
 type NegativeRow = WalletReplayPreview['negativeRows'][number];
 
 export default function WalletReplayPreviewPage() {
+  const location = useLocation();
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<WalletReplayPreview | null>(null);
@@ -102,6 +104,24 @@ export default function WalletReplayPreviewPage() {
         `${Number(r.replayAvailableAfter || 0).toFixed(2)} / ${Number(r.replayFrozenAfter || 0).toFixed(2)}`,
     },
   ];
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search || '');
+    const userId = Number(params.get('userId') || 0);
+    const mode = params.get('mode') || 'full';
+    const autostart = params.get('autostart') === '1';
+
+    if (!Number.isFinite(userId) || userId <= 0) return;
+
+    form.setFieldsValue({
+      userId,
+      mode,
+    });
+
+    if (autostart) {
+      onSubmit();
+    }
+  }, [form, location.search]);
 
   return (
     <PageContainer>

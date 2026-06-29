@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
-import { useModel } from '@umijs/max';
+import { history, useModel } from '@umijs/max';
 import { getPendingWithdrawals, reviewWithdrawal, type WalletWithdrawalRequest } from '@/services/api';
 import dayjs from "dayjs";
 
@@ -24,6 +24,7 @@ const WithdrawalsPage: React.FC = () => {
 
     const [reviewOpen, setReviewOpen] = useState(false);
     const [currentRow, setCurrentRow] = useState<any>(null);
+    const [reviewError, setReviewError] = useState('');
 
     // ✅ 新增统计状态
     const [pendingCount, setPendingCount] = useState<number>(0);
@@ -123,6 +124,7 @@ const WithdrawalsPage: React.FC = () => {
                                 message.error('未获取到当前登录用户信息（reviewerId），请重新登录');
                                 return;
                             }
+                            setReviewError('');
                             setCurrentRow(row);
                             setReviewOpen(true);
                         }}
@@ -214,6 +216,7 @@ const WithdrawalsPage: React.FC = () => {
                     onCancel: () => {
                         setReviewOpen(false);
                         setCurrentRow(null);
+                        setReviewError('');
                     },
                 }}
                 initialValues={{
@@ -234,6 +237,7 @@ const WithdrawalsPage: React.FC = () => {
                         message.success(values.approve ? '已通过' : '已驳回');
                         setReviewOpen(false);
                         setCurrentRow(null);
+                        setReviewError('');
                         actionRef.current?.reload();
                         return true;
                     } catch (e: any) {
@@ -242,6 +246,7 @@ const WithdrawalsPage: React.FC = () => {
                             e?.response?.data?.message ||
                             e?.message ||
                             '审批失败';
+                        setReviewError(msg);
                         message.error(msg);
                         return false;
                     }
@@ -278,6 +283,28 @@ const WithdrawalsPage: React.FC = () => {
                                 );
                             })()}
                         </Descriptions>
+
+                        <Alert
+                            type={reviewError.includes('钱包冻结余额存在缺口') ? 'error' : 'info'}
+                            showIcon
+                            message={reviewError || '如遇冻结余额缺口，可直接进入单用户异常修复页排查'}
+                            action={
+                                <Button
+                                    size="small"
+                                    type="primary"
+                                    onClick={() => {
+                                        const userId = Number(currentRow?.userId || 0);
+                                        if (!Number.isFinite(userId) || userId <= 0) {
+                                            message.error('缺少用户ID，无法跳转异常修复');
+                                            return;
+                                        }
+                                        history.push(`/wallet/replay-preview?userId=${userId}&mode=full&autostart=1`);
+                                    }}
+                                >
+                                    前往异常修复
+                                </Button>
+                            }
+                        />
 
                         <Alert
                             type={currentRow?.withdrawQrCodeUrl ? 'success' : 'warning'}
