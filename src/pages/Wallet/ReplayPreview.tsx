@@ -3,7 +3,7 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { Alert, Button, Card, Col, DatePicker, Form, InputNumber, Radio, Row, Space, Statistic, Tag, message } from 'antd';
 import dayjs from 'dayjs';
 import { getWalletReplayPreview, type WalletReplayPreview } from '@/services/api';
-import { useLocation } from '@umijs/max';
+import { history, useLocation } from '@umijs/max';
 
 type MismatchRow = WalletReplayPreview['mismatchRows'][number];
 type NegativeRow = WalletReplayPreview['negativeRows'][number];
@@ -13,6 +13,20 @@ export default function WalletReplayPreviewPage() {
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<WalletReplayPreview | null>(null);
+
+  const relatedOrderIds = React.useMemo(() => {
+    if (!result) return [];
+    const ids = new Set<number>();
+
+    [...(result.mismatchRows || []), ...(result.negativeRows || [])].forEach((row) => {
+      const orderId = Number(row?.orderId || 0);
+      if (Number.isFinite(orderId) && orderId > 0) {
+        ids.add(orderId);
+      }
+    });
+
+    return Array.from(ids.values());
+  }, [result]);
 
   const onSubmit = async () => {
     try {
@@ -172,6 +186,31 @@ export default function WalletReplayPreviewPage() {
               result.mode === 'full'
                 ? '完整回放会把提现预扣、提现打款、提现释放、收益解冻全部纳入余额回放，可用于核查冻结余额被占用、负余额时刻和提现缺口。'
                 : '旧口径会忽略提现预扣、提现打款、提现释放和收益解冻，仅适合历史结算口径对比，不适合排查提现冻结事故。'
+            }
+          />
+
+          <Alert
+            type={relatedOrderIds.length > 0 ? 'error' : 'info'}
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={relatedOrderIds.length > 0 ? '已找到可进入修复的关联订单' : '当前结果未定位到可直接修复的关联订单'}
+            description={
+              relatedOrderIds.length > 0 ? (
+                <Space wrap>
+                  {relatedOrderIds.slice(0, 8).map((orderId) => (
+                    <Button
+                      key={orderId}
+                      type="primary"
+                      onClick={() => history.push(`/orders/${orderId}`)}
+                    >
+                      前往订单#{orderId}修复
+                    </Button>
+                  ))}
+                  {relatedOrderIds.length > 8 ? <Tag>其余 {relatedOrderIds.length - 8} 个订单请在明细表继续定位</Tag> : null}
+                </Space>
+              ) : (
+                '当前页只有预核算能力。真正的修复动作仍在订单详情页“工具：重新结算 / 钱包对齐”中执行；若本次异常未关联订单，需要补后端用户级修复接口。'
+              )
             }
           />
 
