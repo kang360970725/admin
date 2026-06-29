@@ -22,6 +22,7 @@ type WalletTransactionRow = {
 
     createdAt?: string;
     sourceType?: string;
+    remark?: string | null;
 };
 
 export default function WalletTransactions() {
@@ -175,6 +176,14 @@ export default function WalletTransactions() {
             dataIndex: 'orderAutoSerial',
             width: 160,
             render: (_: any, r: WalletTransactionRow) => r.orderAutoSerial || '--',
+        },
+        {
+            title: '备注',
+            dataIndex: 'remark',
+            width: 320,
+            search: false,
+            ellipsis: true,
+            render: (v: any) => v || '--',
         },
 
         {

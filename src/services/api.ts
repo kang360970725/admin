@@ -1069,6 +1069,7 @@ export interface WalletTransaction {
     settlementId?: number | null;
     reversalOfTxId?: number | null;
     createdAt: string;
+    remark?: string | null;
 }
 
 export interface WalletHold {
@@ -1191,6 +1192,28 @@ export async function getWalletReplayPreview(params: {
     return request<WalletReplayPreview>(`${API_BASE}/wallet/replay-preview`, {
         method: 'GET',
         params,
+    });
+}
+
+export async function repairWalletAnomalies(data: {
+    userId: number;
+    apply?: boolean;
+    includeDeficitUsers?: boolean;
+    limit?: number;
+    reason?: string;
+}) {
+    return request<{
+        generatedAt: string;
+        apply: boolean;
+        repairedCount: number;
+        safeRepairableCount: number;
+        blockedCount: number;
+        blockedItems: any[];
+        appliedItems: any[];
+        previewItems: any[];
+    }>(`${API_BASE}/wallet/anomalies/repair`, {
+        method: 'POST',
+        data,
     });
 }
 

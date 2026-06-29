@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Alert, Button, Card, Col, DatePicker, Form, InputNumber, Radio, Row, Space, Statistic, Tag, message } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Radio, Row, Space, Statistic, Tag, message } from 'antd';
 import dayjs from 'dayjs';
-import { getWalletReplayPreview, type WalletReplayPreview } from '@/services/api';
-import { history, useLocation } from '@umijs/max';
+import { getWalletReplayPreview, repairWalletAnomalies, type WalletReplayPreview } from '@/services/api';
+import { useLocation } from '@umijs/max';
 
 type MismatchRow = WalletReplayPreview['mismatchRows'][number];
 type NegativeRow = WalletReplayPreview['negativeRows'][number];
@@ -13,20 +13,11 @@ export default function WalletReplayPreviewPage() {
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<WalletReplayPreview | null>(null);
-
-  const relatedOrderIds = React.useMemo(() => {
-    if (!result) return [];
-    const ids = new Set<number>();
-
-    [...(result.mismatchRows || []), ...(result.negativeRows || [])].forEach((row) => {
-      const orderId = Number(row?.orderId || 0);
-      if (Number.isFinite(orderId) && orderId > 0) {
-        ids.add(orderId);
-      }
-    });
-
-    return Array.from(ids.values());
-  }, [result]);
+  const [repairLoading, setRepairLoading] = React.useState(false);
+  const [repairReason, setRepairReason] = React.useState('');
+  const [repairPreview, setRepairPreview] = React.useState<any>(null);
+  const [repairApplied, setRepairApplied] = React.useState<any>(null);
+  const [repairBlocked, setRepairBlocked] = React.useState<any>(null);
 
   const onSubmit = async () => {
     try {
@@ -35,6 +26,9 @@ export default function WalletReplayPreviewPage() {
       const range = values.range as [dayjs.Dayjs, dayjs.Dayjs] | undefined;
 
       setLoading(true);
+      setRepairPreview(null);
+      setRepairApplied(null);
+      setRepairBlocked(null);
       const data = await getWalletReplayPreview({
         userId,
         startAt: range?.[0] ? range[0].startOf('day').toISOString() : undefined,
@@ -119,6 +113,58 @@ export default function WalletReplayPreviewPage() {
     },
   ];
 
+  const runRepair = async (apply: boolean) => {
+    try {
+      const values = await form.validateFields();
+      const userId = Number(values.userId);
+      if (!Number.isFinite(userId) || userId <= 0) {
+        message.error('请输入有效的用户ID');
+        return;
+      }
+
+      setRepairLoading(true);
+      setRepairBlocked(null);
+
+      const res = await repairWalletAnomalies({
+        userId,
+        apply,
+        includeDeficitUsers: true,
+        reason: repairReason.trim() || undefined,
+      });
+
+      if (apply) {
+        const applied = Array.isArray(res?.appliedItems) ? res.appliedItems[0] : null;
+        const blocked = Array.isArray(res?.blockedItems) ? res.blockedItems[0] : null;
+        setRepairApplied(applied);
+        setRepairPreview(null);
+        setRepairBlocked(blocked);
+        if (applied) {
+          message.success('钱包异常修复已执行');
+          await onSubmit();
+        } else {
+          message.error(blocked?.blockedReason || '未执行修复');
+        }
+        return;
+      }
+
+      const preview = Array.isArray(res?.previewItems) ? res.previewItems[0] : null;
+      const blocked = Array.isArray(res?.blockedItems) ? res.blockedItems[0] : null;
+      setRepairPreview(preview);
+      setRepairApplied(null);
+      setRepairBlocked(blocked);
+      if (preview) {
+        message.success('已生成异常修复预览');
+      } else {
+        message.error(blocked?.blockedReason || '未生成修复预览');
+      }
+    } catch (e: any) {
+      if (e?.errorFields) return;
+      message.error(e?.message || '钱包异常修复失败');
+    } finally {
+      setRepairLoading(false);
+    }
+  };
+
   React.useEffect(() => {
     const params = new URLSearchParams(location.search || '');
     const userId = Number(params.get('userId') || 0);
@@ -189,30 +235,64 @@ export default function WalletReplayPreviewPage() {
             }
           />
 
-          <Alert
-            type={relatedOrderIds.length > 0 ? 'error' : 'info'}
-            showIcon
-            style={{ marginBottom: 16 }}
-            message={relatedOrderIds.length > 0 ? '已找到可进入修复的关联订单' : '当前结果未定位到可直接修复的关联订单'}
-            description={
-              relatedOrderIds.length > 0 ? (
-                <Space wrap>
-                  {relatedOrderIds.slice(0, 8).map((orderId) => (
-                    <Button
-                      key={orderId}
-                      type="primary"
-                      onClick={() => history.push(`/orders/${orderId}`)}
-                    >
-                      前往订单#{orderId}修复
-                    </Button>
-                  ))}
-                  {relatedOrderIds.length > 8 ? <Tag>其余 {relatedOrderIds.length - 8} 个订单请在明细表继续定位</Tag> : null}
-                </Space>
-              ) : (
-                '当前页只有预核算能力。真正的修复动作仍在订单详情页“工具：重新结算 / 钱包对齐”中执行；若本次异常未关联订单，需要补后端用户级修复接口。'
-              )
-            }
-          />
+          <Card style={{ marginBottom: 16 }} title="钱包异常修复">
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Input.TextArea
+                rows={2}
+                value={repairReason}
+                onChange={(e) => setRepairReason(e.target.value)}
+                placeholder="可选：填写修复原因，例如 提现审核前修复冻结缺口 / 核对流水后修复"
+              />
+              <Space wrap>
+                <Button loading={repairLoading} type="primary" onClick={() => runRepair(false)}>
+                  生成修复预览
+                </Button>
+                <Button
+                  loading={repairLoading}
+                  danger
+                  disabled={!repairPreview}
+                  onClick={() => runRepair(true)}
+                >
+                  确认异常修复
+                </Button>
+              </Space>
+
+              {repairBlocked ? (
+                <Alert
+                  type="error"
+                  showIcon
+                  message="异常修复已阻断"
+                  description={repairBlocked?.blockedReason || '当前用户无法自动修复，请联系研发处理。'}
+                />
+              ) : null}
+
+              {repairPreview?.repairPreview ? (
+                <Descriptions bordered size="small" column={1}>
+                  <Descriptions.Item label="修复说明">
+                    {repairPreview.repairPreview.remark}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="修复前">
+                    冻结 {Number(repairPreview.repairPreview.currentFrozen || 0).toFixed(2)} / 可用 {Number(repairPreview.repairPreview.currentAvailable || 0).toFixed(2)} / 总余额 {Number(repairPreview.repairPreview.currentTotal || 0).toFixed(2)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="修复后">
+                    冻结 {Number(repairPreview.repairPreview.targetFrozen || 0).toFixed(2)} / 可用 {Number(repairPreview.repairPreview.targetAvailable || 0).toFixed(2)} / 总余额 {Number(repairPreview.repairPreview.targetTotal || 0).toFixed(2)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="变动">
+                    冻结 {Number(repairPreview.repairPreview.frozenDelta || 0).toFixed(2)} / 可用 {Number(repairPreview.repairPreview.availableDelta || 0).toFixed(2)} / 总余额 {Number(repairPreview.repairPreview.totalDelta || 0).toFixed(2)}
+                  </Descriptions.Item>
+                </Descriptions>
+              ) : null}
+
+              {repairApplied?.repairPreview ? (
+                <Alert
+                  type="success"
+                  showIcon
+                  message="异常修复已落库"
+                  description={repairApplied?.repairPreview?.remark}
+                />
+              ) : null}
+            </Space>
+          </Card>
 
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={8}>
