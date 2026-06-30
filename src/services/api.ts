@@ -1128,12 +1128,16 @@ export interface WalletReplayPreview {
     settlementSummary: {
         replayTotal: number;
         historyTotal: number;
+        replayCount: number;
+        historyCount: number;
         diff: number;
         signRule: string;
     };
     withdrawalSummary: {
         replayTotal: number;
         historyTotal: number;
+        replayCount: number;
+        historyCount: number;
         diff: number;
         signRule: string;
     };
@@ -1146,6 +1150,24 @@ export interface WalletReplayPreview {
         bizBreakdown: Record<string, number>;
         noBalanceBizTypes: string[];
     };
+    replayRows: Array<{
+        id: number;
+        createdAt: string;
+        bizType: string;
+        status: string;
+        direction: 'IN' | 'OUT';
+        amount: number;
+        sourceType?: string | null;
+        sourceId?: number | null;
+        orderId?: number | null;
+        settlementId?: number | null;
+        dispatchId?: number | null;
+        replayAvailableAfter: number;
+        replayFrozenAfter: number;
+        replayTotalAfter: number;
+        ignored: boolean;
+        ignoredReason?: string | null;
+    }>;
     mismatchRows: Array<{
         id: number;
         createdAt: string;
@@ -1244,10 +1266,12 @@ export async function getWalletAnomalies(params?: {
     userId?: number;
     onlyIssues?: boolean;
     limit?: number;
+    includeIgnored?: boolean;
 }) {
     return request<{
         generatedAt: string;
         onlyIssues: boolean;
+        includeIgnored: boolean;
         scannedUsers: number;
         returnedUsers: number;
         summary: any;
@@ -1255,6 +1279,22 @@ export async function getWalletAnomalies(params?: {
     }>(`${API_BASE}/wallet/anomalies`, {
         method: 'GET',
         params,
+    });
+}
+
+export async function ignoreWalletAnomaly(data: {
+    userId: number;
+    reason?: string;
+}) {
+    return request<{
+        ignored: boolean;
+        userId: number;
+        signature: string;
+        reason?: string;
+        createdAt: string;
+    }>(`${API_BASE}/wallet/anomalies/ignore`, {
+        method: 'POST',
+        data,
     });
 }
 
