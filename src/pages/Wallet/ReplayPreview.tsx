@@ -10,12 +10,10 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Radio,
   Row,
   Space,
   Statistic,
-  Switch,
   Tabs,
   Tag,
   message,
@@ -23,7 +21,6 @@ import {
 import dayjs from 'dayjs';
 import {
   getWalletAnomalies,
-  ignoreWalletAnomaly,
   getWalletReplayPreview,
   getWalletTransactions,
   repairWalletAnomalies,
@@ -85,8 +82,6 @@ export default function WalletReplayPreviewPage() {
   const [repairBlocked, setRepairBlocked] = React.useState<any>(null);
   const [auditLoading, setAuditLoading] = React.useState(false);
   const [auditResult, setAuditResult] = React.useState<any>(null);
-  const [auditIncludeIgnored, setAuditIncludeIgnored] = React.useState(false);
-  const [ignoringUserId, setIgnoringUserId] = React.useState<number | null>(null);
 
   const loadWalletTransactions = React.useCallback(async (page = 1, limit = 50) => {
     const values = form.getFieldsValue();
@@ -195,7 +190,7 @@ export default function WalletReplayPreviewPage() {
   const runBatchAudit = async () => {
     try {
       setAuditLoading(true);
-      const res = await getWalletAnomalies({ onlyIssues: true, limit: 500, includeIgnored: auditIncludeIgnored });
+      const res = await getWalletAnomalies({ onlyIssues: true, limit: 500 });
       setAuditResult(res || null);
       message.success('已完成批量核查');
     } catch (e: any) {
@@ -203,37 +198,6 @@ export default function WalletReplayPreviewPage() {
     } finally {
       setAuditLoading(false);
     }
-  };
-
-  const runIgnoreAnomaly = (row: any) => {
-    let reason = '';
-    Modal.confirm({
-      title: `人工忽略用户 ${row?.userId} 的当前异常`,
-      content: (
-        <Input.TextArea
-          rows={4}
-          placeholder="填写忽略原因，用于后续审计"
-          onChange={(e) => {
-            reason = e.target.value || '';
-          }}
-        />
-      ),
-      onOk: async () => {
-        try {
-          setIgnoringUserId(Number(row?.userId || 0));
-          await ignoreWalletAnomaly({
-            userId: Number(row?.userId || 0),
-            reason: reason.trim() || '人工核对后暂不处理',
-          });
-          message.success(`已忽略用户 ${row?.userId} 的当前异常`);
-          await runBatchAudit();
-        } catch (e: any) {
-          message.error(e?.message || '人工忽略失败');
-        } finally {
-          setIgnoringUserId(null);
-        }
-      },
-    });
   };
 
 
@@ -304,10 +268,6 @@ export default function WalletReplayPreviewPage() {
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Space wrap>
             <Button type="primary" loading={auditLoading} onClick={runBatchAudit}>核查全部异常用户</Button>
-            <Space size={8}>
-              <span>显示已忽略</span>
-              <Switch checked={auditIncludeIgnored} onChange={setAuditIncludeIgnored} />
-            </Space>
           </Space>
           {auditResult?.summary ? (
             <Descriptions bordered size="small" column={2}>
@@ -316,7 +276,6 @@ export default function WalletReplayPreviewPage() {
               <Descriptions.Item label="多算用户">{auditResult.summary?.deficitUsers ?? 0}</Descriptions.Item>
               <Descriptions.Item label="负余额用户">{auditResult.summary?.negativeBalanceUsers ?? 0}</Descriptions.Item>
               <Descriptions.Item label="负快照用户">{auditResult.summary?.negativeSnapshotUsers ?? 0}</Descriptions.Item>
-              <Descriptions.Item label="已忽略用户">{auditResult.summary?.ignoredUsers ?? 0}</Descriptions.Item>
               <Descriptions.Item label="多算总额">¥{formatNumber(auditResult.summary?.totalDeficitAmount)}</Descriptions.Item>
             </Descriptions>
           ) : null}
@@ -347,38 +306,21 @@ export default function WalletReplayPreviewPage() {
                 {
                   title: '状态',
                   width: 120,
-                  render: (_: any, row: any) =>
-                    row?.ignored ? (
-                      <Tag color="default">已忽略</Tag>
-                    ) : (
-                      <Tag color="red">余额偏高</Tag>
-                    ),
+                  render: () => <Tag color="red">余额偏高</Tag>,
                 },
                 {
                   title: '操作',
-                  width: 180,
+                  width: 100,
                   render: (_: any, row: any) => (
-                    <Space size={4}>
-                      <Button
-                        type="link"
-                        onClick={() => {
-                          form.setFieldsValue({ userId: Number(row.userId) });
-                          message.success(`已带入用户 ${row.userId}`);
-                        }}
-                      >
-                        带入核算
-                      </Button>
-                      {!row?.ignored ? (
-                        <Button
-                          type="link"
-                          danger
-                          loading={ignoringUserId === Number(row?.userId || 0)}
-                          onClick={() => runIgnoreAnomaly(row)}
-                        >
-                          人工忽略
-                        </Button>
-                      ) : null}
-                    </Space>
+                    <Button
+                      type="link"
+                      onClick={() => {
+                        form.setFieldsValue({ userId: Number(row.userId) });
+                        message.success(`已带入用户 ${row.userId}`);
+                      }}
+                    >
+                      带入核算
+                    </Button>
                   ),
                 },
               ]}
@@ -432,12 +374,6 @@ export default function WalletReplayPreviewPage() {
               <Space wrap>
                 <Button loading={repairLoading} type="primary" onClick={() => runRepair(false)}>生成重放修复预览</Button>
                 <Button loading={repairLoading} danger disabled={!repairPreview || !repairPreview?.repairPreview?.canApplyByReplay} onClick={() => runRepair(true)}>确认重放修复</Button>
-                <Button
-                  loading={ignoringUserId === Number(result?.userId || form.getFieldValue('userId') || 0)}
-                  onClick={() => runIgnoreAnomaly({ userId: Number(result?.userId || form.getFieldValue('userId') || 0) })}
-                >
-                  人工忽略
-                </Button>
               </Space>
               {repairBlocked ? <Alert type="error" showIcon message="重放修复已阻断" description={repairBlocked?.blockedReason || '当前用户无法自动执行重放修复'} /> : null}
               {repairPreview?.repairPreview ? (

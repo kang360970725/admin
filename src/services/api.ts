@@ -1266,12 +1266,10 @@ export async function getWalletAnomalies(params?: {
     userId?: number;
     onlyIssues?: boolean;
     limit?: number;
-    includeIgnored?: boolean;
 }) {
     return request<{
         generatedAt: string;
         onlyIssues: boolean;
-        includeIgnored: boolean;
         scannedUsers: number;
         returnedUsers: number;
         summary: any;
@@ -1279,22 +1277,6 @@ export async function getWalletAnomalies(params?: {
     }>(`${API_BASE}/wallet/anomalies`, {
         method: 'GET',
         params,
-    });
-}
-
-export async function ignoreWalletAnomaly(data: {
-    userId: number;
-    reason?: string;
-}) {
-    return request<{
-        ignored: boolean;
-        userId: number;
-        signature: string;
-        reason?: string;
-        createdAt: string;
-    }>(`${API_BASE}/wallet/anomalies/ignore`, {
-        method: 'POST',
-        data,
     });
 }
 
