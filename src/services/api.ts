@@ -1217,6 +1217,47 @@ export async function repairWalletAnomalies(data: {
     });
 }
 
+export async function rollbackWalletRepairAdjustments(data: {
+    userId?: number;
+    apply?: boolean;
+    limit?: number;
+    onlyBalanceIncrease?: boolean;
+    reason?: string;
+}) {
+    return request<{
+        generatedAt: string;
+        apply: boolean;
+        onlyBalanceIncrease: boolean;
+        rollbackableCount: number;
+        blockedCount: number;
+        appliedCount: number;
+        blockedItems: any[];
+        appliedItems: any[];
+        previewItems: any[];
+    }>(`${API_BASE}/wallet/anomalies/repair-rollback`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getWalletAnomalies(params?: {
+    userId?: number;
+    onlyIssues?: boolean;
+    limit?: number;
+}) {
+    return request<{
+        generatedAt: string;
+        onlyIssues: boolean;
+        scannedUsers: number;
+        returnedUsers: number;
+        summary: any;
+        items: any[];
+    }>(`${API_BASE}/wallet/anomalies`, {
+        method: 'GET',
+        params,
+    });
+}
+
 // ---------------------- Dashboard API ----------------------
 
 export interface RevenueOverviewRes {
