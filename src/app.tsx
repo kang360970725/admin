@@ -30,6 +30,7 @@ interface CurrentUser {
     name?: string;
     username?: string;
     userType: string;
+    staffEmploymentStatus?: string;
     level: number;
     balance: number;
     avatar?: string;

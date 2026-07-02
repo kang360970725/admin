@@ -3,7 +3,12 @@ export default function access(initialState: { currentUser?: any } | undefined) 
 
   const permissions = currentUser?.permissions || [];
   const userType = String(currentUser?.userType || '').trim().toUpperCase();
+  const staffEmploymentStatus = String(currentUser?.staffEmploymentStatus || '').trim().toUpperCase();
   const isAdmin = userType === 'ADMIN' || userType === 'SUPER_ADMIN';
+  const isDispatchEligibleStaff = !(
+    userType === 'STAFF' &&
+    (staffEmploymentStatus === 'EXITED' || staffEmploymentStatus === 'BLACKLISTED')
+  );
   const has = (key: string) => permissions.includes(key);
   const canViewMemberUsers = isAdmin || has('users:member:page');
   const canViewStaffUsers = isAdmin || has('users:staff:page');
@@ -44,8 +49,8 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canDeleteRating: isAdmin,
 
     // 陪玩中心
-    canViewMyOrders: has('staff:my-orders:page'),
-    canViewWorkbench: has('staff:workbench:page'),
+    canViewMyOrders: has('staff:my-orders:page') && isDispatchEligibleStaff,
+    canViewWorkbench: has('staff:workbench:page') && isDispatchEligibleStaff,
 
     // 订单/结算
     canViewOrdersList: has('orders:list:page'),

@@ -6,6 +6,7 @@ declare global {
       permissions?: string[];
       username?: string;
       workStatus?: string;
+      staffEmploymentStatus?: string;
     };
   }
 }

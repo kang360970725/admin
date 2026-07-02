@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
+    Alert,
     Button,
     Card,
     Col,
@@ -41,11 +42,25 @@ type DictMap = Record<string, Record<string, string>>;
 const WorkbenchPage: React.FC = () => {
     const {initialState, setInitialState} = useModel('@@initialState');
     const currentUser = initialState?.currentUser;
+    const staffEmploymentStatus = String(currentUser?.staffEmploymentStatus || 'ACTIVE').toUpperCase();
+    const canUseDispatchWorkbench = staffEmploymentStatus !== 'EXITED' && staffEmploymentStatus !== 'BLACKLISTED';
 
     const isMobile = useMemo(() => {
         if (typeof window === 'undefined') return false;
         return window.matchMedia?.('(max-width: 767px)')?.matches;
     }, []);
+
+    if (!canUseDispatchWorkbench) {
+        return (
+            <PageContainer>
+                <Alert
+                    type="info"
+                    showIcon
+                    message="当前账号已退店，接单与在线功能已关闭。"
+                />
+            </PageContainer>
+        );
+    }
 
     const [myWorkStatus, setLocalWorkStatus] = useState<string>(
         String(initialState?.currentUser?.workStatus || 'IDLE'),

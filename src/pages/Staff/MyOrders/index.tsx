@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from '@umijs/max';
+import { useModel, useNavigate } from '@umijs/max';
 import { PageContainer, ProTable, type ProColumns } from '@ant-design/pro-components';
-import { Button, Space, Tag } from 'antd';
+import { Alert, Button, Space, Tag } from 'antd';
 import { getEnumDicts, getMyDispatches } from '@/services/api';
 import { pickStatusColor, pickStatusText, DISPATCH_STATUS_META } from '@/constants/status';
 
@@ -18,7 +18,10 @@ const statusColor = (v?: string) => {
 };
 
 const MyOrdersPage: React.FC = () => {
+    const { initialState } = useModel('@@initialState');
     const navigate = useNavigate();
+    const staffEmploymentStatus = String((initialState as any)?.currentUser?.staffEmploymentStatus || 'ACTIVE').toUpperCase();
+    const canViewDispatchOrders = staffEmploymentStatus !== 'EXITED' && staffEmploymentStatus !== 'BLACKLISTED';
 
     const [dicts, setDicts] = useState<DictMap>({});
 
@@ -38,6 +41,18 @@ const MyOrdersPage: React.FC = () => {
             }
         })();
     }, []);
+
+    if (!canViewDispatchOrders) {
+        return (
+            <PageContainer>
+                <Alert
+                    type="info"
+                    showIcon
+                    message="当前账号已退店，接单记录入口已关闭。"
+                />
+            </PageContainer>
+        );
+    }
 
     const columns = useMemo<any>(() => {
         return [
