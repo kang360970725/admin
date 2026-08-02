@@ -16,7 +16,8 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewAllUsers = canViewInternalUsers && isAdmin;
   const hasLegacySystemAdmin = has('system:role:page');
   const hasFinanceRecords = has('finance:records:list');
-  const canViewWalletOverview = has('wallet:overview:page') || has('wallet:withdrawals:page');
+  const canUseOwnStaffWallet = userType === 'STAFF' && isDispatchEligibleStaff;
+  const canViewWalletOverview = has('wallet:overview:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet;
 
   return {
     // 系统管理
@@ -70,7 +71,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewWalletOverview,
     canViewWalletMemberLevels: has('wallet:member-levels:page') || has('wallet:withdrawals:page'),
     canViewWalletRechargePlans: has('wallet:recharge-plans:page') || has('wallet:withdrawals:page'),
-    canViewWalletTransactions: has('wallet:transactions:page') || has('wallet:withdrawals:page'),
+    canViewWalletTransactions: has('wallet:transactions:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet,
     canViewWalletReplayPreview: has('wallet:replay-preview:page') || has('wallet:withdrawals:page'),
     canViewWithdrawals: has('wallet:withdrawals:page'),
 
