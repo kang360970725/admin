@@ -95,6 +95,12 @@
 2. `src/access.ts` 中对应能力，如果不能复用已有能力。
 3. 后端 `prisma/seed.ts` 权限种子和对应 controller 的 `@Permissions`，确保角色管理能分配、接口也能校验。
 
+## 环境与域名
+
+- 生产 API 域名为 `https://api.lmsdclub.cn`。
+- `config/config.ts` 负责按 `UMI_ENV` 注入 `process.env.API_BASE`；生产环境不要再硬编码旧的 `http://api.welax-tech.com`。
+- `src/app.tsx` 的刷新接口和 `src/services/api.ts` 的业务接口都应读取 `process.env.API_BASE`。
+
 ## 重点页面说明
 
 ### 管理页布局约定

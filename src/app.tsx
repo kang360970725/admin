@@ -51,7 +51,7 @@ interface VersionManifest {
 const loginPath = '/login';
 const API_BASE =
     process.env.NODE_ENV === 'production'
-        ? 'http://api.welax-tech.com'
+        ? (process.env.API_BASE || 'https://api.lmsdclub.cn')
         : '/api';
 const LOCAL_APP_VERSION = String(process.env.APP_VERSION || '');
 const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');

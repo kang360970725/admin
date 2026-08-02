@@ -19,7 +19,7 @@ const envConfig = {
   },
   production: {
     // ✅ 生产环境直连后端（不走 /api 反代）
-    API_BASE: 'http://api.welax-tech.com',
+    API_BASE: 'https://api.lmsdclub.cn',
     APP_NAME: '蓝猫陪玩管理系统',
   },
 };

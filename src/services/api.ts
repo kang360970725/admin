@@ -1,5 +1,5 @@
 import { request } from '@umijs/max';
-import { getApiBase, logEnvInfo } from '@/utils/env';
+import { logEnvInfo } from '@/utils/env';
 
 // 记录环境信息  案件编号 01531465
 logEnvInfo();
@@ -8,7 +8,7 @@ logEnvInfo();
 // ✅ 生产环境直连后端域名（来自 config/config.ts 的 define 注入）
 const API_BASE =
     process.env.NODE_ENV === 'production'
-        ? 'http://api.welax-tech.com'
+        ? (process.env.API_BASE || 'https://api.lmsdclub.cn')
         : '/api';
 
 export function getRealtimeStreamUrl(token: string) {
