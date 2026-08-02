@@ -291,7 +291,7 @@ export default defineConfig({
         { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
         { path: '/users/staff', name: '打手管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
         { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
-        { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers' },
+        { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers', hideInMenu: true },
       ],
     },
     { name: '评级管理', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },

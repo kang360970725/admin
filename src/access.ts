@@ -4,16 +4,17 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const permissions = currentUser?.permissions || [];
   const userType = String(currentUser?.userType || '').trim().toUpperCase();
   const staffEmploymentStatus = String(currentUser?.staffEmploymentStatus || '').trim().toUpperCase();
-  const isAdmin = userType === 'ADMIN' || userType === 'SUPER_ADMIN';
+  const isSuperAdmin = userType === 'SUPER_ADMIN';
   const isDispatchEligibleStaff = !(
     userType === 'STAFF' &&
     (staffEmploymentStatus === 'EXITED' || staffEmploymentStatus === 'BLACKLISTED')
   );
   const has = (key: string) => permissions.includes(key);
-  const canViewMemberUsers = isAdmin || has('users:member:page');
-  const canViewStaffUsers = isAdmin || has('users:staff:page');
-  const canViewInternalUsers = isAdmin || has('users:internal:page');
-  const canViewAllUsers = canViewInternalUsers && isAdmin;
+  const canViewMemberUsers = isSuperAdmin || has('users:member:page');
+  const canViewStaffUsers = isSuperAdmin || has('users:staff:page');
+  const canViewInternalUsers = isSuperAdmin || has('users:internal:page');
+  const canViewAllUsers = false;
+  const canManageStaffUsers = isSuperAdmin || has('users:staff:page');
   const hasLegacySystemAdmin = has('system:role:page');
   const hasFinanceRecords = has('finance:records:list');
   const canUseOwnStaffWallet = userType === 'STAFF' && isDispatchEligibleStaff;
@@ -44,15 +45,16 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewInternalUsers,
     canViewAllUsers,
     canViewStaffRatings: has('staff-ratings:page'),
-    canSeeAdmin: isAdmin,
-    canCreateUser: isAdmin,
-    canDeleteUser: isAdmin,
-    canEditUser: isAdmin,
-    canChangeLevel: isAdmin,
-    canResetPassword: isAdmin,
-    canCreateRating: isAdmin,
-    canEditRating: isAdmin,
-    canDeleteRating: isAdmin,
+    canSeeAdmin: isSuperAdmin,
+    canCreateUser: isSuperAdmin,
+    canDeleteUser: isSuperAdmin,
+    canEditUser: isSuperAdmin,
+    canManageStaffUsers,
+    canChangeLevel: isSuperAdmin,
+    canResetPassword: isSuperAdmin,
+    canCreateRating: isSuperAdmin,
+    canEditRating: isSuperAdmin,
+    canDeleteRating: isSuperAdmin,
 
     // 陪玩中心
     canViewMyOrders: has('staff:my-orders:page') && isDispatchEligibleStaff,

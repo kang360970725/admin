@@ -999,59 +999,70 @@ export default function UsersPage() {
             search: false,
             width: 200,
             fixed: 'right',
-            render: (_: any, record: any) => (
-                <Space>
-                    {sceneConfig.key === 'MEMBER' ? (
-                        <Button type="link" size="small" onClick={() => openMemberDetail(record)}>
-                            详情
-                        </Button>
-                    ) : null}
-                    {sceneConfig.key === 'MEMBER' ? (
-                        <Button type="link" size="small" onClick={() => openWallet(record)}>
-                            钱包
-                        </Button>
-                    ) : null}
-                    <Button type="link" size="small" onClick={() => handleEdit(record)}>
-                        编辑
-                    </Button>
-                    {sceneConfig.key !== 'MEMBER' ? (
-                        <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
-                            分配角色
-                        </Button>
-                    ) : null}
-                    {sceneConfig.key !== 'MEMBER' ? (
-                        <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
-                            升降级
-                        </Button>
-                    ) : null}
-                    <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
-                        重置密码
-                    </Button>
-                    {sceneConfig.key === 'STAFF' && canExitOrClearStaff(record) ? (
-                        <Button type="link" size="small" danger onClick={() => openStaffExit(record)}>
-                            退店
-                        </Button>
-                    ) : null}
-                    {sceneConfig.key === 'STAFF' && canExitOrClearStaff(record) ? (
-                        <Button type="link" size="small" danger onClick={() => openStaffClear(record)}>
-                            清退
-                        </Button>
-                    ) : null}
-                    {isAnonymousUserRecord(record) ? (
-                        <Popconfirm
-                            title="确定删除这个匿名用户吗？"
-                            description="删除后无法恢复。"
-                            onConfirm={() => handleDelete(record.id)}
-                            okText="确定"
-                            cancelText="取消"
-                        >
-                            <Button type="link" size="small" danger>
-                                删除
+            render: (_: any, record: any) => {
+                const isStaffScene = sceneConfig.key === 'STAFF';
+                const canManageCurrentStaff = isStaffScene && access.canManageStaffUsers;
+                const canEditCurrentUser = access.canEditUser || canManageCurrentStaff;
+                const canChangeCurrentLevel = access.canChangeLevel || canManageCurrentStaff;
+
+                return (
+                    <Space>
+                        {sceneConfig.key === 'MEMBER' ? (
+                            <Button type="link" size="small" onClick={() => openMemberDetail(record)}>
+                                详情
                             </Button>
-                        </Popconfirm>
-                    ) : null}
-                </Space>
-            ),
+                        ) : null}
+                        {sceneConfig.key === 'MEMBER' ? (
+                            <Button type="link" size="small" onClick={() => openWallet(record)}>
+                                钱包
+                            </Button>
+                        ) : null}
+                        {canEditCurrentUser ? (
+                            <Button type="link" size="small" onClick={() => handleEdit(record)}>
+                                编辑
+                            </Button>
+                        ) : null}
+                        {access.canEditUser && sceneConfig.key !== 'MEMBER' ? (
+                            <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
+                                分配角色
+                            </Button>
+                        ) : null}
+                        {canChangeCurrentLevel && sceneConfig.key !== 'MEMBER' ? (
+                            <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
+                                升降级
+                            </Button>
+                        ) : null}
+                        {access.canResetPassword ? (
+                            <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
+                                重置密码
+                            </Button>
+                        ) : null}
+                        {canManageCurrentStaff && canExitOrClearStaff(record) ? (
+                            <Button type="link" size="small" danger onClick={() => openStaffExit(record)}>
+                                退店
+                            </Button>
+                        ) : null}
+                        {canManageCurrentStaff && canExitOrClearStaff(record) ? (
+                            <Button type="link" size="small" danger onClick={() => openStaffClear(record)}>
+                                清退
+                            </Button>
+                        ) : null}
+                        {access.canDeleteUser && isAnonymousUserRecord(record) ? (
+                            <Popconfirm
+                                title="确定删除这个匿名用户吗？"
+                                description="删除后无法恢复。"
+                                onConfirm={() => handleDelete(record.id)}
+                                okText="确定"
+                                cancelText="取消"
+                            >
+                                <Button type="link" size="small" danger>
+                                    删除
+                                </Button>
+                            </Popconfirm>
+                        ) : null}
+                    </Space>
+                );
+            },
         },
     ].filter(Boolean) as any[];
 
@@ -1155,7 +1166,7 @@ export default function UsersPage() {
                     labelWidth: 'auto',
                 }}
                 toolBarRender={() => [
-                    !access.canCreateUser && (
+                    access.canCreateUser && (
                         <Button
                             key="add"
                             type="primary"
@@ -1336,10 +1347,12 @@ export default function UsersPage() {
             >
                 {memberDetail ? (
                     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        <Space wrap>
-                            <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
-                            <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
-                        </Space>
+                        {access.canEditUser ? (
+                            <Space wrap>
+                                <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
+                                <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
+                            </Space>
+                        ) : null}
                         <Descriptions bordered size="small" column={2}>
                             <Descriptions.Item label="会员编码">{memberDetail?.memberProfile?.memberCode || '-'}</Descriptions.Item>
                             <Descriptions.Item label="会员等级">{memberDetail?.memberProfile?.levelCode || 'NONE'}</Descriptions.Item>
@@ -1433,11 +1446,11 @@ export default function UsersPage() {
                         <Card
                             size="small"
                             title="游戏名片"
-                            extra={(
+                            extra={access.canEditUser ? (
                                 <Button type="link" size="small" onClick={openMemberGameCardModal}>
                                     维护游戏名片
                                 </Button>
-                            )}
+                            ) : null}
                         >
                             <List
                                 size="small"
@@ -1445,7 +1458,7 @@ export default function UsersPage() {
                                 locale={{ emptyText: '暂无游戏名片' }}
                                 renderItem={(item: any) => (
                                     <List.Item
-                                        actions={[
+                                        actions={access.canEditUser ? [
                                             item?.isPrimary ? (
                                                 <Tag color="gold" key="primary">主要</Tag>
                                             ) : (
@@ -1470,7 +1483,7 @@ export default function UsersPage() {
                                                     删除
                                                 </Button>
                                             </Popconfirm>,
-                                        ]}
+                                        ] : []}
                                     >
                                         <div style={{ width: '100%' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>

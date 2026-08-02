@@ -23,6 +23,24 @@ const scopeMap = {
     BOTH: { text: '线上线下', color: 'purple' },
 };
 
+function formatBeijingTime(raw: any) {
+    if (!raw) return '-';
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return '-';
+    const parts = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    }).formatToParts(date);
+    const pick = (type: string) => parts.find((part) => part.type === type)?.value || '00';
+    return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}:${pick('second')}`;
+}
+
 export default function StaffRatingsPage() {
     const access = useAccess();
     const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -107,17 +125,33 @@ export default function StaffRatingsPage() {
             width: 80,
         },
         {
+            title: '创建时间',
+            dataIndex: 'createdAt',
+            key: 'createdAt',
+            width: 170,
+            search: false,
+            render: (value: any) => formatBeijingTime(value),
+        },
+        {
+            title: '修改时间',
+            dataIndex: 'updatedAt',
+            key: 'updatedAt',
+            width: 170,
+            search: false,
+            render: (value: any) => formatBeijingTime(value),
+        },
+        {
             title: '操作',
             key: 'action',
             width: 150,
             render: (_: any, record: any) => (
                 <Space>
-                    {!access.canEditRating && (
+                    {access.canEditRating && (
                         <Button type="link" size="small" onClick={() => handleEdit(record)}>
                             编辑
                         </Button>
                     )}
-                    {!access.canDeleteRating && (
+                    {access.canDeleteRating && (
                         <Popconfirm
                             title="确定删除这个评级吗？"
                             onConfirm={() => handleDelete(record.id)}
@@ -160,7 +194,7 @@ export default function StaffRatingsPage() {
                     labelWidth: 'auto',
                 }}
                 toolBarRender={() => [
-                    !access.canCreateRating && (
+                    access.canCreateRating && (
                         <Button
                             key="add"
                             type="primary"
