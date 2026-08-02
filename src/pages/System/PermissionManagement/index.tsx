@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Button, Spin, Tree, Modal, Form, Input, Select, Space, message } from 'antd';
+import { Card, Button, Spin, Tree, Modal, Form, Input, Select, Space, message, Tag, Typography } from 'antd';
 import { getPermissionTree, createPermission, deletePermission } from '@/services/api';
 
 const { Option } = Select;
@@ -69,12 +69,12 @@ const PermissionManagement: React.FC = () => {
 
     const titleRender = (node: any) => (
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-      <span>
-        {node.name}
-          <span style={{ color: '#999', marginLeft: 8, fontSize: 12 }}>
-          ({node.key})
-        </span>
-      </span>
+      <Space size={6}>
+        <span>{node.name}</span>
+          {String(node?.key || '').startsWith('menu:') ? <Tag color="blue">目录</Tag> : <Tag>{node.type}</Tag>}
+          <Typography.Text type="secondary">{node.key}</Typography.Text>
+          <Typography.Text type="secondary">模块：{node.module}</Typography.Text>
+      </Space>
             <Space>
                 <Button type="link" size="small" onClick={() => handleAdd(node)}>
                     添加子权限
@@ -101,6 +101,7 @@ const PermissionManagement: React.FC = () => {
                         treeData={permissionTree}
                         titleRender={titleRender}
                         defaultExpandAll
+                        showLine
                         fieldNames={{
                             title: 'name',
                             key: 'id',

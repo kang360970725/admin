@@ -17,7 +17,7 @@
 环境/API：
 
 - 开发环境通过 `/api` 代理到 `http://localhost:3000`。
-- 生产环境当前指向 `http://api.welax-tech.com`。
+- 生产环境当前指向 `https://api.lmsdclub.cn`。
 - 大多数后端请求集中在 `src/services/api.ts`，页面从这里 import 具名函数。
 - 页面备案号展示在 `src/app.tsx` 的 `rootContainer` 全局追加，样式在 `src/global.less`；当前备案号为 `蜀ICP备2026039511号-1`。
 
@@ -88,6 +88,8 @@
 - 钱包路由相对宽松；后端 `UserStatusGuard` 也允许冻结用户访问钱包相关接口。
 - 管理员类型在部分用户管理场景有旁路能力，但多数菜单仍由 permissions key 控制。
 - 当前页面级权限已经按新增岗位拆分为细分 key；历史粗权限如 `system:role:page`、`finance:records:list` 只作为兼容兜底，不应再作为新页面默认权限。
+- 权限管理和角色配置使用后端 `Permission.parentId` 形成权限树；`menu:*` 是目录节点，仅用于呈现菜单位置，角色保存时只保存真实权限节点。
+- 新增页面时必须让权限 key 同时出现在 `config/config.ts` 路由 access、`src/access.ts`、后端 `prisma/seed.ts` 的树形 `parentKey` 和对应 controller 的 `@Permissions` 中。
 
 新增路由时通常需要同时改：
 

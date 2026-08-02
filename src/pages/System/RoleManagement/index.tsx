@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Table, Button, Space, message, Modal, Form, Input, Tree, Tag } from 'antd';
+import { Card, Table, Button, Space, message, Modal, Form, Input, Tree, Tag, Typography } from 'antd';
 import { getRoles, createRole, updateRole, deleteRole } from '@/services/api';
 import { getPermissionTree } from '@/services/api';
 
@@ -15,6 +15,47 @@ const RoleManagement: React.FC = () => {
     useEffect(() => {
         loadData();
     }, []);
+
+    const collectAssignablePermissionIds = (nodes: any[]): number[] => {
+        const ids: number[] = [];
+        const walk = (items: any[]) => {
+            (items || []).forEach((item) => {
+                if (!String(item?.key || '').startsWith('menu:')) {
+                    ids.push(Number(item.id));
+                }
+                walk(item.children || []);
+            });
+        };
+        walk(nodes);
+        return ids;
+    };
+
+    const assignablePermissionIds = React.useMemo(
+        () => new Set(collectAssignablePermissionIds(permissionTree)),
+        [permissionTree],
+    );
+
+    const normalizeCheckedKeys = (checked: any): number[] => {
+        const keys = Array.isArray(checked) ? checked : checked?.checked || [];
+        return Array.from(
+            new Set(
+                keys
+                    .map((id: any) => Number(id))
+                    .filter((id: number) => Number.isFinite(id) && assignablePermissionIds.has(id)),
+            ),
+        );
+    };
+
+    const renderPermissionTitle = (node: any) => {
+        const isMenu = String(node?.key || '').startsWith('menu:');
+        return (
+            <Space size={6}>
+                <span>{node.name}</span>
+                {isMenu ? <Tag color="blue">目录</Tag> : <Tag>{node.type}</Tag>}
+                {!isMenu ? <Typography.Text type="secondary">{node.key}</Typography.Text> : null}
+            </Space>
+        );
+    };
 
     const loadData = async () => {
         setLoading(true);
@@ -40,7 +81,11 @@ const RoleManagement: React.FC = () => {
 
     const handleEdit = (record: any) => {
         setEditingRole(record);
-        setSelectedPermissions(record.permissions.map((p: any) => p.id));
+        setSelectedPermissions(
+            record.permissions
+                .map((p: any) => Number(p.id))
+                .filter((id: number) => assignablePermissionIds.has(id)),
+        );
         setModalVisible(true);
     };
 
@@ -48,7 +93,7 @@ const RoleManagement: React.FC = () => {
         try {
             const data = {
                 ...values,
-                permissionIds: selectedPermissions
+                permissionIds: selectedPermissions.filter((id) => assignablePermissionIds.has(Number(id))),
             };
 
             if (editingRole) {
@@ -184,7 +229,10 @@ const RoleManagement: React.FC = () => {
                             checkable
                             treeData={permissionTree}
                             checkedKeys={selectedPermissions}
-                            onCheck={(checked: any) => setSelectedPermissions(checked)}
+                            onCheck={(checked: any) => setSelectedPermissions(normalizeCheckedKeys(checked))}
+                            titleRender={renderPermissionTitle}
+                            showLine
+                            defaultExpandAll
                             fieldNames={{
                                 title: 'name',
                                 key: 'id',

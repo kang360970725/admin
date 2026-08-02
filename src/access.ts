@@ -75,11 +75,8 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewWalletReplayPreview: has('wallet:replay-preview:page') || has('wallet:withdrawals:page'),
     canViewWithdrawals: has('wallet:withdrawals:page'),
 
-    // ✅ 营业数据看板
-    canViewDashboard: has('dashboard:revenue:page'),
     // ✅ 业绩数据看板
     canViewPerformanceDashboard: has('performance:dashboard:view'),
-    canViewPerformanceStaff: has('performance:staff:view'),
     // ✅ 财务核账
     canViewFinanceDashboard: has('finance:dashboard:view'), //财务看板
     canViewFinanceReconcile: hasFinanceRecords, //财务明细
