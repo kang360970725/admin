@@ -254,9 +254,24 @@ function buildSubscribeTemplateConfigValue(values: any) {
 }
 
 function getDefaultStaffRuleEngineConfig(): StaffRuleEngineConfig {
+  const defaultRule = {
+    id: 'default_rule',
+    name: '默认规则',
+    enabled: true,
+    priority: -1,
+    tagCodes: [],
+    depositAmount: 500,
+    firstWithdrawMinBalance: 1000,
+    firstWithdrawMinAcceptedDays: 15,
+    quitCoolingDays: 180,
+    depositForfeitDays: 30,
+    dormantFreezeDays: 7,
+    refundWhenDepositInsufficient: true,
+  };
   return {
     tags: [],
     rules: [],
+    defaultRule,
   };
 }
 
@@ -266,9 +281,51 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
   if (!raw) return fallback;
   try {
     const parsed = JSON.parse(raw || '{}');
+    const tags = Array.isArray(parsed?.tags) ? parsed.tags : [];
+    const tagMap = new Map(
+      tags.map((item: any, index: number) => [
+        String(item?.code || '').trim().toLowerCase(),
+        {
+          code: String(item?.code || '').trim().toLowerCase(),
+          name: String(item?.name || '').trim(),
+          enabled: item?.enabled !== false,
+          sort: Number.isFinite(Number(item?.sort)) ? Number(item.sort) : index + 1,
+        },
+      ]),
+    );
+    const defaultRule = {
+      ...fallback.defaultRule,
+      ...(parsed?.defaultRule && typeof parsed.defaultRule === 'object' ? parsed.defaultRule : {}),
+      id: 'default_rule',
+      name: '默认规则',
+      enabled: true,
+      tagCodes: [],
+      dormantFreezeDays: Number(parsed?.defaultRule?.dormantFreezeDays ?? fallback.defaultRule.dormantFreezeDays),
+    };
+    const rules = Array.isArray(parsed?.rules)
+      ? parsed.rules.map((item: any, index: number) => {
+          const tagCode = String((Array.isArray(item?.tagCodes) ? item.tagCodes[0] : item?.tagCode) || '').trim().toLowerCase();
+          const tag = tagMap.get(tagCode);
+          return {
+            ...item,
+            id: String(item?.id || '').trim(),
+            name: String(item?.name || '').trim(),
+            enabled: item?.enabled !== false,
+            priority: Number.isFinite(Number(item?.priority)) ? Number(item.priority) : 0,
+            tagCode,
+            tagName: String(tag?.name || item?.tagName || '').trim(),
+            tagEnabled: tag?.enabled !== false,
+            sort: Number.isFinite(Number(tag?.sort)) ? Number(tag?.sort) : index + 1,
+            tagCodes: tagCode ? [tagCode] : [],
+            firstWithdrawMinAcceptedDays: Number(item?.firstWithdrawMinAcceptedDays ?? 15),
+            dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
+          };
+        })
+      : [];
     return {
-      tags: Array.isArray(parsed?.tags) ? parsed.tags : [],
-      rules: Array.isArray(parsed?.rules) ? parsed.rules : [],
+      tags,
+      rules,
+      defaultRule,
     };
   } catch {
     return fallback;
@@ -277,31 +334,49 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
 
 function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
   const current = values?.staffRuleEngine || {};
-  const tags = Array.isArray(current?.tags)
-    ? current.tags.map((item: any, index: number) => ({
-        code: String(item?.code || '').trim().toLowerCase(),
-        name: String(item?.name || '').trim(),
+  const rawRules = Array.isArray(current?.rules) ? current.rules : [];
+  const tags = rawRules
+    .map((item: any, index: number) => ({
+        code: String(item?.tagCode || item?.code || '').trim().toLowerCase(),
+        name: String(item?.tagName || item?.name || '').trim(),
         enabled: item?.enabled !== false,
         sort: Number.isFinite(Number(item?.sort)) ? Number(item.sort) : index + 1,
       }))
-    : [];
-  const rules = Array.isArray(current?.rules)
-    ? current.rules.map((item: any, index: number) => ({
-        id: String(item?.id || '').trim(),
-        name: String(item?.name || '').trim(),
+    .filter((item: any) => item.code);
+  const defaultRule = {
+    ...getDefaultStaffRuleEngineConfig().defaultRule,
+    ...(current?.defaultRule || {}),
+    id: 'default_rule',
+    name: '默认规则',
+    enabled: true,
+    tagCodes: [],
+    depositAmount: Number(current?.defaultRule?.depositAmount ?? 500),
+    firstWithdrawMinBalance: Number(current?.defaultRule?.firstWithdrawMinBalance ?? 1000),
+    firstWithdrawMinAcceptedDays: Number(current?.defaultRule?.firstWithdrawMinAcceptedDays ?? 15),
+    quitCoolingDays: Number(current?.defaultRule?.quitCoolingDays ?? 180),
+    depositForfeitDays: Number(current?.defaultRule?.depositForfeitDays ?? 30),
+    dormantFreezeDays: Number(current?.defaultRule?.dormantFreezeDays ?? 7),
+    refundWhenDepositInsufficient: true,
+  };
+  const rules = rawRules
+    .map((item: any, index: number) => {
+      const tagCode = String(item?.tagCode || item?.code || '').trim().toLowerCase();
+      return {
+        id: String(item?.id || `${tagCode || `rule_${index + 1}`}_rule`).trim(),
+        name: String(item?.name || `${String(item?.tagName || tagCode || `标签 ${index + 1}`).trim()}规则`).trim(),
         enabled: item?.enabled !== false,
         priority: Number.isFinite(Number(item?.priority)) ? Number(item.priority) : 0,
-        tagCodes: Array.isArray(item?.tagCodes)
-          ? item.tagCodes.map((tag: any) => String(tag || '').trim().toLowerCase()).filter(Boolean)
-          : [],
+        tagCodes: tagCode ? [tagCode] : [],
         depositAmount: Number(item?.depositAmount ?? 0),
         firstWithdrawMinBalance: Number(item?.firstWithdrawMinBalance ?? 0),
+        firstWithdrawMinAcceptedDays: Number(item?.firstWithdrawMinAcceptedDays ?? 15),
         quitCoolingDays: Number(item?.quitCoolingDays ?? 0),
         depositForfeitDays: Number(item?.depositForfeitDays ?? 0),
+        dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
         refundWhenDepositInsufficient: true,
-      }))
-    : [];
-  return { tags, rules };
+      };
+    });
+  return { tags, rules, defaultRule };
 }
 
 function resolveCategory(row: SystemConfigItem): CategoryKey {
@@ -638,68 +713,70 @@ const SystemConfigsPage: React.FC = () => {
                 );
               }
               if (isStaffRuleEngineConfig) {
-                const tagOptions = (getFieldValue(['staffRuleEngine', 'tags']) || [])
-                  .filter((item: any) => String(item?.code || '').trim())
-                  .map((item: any) => ({
-                    label: `${String(item?.name || '').trim() || String(item?.code || '').trim()}（${String(item?.code || '').trim()}）`,
-                    value: String(item?.code || '').trim().toLowerCase(),
-                  }));
                 return (
                   <>
                     <Alert
                       type="info"
                       showIcon
                       style={{ marginBottom: 16 }}
-                      message="这里维护员工标签与提现/退店规则"
-                      description="运营只需要填写标签名称、勾选适用标签，并配置押金、首次提现门槛、退店冷却期和押金不退天数。规则优先级数字越大越优先命中。"
+                      message="这里维护员工标签规则"
+                      description="默认规则用于未配置标签、未命中标签规则的员工；下方每条标签规则为一对一绑定，不再支持一个规则关联多个标签。"
                     />
 
-                    <Card size="small" title="员工标签" style={{ marginBottom: 16 }}>
-                      <Form.List name={['staffRuleEngine', 'tags']}>
-                        {(fields, { add, remove }) => (
-                          <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                            {fields.map((field, index) => (
-                              <Card
-                                key={field.key}
-                                size="small"
-                                type="inner"
-                                title={`标签 ${index + 1}`}
-                                extra={<a onClick={() => remove(field.name)}>删除</a>}
-                              >
-                                <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                                  <Form.Item
-                                    label="标签名称"
-                                    name={[field.name, 'name']}
-                                    rules={[{ required: true, message: '请输入标签名称' }]}
-                                  >
-                                    <Input placeholder="例如：线上高端、大神、金牌陪玩" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label="标签编码"
-                                    name={[field.name, 'code']}
-                                    rules={[{ required: true, message: '请输入标签编码' }]}
-                                    extra="建议使用英文字母或拼音缩写，系统会自动转成小写。"
-                                  >
-                                    <Input placeholder="例如：vip_online / high_rank" />
-                                  </Form.Item>
-                                  <Space size={16} wrap>
-                                    <Form.Item label="是否启用" name={[field.name, 'enabled']} valuePropName="checked" initialValue={true}>
-                                      <Switch />
-                                    </Form.Item>
-                                    <Form.Item label="排序" name={[field.name, 'sort']} initialValue={index + 1}>
-                                      <InputNumber min={1} precision={0} style={{ width: 120 }} />
-                                    </Form.Item>
-                                  </Space>
-                                </Space>
-                              </Card>
-                            ))}
-                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1 })}>新增标签</Button>
-                          </Space>
-                        )}
-                      </Form.List>
+                    <Card size="small" title="默认规则" style={{ marginBottom: 16 }}>
+                      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                        <Space size={16} wrap>
+                          <Form.Item
+                            label="押金金额"
+                            name={['staffRuleEngine', 'defaultRule', 'depositAmount']}
+                            rules={[{ required: true, message: '请输入押金金额' }]}
+                          >
+                            <InputNumber min={0} precision={2} style={{ width: 160 }} addonBefore="¥" />
+                          </Form.Item>
+                          <Form.Item
+                            label="首次提现最低保留"
+                            name={['staffRuleEngine', 'defaultRule', 'firstWithdrawMinBalance']}
+                            rules={[{ required: true, message: '请输入首次提现最低保留金额' }]}
+                          >
+                            <InputNumber min={0} precision={2} style={{ width: 180 }} addonBefore="¥" />
+                          </Form.Item>
+                        </Space>
+                        <Space size={16} wrap>
+                          <Form.Item
+                            label="首次提现接单满"
+                            name={['staffRuleEngine', 'defaultRule', 'firstWithdrawMinAcceptedDays']}
+                            initialValue={15}
+                            rules={[{ required: true, message: '请输入首次提现接单天数' }]}
+                          >
+                            <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                          </Form.Item>
+                          <Form.Item
+                            label="退店冷却期"
+                            name={['staffRuleEngine', 'defaultRule', 'quitCoolingDays']}
+                            rules={[{ required: true, message: '请输入退店冷却天数' }]}
+                          >
+                            <InputNumber min={0} precision={0} style={{ width: 160 }} addonAfter="天" />
+                          </Form.Item>
+                          <Form.Item
+                            label="押金不退限制"
+                            name={['staffRuleEngine', 'defaultRule', 'depositForfeitDays']}
+                            rules={[{ required: true, message: '请输入押金不退天数' }]}
+                          >
+                            <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                          </Form.Item>
+                          <Form.Item
+                            label="自动冻结周期"
+                            name={['staffRuleEngine', 'defaultRule', 'dormantFreezeDays']}
+                            initialValue={7}
+                            rules={[{ required: true, message: '请输入自动冻结周期' }]}
+                          >
+                            <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                          </Form.Item>
+                        </Space>
+                      </Space>
                     </Card>
 
-                    <Card size="small" title="提现 / 退店规则">
+                    <Card size="small" title="标签规则">
                       <Form.List name={['staffRuleEngine', 'rules']}>
                         {(fields, { add, remove }) => (
                           <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -712,36 +789,29 @@ const SystemConfigsPage: React.FC = () => {
                                 extra={<a onClick={() => remove(field.name)}>删除</a>}
                               >
                                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                                  <Form.Item
-                                    label="规则名称"
-                                    name={[field.name, 'name']}
-                                    rules={[{ required: true, message: '请输入规则名称' }]}
-                                  >
-                                    <Input placeholder="例如：线上高端规则" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label="规则标识"
-                                    name={[field.name, 'id']}
-                                    rules={[{ required: true, message: '请输入规则标识' }]}
-                                    extra="建议使用英文字母或拼音缩写，便于后续排查。"
-                                  >
-                                    <Input placeholder="例如：vip_online_rule" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    label="适用员工标签"
-                                    name={[field.name, 'tagCodes']}
-                                    rules={[{ required: true, message: '请选择至少一个员工标签' }]}
-                                  >
-                                    <Select
-                                      mode="multiple"
-                                      allowClear
-                                      options={tagOptions}
-                                      placeholder="请选择这条规则适用的员工标签"
-                                    />
-                                  </Form.Item>
+                                  <Space size={16} wrap>
+                                    <Form.Item
+                                      label="标签名称"
+                                      name={[field.name, 'tagName']}
+                                      rules={[{ required: true, message: '请输入标签名称' }]}
+                                    >
+                                      <Input placeholder="例如：线上高端、大神、金牌陪玩" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      label="标签编码"
+                                      name={[field.name, 'tagCode']}
+                                      rules={[{ required: true, message: '请输入标签编码' }]}
+                                      extra="建议使用英文字母或拼音缩写，系统会自动转成小写。"
+                                    >
+                                      <Input placeholder="例如：vip_online / high_rank" />
+                                    </Form.Item>
+                                  </Space>
                                   <Space size={16} wrap>
                                     <Form.Item label="是否启用" name={[field.name, 'enabled']} valuePropName="checked" initialValue={true}>
                                       <Switch />
+                                    </Form.Item>
+                                    <Form.Item label="排序" name={[field.name, 'sort']} initialValue={index + 1}>
+                                      <InputNumber min={1} precision={0} style={{ width: 120 }} />
                                     </Form.Item>
                                     <Form.Item label="优先级" name={[field.name, 'priority']} initialValue={0}>
                                       <InputNumber min={0} precision={0} style={{ width: 120 }} />
@@ -762,6 +832,14 @@ const SystemConfigsPage: React.FC = () => {
                                     >
                                       <InputNumber min={0} precision={2} style={{ width: 180 }} addonBefore="¥" />
                                     </Form.Item>
+                                    <Form.Item
+                                      label="首次提现接单满"
+                                      name={[field.name, 'firstWithdrawMinAcceptedDays']}
+                                      initialValue={15}
+                                      rules={[{ required: true, message: '请输入首次提现接单天数' }]}
+                                    >
+                                      <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                                    </Form.Item>
                                   </Space>
                                   <Space size={16} wrap>
                                     <Form.Item
@@ -778,12 +856,20 @@ const SystemConfigsPage: React.FC = () => {
                                     >
                                       <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
                                     </Form.Item>
+                                    <Form.Item
+                                      label="自动冻结周期"
+                                      name={[field.name, 'dormantFreezeDays']}
+                                      initialValue={7}
+                                      rules={[{ required: true, message: '请输入自动冻结周期' }]}
+                                    >
+                                      <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                                    </Form.Item>
                                   </Space>
                                 </Space>
                               </Card>
                             ))}
-                            <Button onClick={() => add({ enabled: true, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, quitCoolingDays: 0, depositForfeitDays: 0, tagCodes: [] })}>
-                              新增规则
+                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, firstWithdrawMinAcceptedDays: 15, quitCoolingDays: 0, depositForfeitDays: 0, dormantFreezeDays: 7 })}>
+                              新增标签规则
                             </Button>
                           </Space>
                         )}

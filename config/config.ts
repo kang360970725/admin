@@ -106,8 +106,8 @@ export default defineConfig({
         { path: '/m/orders', component: './Orders', access: 'canViewOrdersList' },
 
         // ✅ 移动端钱包：先复用概览页（后续可以做轻量钱包页再替换组件）
-        { path: '/m/wallet', component: '@/pages/Wallet/Overview' },
-        { path: '/m/chest', component: '@/pages/Mobile/Chest', access: 'canViewOrdersList' },
+        { path: '/m/wallet', component: '@/pages/Wallet/Overview', access: 'canViewWalletOverview' },
+        { path: '/m/chest', component: '@/pages/Mobile/Chest', access: 'canViewChestDemo' },
 
         // ✅ 兜底 404（移动端）
         { path: '*', component: '@/pages/404', layout: false },
@@ -152,6 +152,7 @@ export default defineConfig({
         { path: '/system/system-configs', name: '基础配置', component: '@/pages/System/SystemConfigs', access: 'canViewSystemConfigs' },
         { path: '/system/app-versions', name: '版本迭代', component: '@/pages/System/AppVersions', access: 'canViewAppVersions' },
         { path: '/system/announcements', name: '系统公告', component: '@/pages/System/Announcements', access: 'canViewAnnouncements' },
+        { path: '/system/questionnaires', name: '匿名问卷', component: '@/pages/System/Questionnaires', access: 'canViewQuestionnairesAdmin' },
         { path: '/system/duty-cs', name: '当班客服配置', component: '@/pages/System/DutyCsSchedules', access: 'canViewDutyCsSchedules' },
         { path: '/system/notification-test-push', name: '测试推送中心', component: '@/pages/System/NotificationTestPush', access: 'canViewNotificationTestPush' },
       ],
@@ -194,7 +195,7 @@ export default defineConfig({
       name: '操作日志',
       icon: 'FileSearchOutlined',
       component: './UserLogs',
-      access: 'canViewRoleManagement'
+      access: 'canViewUserLogs'
     },
     // {
     //   path: '/finance',
@@ -229,6 +230,12 @@ export default defineConfig({
           component: '@/pages/Finance/OfflineFees',
           access: 'canViewFinanceOfflineFees',
         },
+        {
+          path: '/finance/equipment-rental-fees',
+          name: '设备租赁费',
+          component: '@/pages/Finance/EquipmentRentalFees',
+          access: 'canViewFinanceEquipmentRentalFees',
+        },
       ],
     },
 
@@ -239,6 +246,7 @@ export default defineConfig({
       routes: [
         { path: '/staff/my-orders', name: '我的接单记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
         { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
+        { path: '/staff/questionnaires', name: '信息采集', component: './Staff/Questionnaires', access: 'canViewStaffQuestionnaires' },
       ],
     },
 
@@ -252,7 +260,7 @@ export default defineConfig({
       access: 'canViewOrdersList',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
-        { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrdersList' },
+        { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrderComplaints' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },
@@ -263,11 +271,11 @@ export default defineConfig({
       icon: 'WalletOutlined',
       routes: [
         { path: '/wallet', redirect: '/wallet/overview' },
-        { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview' },
-        { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels' },
-        { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans' },
-        { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions' },
-        { path: '/wallet/replay-preview', name: '单用户预核算', component: '@/pages/Wallet/ReplayPreview', access: 'canViewWithdrawals' },
+        { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview', access: 'canViewWalletOverview' },
+        { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels', access: 'canViewWalletMemberLevels' },
+        { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans', access: 'canViewWalletRechargePlans' },
+        { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions', access: 'canViewWalletTransactions' },
+        { path: '/wallet/replay-preview', name: '单用户预核算', component: '@/pages/Wallet/ReplayPreview', access: 'canViewWalletReplayPreview' },
         { path: '/wallet/withdrawals', name: '提现审批', component: '@/pages/Wallet/Withdrawals', access: 'canViewWithdrawals' },
         { path: '/wallet/withdrawals/records', name: '提现记录', component: '@/pages/Wallet/Withdrawals/Records', access: 'canViewWithdrawals' },
       ],

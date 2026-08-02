@@ -5,6 +5,7 @@ import {
     Button,
     Card,
     Col,
+    DatePicker,
     Drawer,
     Form,
     Input,
@@ -142,11 +143,13 @@ export default function CSWorkbenchPage() {
     const [loading, setLoading] = useState(false);
     const [keyword, setKeyword] = useState<string>(''); // 订单编号 autoSerial
     const [customerGameId, setCustomerGameId] = useState<string>('');
+    const [orderMonth, setOrderMonth] = useState<string>('');
 
     // 列表数据
     const [list, setList] = useState<OrderRow[]>([]);
     const [total, setTotal] = useState<number>(0);
     const [page, setPage] = useState<number>(1);
+    const [consumptionSummary, setConsumptionSummary] = useState<any>(null);
 
     // 派单抽屉（列表里的立即派单）
     const [dispatchOpen, setDispatchOpen] = useState(false);
@@ -368,6 +371,7 @@ export default function CSWorkbenchPage() {
             statusFilter,
             keyword,
             customerGameId,
+            orderMonth,
             p,
         });
         lastFetchRef.current = signature;
@@ -380,12 +384,25 @@ export default function CSWorkbenchPage() {
                 serial: keyword?.trim() || undefined,
                 status: statusFilter,
                 customerGameId: customerGameId?.trim() || undefined,
+                orderMonth: orderMonth || undefined,
             });
 
             if (lastFetchRef.current !== signature) return;
 
             setList(safeArray<OrderRow>((res as any)?.data));
             setTotal(Number((res as any)?.total ?? 0));
+            const queryCustomerGameId = String(customerGameId || '').trim();
+            if (queryCustomerGameId) {
+                setConsumptionSummary({
+                    customerGameId: queryCustomerGameId,
+                    orderMonth: orderMonth || undefined,
+                    orderCount: Number((res as any)?.total ?? 0),
+                    receivableAmount: Number((res as any)?.summary?.receivableAmount ?? 0),
+                    paidAmount: Number((res as any)?.summary?.paidAmount ?? 0),
+                });
+            } else {
+                setConsumptionSummary(null);
+            }
             setPage(p);
         } catch (e: any) {
             console.error(e);
@@ -722,6 +739,16 @@ export default function CSWorkbenchPage() {
                             style={{ borderRadius: 12 }}
                         />
                     </Col>
+                    <Col span={24}>
+                        <DatePicker
+                            picker="month"
+                            allowClear
+                            placeholder="查询月份"
+                            value={orderMonth ? dayjs(orderMonth, 'YYYY-MM') : null}
+                            onChange={(value) => setOrderMonth(value ? value.format('YYYY-MM') : '')}
+                            style={{ width: '100%', borderRadius: 12 }}
+                        />
+                    </Col>
 
                     <Col span={24}>
                         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -746,6 +773,23 @@ export default function CSWorkbenchPage() {
                             </Space>
                         </Space>
                     </Col>
+                    {consumptionSummary?.customerGameId ? (
+                        <Col span={24}>
+                            <div style={{ border: '1px solid #f0f0f0', borderRadius: 12, padding: '10px 12px', background: '#fafafa' }}>
+                                <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                                    <Text strong style={{ wordBreak: 'break-all' }}>
+                                        客户游戏ID：{consumptionSummary.customerGameId}
+                                    </Text>
+                                    <Space size={16} wrap>
+                                        <Text type="secondary">月份：{consumptionSummary.orderMonth || '全部'}</Text>
+                                        <Text type="secondary">订单数：{Number(consumptionSummary.orderCount || 0)}</Text>
+                                        <Text type="secondary">应付：¥{Number(consumptionSummary.receivableAmount || 0).toFixed(2)}</Text>
+                                        <Text type="secondary">实付：¥{Number(consumptionSummary.paidAmount || 0).toFixed(2)}</Text>
+                                    </Space>
+                                </Space>
+                            </div>
+                        </Col>
+                    ) : null}
                 </Row>
             </Card>
         </div>

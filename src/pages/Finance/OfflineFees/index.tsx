@@ -1,9 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Tag } from 'antd';
+import { Button, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Tag } from 'antd';
 import dayjs from 'dayjs';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
+  deleteOfflineFeeBill,
   enforceOfflineFeeBill,
   generateOfflineFeeBills,
   listOfflineFeeBills,
@@ -57,11 +58,34 @@ const OfflineFeesPage: React.FC = () => {
 
   const columns = useMemo<ProColumns<OfflineFeeBill>[]>(
     () => [
-      { title: '月份', dataIndex: 'billMonth', width: 90 },
+      {
+        title: '月份',
+        dataIndex: 'billMonth',
+        width: 120,
+        valueType: 'dateMonth',
+        transform: (value) => ({
+          billMonth: value ? (dayjs.isDayjs(value) ? value.format('YYYY-MM') : String(value)) : undefined,
+        }),
+      },
       {
         title: '员工',
-        dataIndex: ['user', 'name'],
+        dataIndex: 'userId',
+        valueType: 'select',
         width: 140,
+        fieldProps: {
+          showSearch: true,
+          filterOption: false,
+          loading: staffLoading,
+          placeholder: '搜索员工',
+          options: staffOptions.map((staff) => ({
+            label: `${staff.name || staff.realName || staff.phone} (${staff.phone})`,
+            value: staff.id,
+          })),
+          onSearch: fetchOfflineStaffOptions,
+          onDropdownVisibleChange: (open: boolean) => {
+            if (open && !staffOptions.length) void fetchOfflineStaffOptions();
+          },
+        },
         render: (_, row) => row.user?.name || row.user?.phone || `#${row.userId}`,
       },
       { title: '手机号', dataIndex: ['user', 'phone'], width: 120, search: false },
@@ -223,12 +247,32 @@ const OfflineFeesPage: React.FC = () => {
                 <a>废除账单</a>
               </Popconfirm>
             ) : null,
+            isWaived ? (
+              <Popconfirm
+                key="delete"
+                title="确认删除该已废除账单？"
+                description="删除后列表中将不再展示该账单，仅已废除且无缴费记录的账单允许删除。"
+                okText="删除"
+                okButtonProps={{ danger: true }}
+                onConfirm={async () => {
+                  try {
+                    await deleteOfflineFeeBill({ billId: row.id });
+                    message.success('账单已删除');
+                    actionRef.current?.reload();
+                  } catch (e: any) {
+                    message.error(e?.data?.message || e?.message || '删除失败');
+                  }
+                }}
+              >
+                <a style={{ color: '#ff4d4f' }}>删除账单</a>
+              </Popconfirm>
+            ) : null,
             !canPay ? <Tag key="done" color="success">已结清</Tag> : null,
           ].filter(Boolean);
         },
       },
     ],
-    [editForm, payForm],
+    [editForm, fetchOfflineStaffOptions, payForm, staffLoading, staffOptions],
   );
 
   return (
@@ -246,7 +290,7 @@ const OfflineFeesPage: React.FC = () => {
             onClick={async () => {
               setManualVisible(true);
               manualForm.setFieldsValue({
-                month: dayjs().subtract(1, 'month').format('YYYY-MM'),
+                month: dayjs().subtract(1, 'month'),
                 performanceBaseAmount: 0,
               });
               await fetchOfflineStaffOptions();
@@ -259,17 +303,18 @@ const OfflineFeesPage: React.FC = () => {
             type="primary"
             onClick={() => {
               setGenerateVisible(true);
-              generateForm.setFieldsValue({ month: dayjs().subtract(1, 'month').format('YYYY-MM') });
+              generateForm.setFieldsValue({ month: dayjs().subtract(1, 'month') });
             }}
           >
             生成月账单
           </Button>,
         ]}
         request={async (params) => {
+          const billMonthValue = (params as any).billMonth;
           const res = await listOfflineFeeBills({
             page: params.current,
             limit: params.pageSize,
-            billMonth: params.billMonth,
+            billMonth: billMonthValue ? (dayjs.isDayjs(billMonthValue) ? billMonthValue.format('YYYY-MM') : String(billMonthValue)) : undefined,
             status: params.status,
             userId: params.userId,
           });
@@ -294,7 +339,8 @@ const OfflineFeesPage: React.FC = () => {
           try {
             const values = await generateForm.validateFields();
             setSubmitting(true);
-            await generateOfflineFeeBills({ month: values.month });
+            const month = dayjs.isDayjs(values.month) ? values.month.format('YYYY-MM') : String(values.month || '');
+            await generateOfflineFeeBills({ month, confirmed: true });
             message.success('账单已生成/更新');
             setGenerateVisible(false);
             actionRef.current?.reload();
@@ -306,15 +352,17 @@ const OfflineFeesPage: React.FC = () => {
         }}
       >
         <Form form={generateForm} layout="vertical">
+          <div style={{ marginBottom: 12, color: '#666', lineHeight: '22px' }}>
+            系统不会自动生成线下费用账单。确认后将按所选月份为当前线下员工生成或更新账单。
+          </div>
           <Form.Item
             label="账单月份"
             name="month"
             rules={[
-              { required: true, message: '请输入账单月份' },
-              { pattern: /^\d{4}-\d{2}$/, message: '格式必须为 YYYY-MM' },
+              { required: true, message: '请选择账单月份' },
             ]}
           >
-            <Input style={{ width: '100%' }} placeholder="例如 2026-03" maxLength={7} />
+            <DatePicker picker="month" style={{ width: '100%' }} format="YYYY-MM" />
           </Form.Item>
         </Form>
       </Modal>
@@ -333,7 +381,7 @@ const OfflineFeesPage: React.FC = () => {
             setSubmitting(true);
             await manualCreateOfflineFeeBill({
               userId: Number(values.userId),
-              month: String(values.month),
+              month: dayjs.isDayjs(values.month) ? values.month.format('YYYY-MM') : String(values.month || ''),
               performanceBaseAmount: Number(values.performanceBaseAmount || 0),
             });
             message.success('线下账单已录入');
@@ -370,11 +418,10 @@ const OfflineFeesPage: React.FC = () => {
             label="账单月份"
             name="month"
             rules={[
-              { required: true, message: '请输入账单月份' },
-              { pattern: /^\d{4}-\d{2}$/, message: '格式必须为 YYYY-MM' },
+              { required: true, message: '请选择账单月份' },
             ]}
           >
-            <Input style={{ width: '100%' }} placeholder="例如 2026-03" maxLength={7} />
+            <DatePicker picker="month" style={{ width: '100%' }} format="YYYY-MM" />
           </Form.Item>
 
           <Form.Item

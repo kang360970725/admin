@@ -95,6 +95,12 @@ const getStaffEmploymentTag = (record: any) => {
     return <Tag color="default">已退店</Tag>;
 };
 
+const canExitOrClearStaff = (record: any) => {
+    if (record?.userType !== 'STAFF') return false;
+    const status = String(record?.staffEmploymentStatus || 'ACTIVE');
+    return status === 'ACTIVE' || status === 'FROZEN';
+};
+
 export default function UsersPage() {
     const access = useAccess();
     const location = useLocation();
@@ -1021,12 +1027,12 @@ export default function UsersPage() {
                     <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
                         重置密码
                     </Button>
-                    {sceneConfig.key === 'STAFF' && String(record?.staffEmploymentStatus || 'ACTIVE') !== 'BLACKLISTED' ? (
+                    {sceneConfig.key === 'STAFF' && canExitOrClearStaff(record) ? (
                         <Button type="link" size="small" danger onClick={() => openStaffExit(record)}>
                             退店
                         </Button>
                     ) : null}
-                    {sceneConfig.key === 'STAFF' ? (
+                    {sceneConfig.key === 'STAFF' && canExitOrClearStaff(record) ? (
                         <Button type="link" size="small" danger onClick={() => openStaffClear(record)}>
                             清退
                         </Button>
@@ -1260,6 +1266,7 @@ export default function UsersPage() {
                         <div>标签：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
                         <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
                         <div>入店天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
+                        <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedDays ?? 15)} 天</div>
                         <div>退店冷却期：{Number(staffExitPreview?.quitCoolingDays ?? 180)} 天</div>
                         <div>押金不退限制：{Number(staffExitPreview?.depositForfeitDays ?? 0)} 天</div>
                         <div>当前可用/冻结/保证金：¥{Number(staffExitPreview?.availableBalance ?? 0)} / ¥{Number(staffExitPreview?.frozenBalance ?? 0)} / ¥{Number(staffExitPreview?.depositBalance ?? 0)}</div>

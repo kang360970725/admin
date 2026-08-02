@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {useModel, useNavigate} from '@umijs/max';
-import {Button, Card, Checkbox, Col, Collapse, Form, Input, InputNumber, message, Modal, Row, Space, Tag, Tooltip} from 'antd';
+import {Button, Card, Checkbox, Col, Collapse, DatePicker, Form, Input, InputNumber, message, Modal, Row, Space, Tag, Tooltip} from 'antd';
 import {
     assignDispatch,
     createOrder,
@@ -44,6 +44,7 @@ const OrdersPage: React.FC = () => {
     const [createOpen, setCreateOpen] = useState(false);
     const [todayOverview, setTodayOverview] = useState<any>(null);
     const [overviewLoading, setOverviewLoading] = useState(false);
+    const [consumptionSummary, setConsumptionSummary] = useState<any>(null);
 
     // ✅ 当前用户（用于：敏感字段 customerGameId 在“已结单”状态下脱敏展示）
     const {initialState} = useModel('@@initialState');
@@ -329,6 +330,13 @@ const OrdersPage: React.FC = () => {
         },
 
         {
+            title: '查询月份',
+            dataIndex: 'orderMonth',
+            hideInTable: true,
+            renderFormItem: () => <DatePicker picker="month" allowClear style={{ width: '100%' }} />,
+        },
+
+        {
             title: '派单客服',
             dataIndex: ['dispatcher', 'name'],
             width: 110,
@@ -465,6 +473,44 @@ const OrdersPage: React.FC = () => {
                 </Space>
             </Card>
 
+            {consumptionSummary?.customerGameId ? (
+                <Card
+                    size="small"
+                    style={{marginBottom: 12, borderRadius: 12}}
+                    bodyStyle={{padding: isMobile ? '8px 10px' : '10px 12px'}}
+                >
+                    <Row gutter={[8, 8]}>
+                        <Col xs={24} sm={8}>
+                            <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>客户游戏ID</div>
+                            <div style={{fontSize: isMobile ? 15 : 16, fontWeight: 600, lineHeight: 1.3, wordBreak: 'break-all'}}>
+                                {consumptionSummary.customerGameId}
+                            </div>
+                            <div style={{fontSize: 12, color: 'rgba(0,0,0,.45)', marginTop: 2}}>
+                                {consumptionSummary.orderMonth ? `月份：${consumptionSummary.orderMonth}` : '月份：全部'}
+                            </div>
+                        </Col>
+                        <Col xs={8} sm={4}>
+                            <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>订单数</div>
+                            <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                {Number(consumptionSummary.orderCount || 0)}
+                            </div>
+                        </Col>
+                        <Col xs={8} sm={6}>
+                            <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>应付合计</div>
+                            <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                ¥{Number(consumptionSummary.receivableAmount || 0).toFixed(2)}
+                            </div>
+                        </Col>
+                        <Col xs={8} sm={6}>
+                            <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>实付合计</div>
+                            <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                ¥{Number(consumptionSummary.paidAmount || 0).toFixed(2)}
+                            </div>
+                        </Col>
+                    </Row>
+                </Card>
+            ) : null}
+
             <ProTable<any>
                 rowKey="id"
                 actionRef={actionRef}
@@ -500,12 +546,15 @@ const OrdersPage: React.FC = () => {
                                 ? false
                                 : Boolean(params.isPaid);
 
+                    const customerGameId = String(params.customerGameId || '').trim();
+                    const orderMonth = params.orderMonth ? dayjs(params.orderMonth as any).format('YYYY-MM') : undefined;
                     const res = await getOrders({
                         page: Number(params.current || 1),
                         limit: Number(params.pageSize || 20),
                         serial: params.autoSerial,
                         status: params.status,
-                        customerGameId: params.customerGameId,
+                        customerGameId,
+                        orderMonth,
                         // ✅ 新增：综合搜索
                         keyword: params.keyword,
                         // ✅ 收款筛选
@@ -514,6 +563,17 @@ const OrdersPage: React.FC = () => {
 
                         // projectId/playerId/dispatcherId 你后续加筛选控件后再传
                     });
+                    if (customerGameId) {
+                        setConsumptionSummary({
+                            customerGameId,
+                            orderMonth,
+                            orderCount: Number(res.total || 0),
+                            receivableAmount: Number(res?.summary?.receivableAmount || 0),
+                            paidAmount: Number(res?.summary?.paidAmount || 0),
+                        });
+                    } else {
+                        setConsumptionSummary(null);
+                    }
 
                     return {
                         data: res.data || [],

@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import type {FormInstance} from 'antd';
-import {Alert, Button, Divider, Form, message, Space, Tag, Tooltip, Typography, Upload} from 'antd';
+import {Alert, Button, Divider, Form, List, message, Space, Tag, Tooltip, Typography, Upload} from 'antd';
 import type {ActionType} from '@ant-design/pro-components';
 import {
     ModalForm,
@@ -12,7 +12,7 @@ import {
 } from '@ant-design/pro-components';
 import {useModel} from '@umijs/max';
 import {UploadOutlined, WechatOutlined} from '@ant-design/icons';
-import {getOfflineFeeGuardInfo, getWithdrawInfo} from "@/services/api";
+import {confirmMyEquipmentRentalBill, getOfflineFeeGuardInfo, getWithdrawInfo, listMyEquipmentRentalBills} from "@/services/api";
 import {
     applyWithdrawal,
     getMyWithdrawals,
@@ -40,10 +40,12 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const userId = Number((initialState as any)?.currentUser?.id || 0);
     const currentUser = (initialState as any)?.currentUser;
 
-    const isStaff = currentUser?.userType === 'STAFF';
-
     const [depositBalance, setDepositBalance] = useState(0);
     const [depositLimit, setDepositLimit] = useState(2000);
+    const [withdrawUserType, setWithdrawUserType] = useState<string>(String(currentUser?.userType || ''));
+    const [withdrawStaffEmploymentStatus, setWithdrawStaffEmploymentStatus] = useState<string>(
+        String(currentUser?.staffEmploymentStatus || 'ACTIVE'),
+    );
     const [offlineFeeGuard, setOfflineFeeGuard] = useState<{
         hasOutstanding: boolean;
         partialMinPay: number;
@@ -64,6 +66,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
     const [open, setOpen] = useState(false);
     const [hasPending, setHasPending] = useState(false);
+    const [rentalBills, setRentalBills] = useState<any[]>([]);
+    const [rentalLoading, setRentalLoading] = useState(false);
 
     const withdrawAmount = Form.useWatch('amount', formRef.current);
     const payOfflineFeeAmountWatch = Form.useWatch('payOfflineFeeAmount', formRef.current);
@@ -77,7 +81,11 @@ const WithdrawalMine: React.FC<Props> = (props) => {
      */
     const depositPreview = useMemo(() => {
 
-        if (!withdrawAmount || !isStaff) return 0;
+        const isActiveStaff =
+            String(withdrawUserType || '').toUpperCase() === 'STAFF' &&
+            String(withdrawStaffEmploymentStatus || 'ACTIVE').toUpperCase() === 'ACTIVE';
+
+        if (!withdrawAmount || !isActiveStaff) return 0;
 
         const amount = Number(withdrawAmount);
 
@@ -89,7 +97,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
         return Math.min(depositNeed, depositByRate);
 
-    }, [withdrawAmount, depositBalance, depositLimit, isStaff]);
+    }, [withdrawAmount, depositBalance, depositLimit, withdrawUserType, withdrawStaffEmploymentStatus]);
 
     const fetchWithdrawInfo = async () => {
         try {
@@ -101,6 +109,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
             setDepositBalance(Number(res.depositBalance || 0));
             setDepositLimit(Number(res.depositLimit || 500));
+            setWithdrawUserType(String((res as any)?.userType || currentUser?.userType || ''));
+            setWithdrawStaffEmploymentStatus(String((res as any)?.staffEmploymentStatus || currentUser?.staffEmploymentStatus || 'ACTIVE'));
             setOfflineFeeGuard({
                 hasOutstanding: Boolean(guardInfo?.hasOutstanding),
                 partialMinPay: Number(guardInfo?.partialMinPay || 100),
@@ -131,6 +141,13 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
     }, [withdrawAmount, depositPreview]);
 
+    const shouldShowDepositPreview = useMemo(() => {
+        return (
+            String(withdrawUserType || '').toUpperCase() === 'STAFF' &&
+            String(withdrawStaffEmploymentStatus || 'ACTIVE').toUpperCase() === 'ACTIVE'
+        );
+    }, [withdrawUserType, withdrawStaffEmploymentStatus]);
+
     const maxWithdraw = useMemo(() => {
         const n = Number(availableBalance || 0);
         if (!Number.isFinite(n) || n <= 0) return 0;
@@ -160,6 +177,22 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
     const genIdempotencyKey = () =>
         `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    const fetchRentalBills = async () => {
+        try {
+            setRentalLoading(true);
+            const rows = await listMyEquipmentRentalBills();
+            setRentalBills(Array.isArray(rows) ? rows : []);
+        } catch (e) {
+            setRentalBills([]);
+        } finally {
+            setRentalLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        void fetchRentalBills();
+    }, []);
 
     const fetchQrCodeUrl = async () => {
         try {
@@ -259,6 +292,47 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
     return (
         <>
+            {rentalBills.length ? (
+                <Alert
+                    type="warning"
+                    showIcon
+                    style={{marginBottom: 16}}
+                    message="存在待确认设备租赁费"
+                    description={(
+                        <List
+                            size="small"
+                            loading={rentalLoading}
+                            dataSource={rentalBills}
+                            renderItem={(item: any) => (
+                                <List.Item
+                                    actions={[
+                                        <Button
+                                            key="confirm"
+                                            type="primary"
+                                            size="small"
+                                            onClick={async () => {
+                                                try {
+                                                    await confirmMyEquipmentRentalBill({billId: Number(item.id)});
+                                                    message.success('设备租赁费已确认扣除');
+                                                    await fetchRentalBills();
+                                                    onApplied?.();
+                                                } catch (e: any) {
+                                                    message.error(e?.data?.message || e?.response?.data?.message || e?.message || '确认失败');
+                                                }
+                                            }}
+                                        >
+                                            确认扣费
+                                        </Button>,
+                                    ]}
+                                >
+                                    {item.billMonth} 设备租赁费 ¥{Number(item.remainingAmount || item.amount || 0).toFixed(2)}
+                                </List.Item>
+                            )}
+                        />
+                    )}
+                />
+            ) : null}
+
             <ProTable<WalletWithdrawalRequest>
                 headerTitle="提现记录"
                 rowKey="id"
@@ -545,7 +619,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                         ]}
                     />
 
-                    {isStaff && withdrawAmount ? (
+                    {shouldShowDepositPreview && withdrawAmount ? (
                         <Alert
                             type="info"
                             showIcon

@@ -14,22 +14,27 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewStaffUsers = isAdmin || has('users:staff:page');
   const canViewInternalUsers = isAdmin || has('users:internal:page');
   const canViewAllUsers = canViewInternalUsers && isAdmin;
+  const hasLegacySystemAdmin = has('system:role:page');
+  const hasFinanceRecords = has('finance:records:list');
+  const canViewWalletOverview = has('wallet:overview:page') || has('wallet:withdrawals:page');
 
   return {
     // 系统管理
     canViewRoleManagement: has('system:role:page'),
     canViewPermissionManagement: has('system:permission:page'),
     canViewGameProjectManagement: has('system:game-project:page'),
-    canViewSystemConfigs: has('system:role:page'),
-    canViewMiniappHomeConfig: has('system:role:page'),
-    canViewMiniappProtocols: has('system:role:page'),
-    canViewAppVersions: has('system:role:page'),
-    canViewAnnouncements: has('system:role:page'),
-    canViewDutyCsSchedules: has('system:role:page'),
-    canViewNotificationTestPush: has('system:role:page'),
-    canViewChestDemo: has('ops:promotion:page') || has('chest:page') || has('system:role:page'),
-    canViewCoupons: has('coupons:user-coupons:list') || has('system:role:page'),
-    canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || has('system:role:page'),
+    canViewSystemConfigs: has('system:configs:page') || hasLegacySystemAdmin,
+    canViewMiniappHomeConfig: has('miniapp:home:page') || hasLegacySystemAdmin,
+    canViewMiniappProtocols: has('miniapp:protocols:page') || hasLegacySystemAdmin,
+    canViewAppVersions: has('system:app-versions:page') || hasLegacySystemAdmin,
+    canViewAnnouncements: has('system:announcements:page') || hasLegacySystemAdmin,
+    canViewQuestionnairesAdmin: has('system:questionnaires:page') || hasLegacySystemAdmin,
+    canViewDutyCsSchedules: has('system:duty-cs:page') || hasLegacySystemAdmin,
+    canViewNotificationTestPush: has('system:notification-test-push:page') || hasLegacySystemAdmin,
+    canViewUserLogs: has('system:user-logs:page') || hasLegacySystemAdmin,
+    canViewChestDemo: has('ops:promotion:page') || has('chest:page') || hasLegacySystemAdmin,
+    canViewCoupons: has('coupons:page') || has('coupons:user-coupons:list') || hasLegacySystemAdmin,
+    canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || hasLegacySystemAdmin,
 
     // 用户/评级
     canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewInternalUsers || canViewAllUsers,
@@ -51,17 +56,22 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     // 陪玩中心
     canViewMyOrders: has('staff:my-orders:page') && isDispatchEligibleStaff,
     canViewWorkbench: has('staff:workbench:page') && isDispatchEligibleStaff,
+    canViewStaffQuestionnaires: (has('staff:questionnaires:page') || has('staff:workbench:page')) && isDispatchEligibleStaff,
 
     // 订单/结算
     canViewOrdersList: has('orders:list:page'),
     canViewOrderDetail: has('orders:detail:page'),
+    canViewOrderComplaints: has('orders:complaints:page') || has('orders:list:page'),
     canViewSettlementExperience: has('settlements:experience:page'),
     canViewSettlementMonthly: has('settlements:monthly:page'),
 
-    // ✅ 客服工作台：复用订单列表权限（最小改动、零后端改造）
-    canViewCSWorkbench: has('orders:list:page'),
+    canViewCSWorkbench: has('orders:workbench:page') || has('orders:list:page'),
 
-    // ✅ 钱包-提现审批
+    canViewWalletOverview,
+    canViewWalletMemberLevels: has('wallet:member-levels:page') || has('wallet:withdrawals:page'),
+    canViewWalletRechargePlans: has('wallet:recharge-plans:page') || has('wallet:withdrawals:page'),
+    canViewWalletTransactions: has('wallet:transactions:page') || has('wallet:withdrawals:page'),
+    canViewWalletReplayPreview: has('wallet:replay-preview:page') || has('wallet:withdrawals:page'),
     canViewWithdrawals: has('wallet:withdrawals:page'),
 
     // ✅ 营业数据看板
@@ -70,10 +80,10 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewPerformanceDashboard: has('performance:dashboard:view'),
     canViewPerformanceStaff: has('performance:staff:view'),
     // ✅ 财务核账
-    // canViewFinanceReconcile: has('finance:reconcile:page'),
     canViewFinanceDashboard: has('finance:dashboard:view'), //财务看板
-    canViewFinanceReconcile: has('finance:records:list'), //财务明细
-    canViewFinanceOfflineFees: has('finance:records:list'),
+    canViewFinanceReconcile: hasFinanceRecords, //财务明细
+    canViewFinanceOfflineFees: has('finance:offline-fees:page') || hasFinanceRecords,
+    canViewFinanceEquipmentRentalFees: has('finance:equipment-rental-fees:page') || hasFinanceRecords,
 
   };
 }

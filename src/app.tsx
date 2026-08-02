@@ -58,6 +58,24 @@ const LOCAL_APP_BUILD_ID = String(process.env.APP_BUILD_ID || '');
 const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
 const VERSION_ACK_STORAGE_KEY = 'VERSION_REFRESH_ACK_KEY';
 const LOCAL_BUILD_PLACEHOLDER_REGEX = /^(development|test|pre|production)-0\.0\.0$/i;
+const ICP_RECORD_TEXT = '蜀ICP备2026039511号-1';
+
+const IcpRecordFooter: React.FC = () => (
+    <div className="bc-icp-footer">
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">
+            {ICP_RECORD_TEXT}
+        </a>
+    </div>
+);
+
+export function rootContainer(container: React.ReactNode) {
+    return (
+        <>
+            {container}
+            <IcpRecordFooter />
+        </>
+    );
+}
 
 async function fetchVersionManifest(): Promise<VersionManifest | null> {
     try {

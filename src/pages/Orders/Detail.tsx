@@ -1539,10 +1539,28 @@ const OrderDetailPage: React.FC = () => {
             && Number(currentDispatch?.id || 0) > 0;
     }, [currentDispatch, order]);
 
-    const canCustomerServiceFinishCurrentDispatch = useMemo(() => {
+    const currentDispatchHasEffectiveParticipants = useMemo(() => {
+        const participants = Array.isArray(currentDispatch?.participants) ? currentDispatch.participants : [];
+        return participants.some((p: any) => {
+            const userId = Number(p?.userId ?? 0);
+            return Number.isFinite(userId) && userId > 0 && p?.isActive !== false && !p?.rejectedAt;
+        });
+    }, [currentDispatch]);
+
+    const canCustomerServiceFinishStatus = useMemo(() => {
         const status = String(currentDispatch?.status || '');
         return Number(currentDispatch?.id || 0) > 0 && ['WAIT_ACCEPT', 'ACCEPTED'].includes(status);
     }, [currentDispatch]);
+
+    const customerServiceFinishDisabledReason = useMemo(() => {
+        if (!canCustomerServiceFinishStatus) return '';
+        if (!currentDispatchHasEffectiveParticipants) return '当前派单没有有效打手，请先重新派单或调整打手';
+        return '';
+    }, [canCustomerServiceFinishStatus, currentDispatchHasEffectiveParticipants]);
+
+    const canCustomerServiceFinishCurrentDispatch = useMemo(() => {
+        return canCustomerServiceFinishStatus && currentDispatchHasEffectiveParticipants;
+    }, [canCustomerServiceFinishStatus, currentDispatchHasEffectiveParticipants]);
 
     const openAdjust = (settlement: any) => {
         setCurrentSettlement(settlement);
@@ -2274,26 +2292,32 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         </Col>
                     ) : null}
-                    {canCustomerServiceFinishCurrentDispatch ? (
+                    {canCustomerServiceFinishStatus ? (
                         <Col span={12}>
-                            <Button
-                                block
-                                style={{height: 44, borderRadius: 14}}
-                                onClick={() => openFinish(currentDispatch, 'ARCHIVE')}
-                            >
-                                客服存单
-                            </Button>
+                            <Tooltip title={customerServiceFinishDisabledReason}>
+                                <Button
+                                    block
+                                    disabled={!canCustomerServiceFinishCurrentDispatch}
+                                    style={{height: 44, borderRadius: 14}}
+                                    onClick={() => openFinish(currentDispatch, 'ARCHIVE')}
+                                >
+                                    客服存单
+                                </Button>
+                            </Tooltip>
                         </Col>
                     ) : null}
-                    {canCustomerServiceFinishCurrentDispatch ? (
+                    {canCustomerServiceFinishStatus ? (
                         <Col span={12}>
-                            <Button
-                                block
-                                style={{height: 44, borderRadius: 14}}
-                                onClick={() => openFinish(currentDispatch, 'COMPLETE')}
-                            >
-                                客服结单
-                            </Button>
+                            <Tooltip title={customerServiceFinishDisabledReason}>
+                                <Button
+                                    block
+                                    disabled={!canCustomerServiceFinishCurrentDispatch}
+                                    style={{height: 44, borderRadius: 14}}
+                                    onClick={() => openFinish(currentDispatch, 'COMPLETE')}
+                                >
+                                    客服结单
+                                </Button>
+                            </Tooltip>
                         </Col>
                     ) : null}
                     {canRollbackCurrentDispatchToAccepted ? (
@@ -2728,15 +2752,25 @@ const OrderDetailPage: React.FC = () => {
                                 客服代接单
                             </Button>
                         ) : null}
-                        {canCustomerServiceFinishCurrentDispatch ? (
-                            <Button onClick={() => openFinish(currentDispatch, 'ARCHIVE')}>
-                                客服存单
-                            </Button>
+                        {canCustomerServiceFinishStatus ? (
+                            <Tooltip title={customerServiceFinishDisabledReason}>
+                                <Button
+                                    disabled={!canCustomerServiceFinishCurrentDispatch}
+                                    onClick={() => openFinish(currentDispatch, 'ARCHIVE')}
+                                >
+                                    客服存单
+                                </Button>
+                            </Tooltip>
                         ) : null}
-                        {canCustomerServiceFinishCurrentDispatch ? (
-                            <Button onClick={() => openFinish(currentDispatch, 'COMPLETE')}>
-                                客服结单
-                            </Button>
+                        {canCustomerServiceFinishStatus ? (
+                            <Tooltip title={customerServiceFinishDisabledReason}>
+                                <Button
+                                    disabled={!canCustomerServiceFinishCurrentDispatch}
+                                    onClick={() => openFinish(currentDispatch, 'COMPLETE')}
+                                >
+                                    客服结单
+                                </Button>
+                            </Tooltip>
                         ) : null}
                         {canRollbackCurrentDispatchToAccepted ? (
                             <Button danger onClick={() => openForceAction('ROLLBACK_ACCEPTED')}>

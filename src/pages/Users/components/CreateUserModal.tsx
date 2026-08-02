@@ -73,7 +73,42 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
             if (error.errorFields) {
                 message.error('请完善表单信息');
             } else {
-                message.error(error?.response?.data?.message || '创建用户失败');
+                const data = error?.data || error?.response?.data || {};
+                const code = data?.code;
+                const errorMessage = data?.message || error?.message || '创建用户失败';
+                if (code === 'STAFF_REJOIN_COOLDOWN_CONFIRM_REQUIRED') {
+                    Modal.confirm({
+                        title: '确认重新入店？',
+                        content: (
+                            <div style={{ lineHeight: '22px' }}>
+                                <div>{errorMessage}</div>
+                                <div style={{ marginTop: 8, color: '#ff4d4f' }}>
+                                    确认后会复用历史员工账号，并清零账户中的所有正数余额；负数余额不会处理。
+                                </div>
+                            </div>
+                        ),
+                        okText: '确认重新入店',
+                        cancelText: '取消',
+                        okButtonProps: { danger: true },
+                        onOk: async () => {
+                            const retryValues = await form.validateFields();
+                            const retryPayload: any = { ...retryValues, forceRejoin: true };
+                            retryPayload.workMode = (retryValues.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
+                            retryPayload.offlineJoinedAt =
+                                retryPayload.workMode === 'OFFLINE' && retryValues.offlineJoinedAt
+                                    ? dayjs(retryValues.offlineJoinedAt).startOf('day').toISOString()
+                                    : null;
+                            await createUser(retryPayload);
+                            message.success('员工已重新入店');
+                            form.resetFields();
+                            setUserType('REGISTERED_USER');
+                            setWorkMode('ONLINE');
+                            onSuccess();
+                        },
+                    });
+                } else {
+                    message.error(errorMessage);
+                }
             }
         } finally {
             setLoading(false);
@@ -178,11 +213,19 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         </Form.Item>
 
                         <>
-                            <Form.Item label="真实姓名" name="realName">
+                            <Form.Item
+                                label="真实姓名"
+                                name="realName"
+                                rules={isStaff ? [{ required: true, message: '员工必须填写真实姓名' }] : undefined}
+                            >
                                 <Input placeholder="请输入真实姓名" />
                             </Form.Item>
 
-                            <Form.Item label="身份证号" name="idCard">
+                            <Form.Item
+                                label="身份证号"
+                                name="idCard"
+                                rules={isStaff ? [{ required: true, message: '员工必须填写身份证号' }] : undefined}
+                            >
                                 <Input placeholder="请输入身份证号" />
                             </Form.Item>
                         </>

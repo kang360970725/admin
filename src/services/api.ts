@@ -46,6 +46,7 @@ export interface User {
     staffTags?: string[];
     matchedDepositAmount?: number;
     matchedFirstWithdrawMinBalance?: number;
+    matchedFirstWithdrawMinAcceptedDays?: number;
     matchedQuitCoolingDays?: number;
     matchedDepositForfeitDays?: number;
     matchedStaffRule?: StaffRuleItem | null;
@@ -112,14 +113,17 @@ export interface StaffRuleItem {
     tagCodes: string[];
     depositAmount: number;
     firstWithdrawMinBalance: number;
+    firstWithdrawMinAcceptedDays: number;
     quitCoolingDays: number;
     depositForfeitDays: number;
+    dormantFreezeDays: number;
     refundWhenDepositInsufficient?: boolean;
 }
 
 export interface StaffRuleEngineConfig {
     tags: StaffRuleTag[];
     rules: StaffRuleItem[];
+    defaultRule: StaffRuleItem;
 }
 
 export interface StaffExitPreview {
@@ -140,6 +144,7 @@ export interface StaffExitPreview {
     clearAmount: number;
     depositAmountRule: number;
     firstWithdrawMinBalance: number;
+    firstWithdrawMinAcceptedDays: number;
     refundWhenDepositInsufficient: boolean;
     blacklistAllowed: boolean;
     suggestedExitMode: 'RELEASE_TO_AVAILABLE' | 'CLEAR_ALL';
@@ -793,7 +798,7 @@ export async function getPublicMiniappHomeConfig() {
 }
 
 // 空闲打手下拉（支持 keyword；默认 onlyIdle=true）
-export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean; limit?: number; onlyOnline?: boolean; paginate?: boolean; page?: number }) {
+export async function getPlayerOptions(data: { keyword?: string; onlyIdle?: boolean; limit?: number; onlyOnline?: boolean; paginate?: boolean; page?: number; includeFrozen?: boolean }) {
     return request(`${API_BASE}/users/players/options`, {
         method: 'POST',
         data,
@@ -1567,10 +1572,13 @@ export async function getMyWithdrawals(userId?: number | { userId?: number }) {
  */
 export async function getWithdrawInfo() {
     return request<{
+        userType?: string;
+        staffEmploymentStatus?: 'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED' | string;
         availableBalance: number;
         depositBalance: number;
         depositLimit: number;
         firstWithdrawMinBalance: number;
+        firstWithdrawMinAcceptedDays: number;
         matchedStaffRule?: StaffRuleItem | null;
         workMode?: 'ONLINE' | 'OFFLINE';
     }>(`${API_BASE}/wallet/withdrawals/withdraw-info`, {
@@ -1969,7 +1977,7 @@ export async function listOfflineFeeBills(data: {
     });
 }
 
-export async function generateOfflineFeeBills(data: { month: string }) {
+export async function generateOfflineFeeBills(data: { month: string; confirmed?: boolean }) {
   return request(`${API_BASE}/offline-fees/bills/generate`, {
     method: 'POST',
     data,
@@ -2032,8 +2040,147 @@ export async function waiveOfflineFeeBill(data: { billId: number; remark?: strin
     });
 }
 
+export async function deleteOfflineFeeBill(data: { billId: number }) {
+    return request<{ success: boolean; billId: number }>(`${API_BASE}/offline-fees/bills/delete`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function refundOfflineFeeBill(data: { billId: number; remark?: string }) {
     return request(`${API_BASE}/offline-fees/bills/refund`, {
+        method: 'POST',
+        data,
+    });
+}
+
+// ---------------------- Equipment Rental Fee API ----------------------
+
+export interface EquipmentRentalContract {
+    id: number;
+    userId: number;
+    monthlyAmount: number;
+    startMonth: string;
+    endMonth?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
+    status: 'ACTIVE' | 'INACTIVE';
+    remark?: string | null;
+    user?: {
+        id: number;
+        name?: string;
+        phone?: string;
+        workMode?: string;
+        staffEmploymentStatus?: string;
+    };
+}
+
+export interface EquipmentRentalBill {
+    id: number;
+    contractId: number;
+    userId: number;
+    billMonth: string;
+    periodStart?: string;
+    periodEnd?: string;
+    amount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    status: 'PENDING' | 'PAID' | 'WAIVED';
+    dueAt?: string | null;
+    confirmedAt?: string | null;
+    generatedAt?: string;
+    totalAssets?: number;
+    insufficient?: boolean;
+    user?: {
+        id: number;
+        name?: string;
+        phone?: string;
+        workMode?: string;
+    };
+}
+
+export async function listEquipmentRentalContracts(data: {
+    status?: string;
+    userId?: number;
+    page?: number;
+    limit?: number;
+}) {
+    return request<{ list: EquipmentRentalContract[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/equipment-rental-fees/contracts/list`,
+        { method: 'POST', data },
+    );
+}
+
+export async function createEquipmentRentalContract(data: {
+    userId: number;
+    monthlyAmount: number;
+    startDate: string;
+    endDate?: string;
+    remark?: string;
+}) {
+    return request<EquipmentRentalContract>(`${API_BASE}/equipment-rental-fees/contracts/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateEquipmentRentalContract(data: {
+    id: number;
+    monthlyAmount?: number;
+    startDate?: string;
+    endDate?: string | null;
+    status?: 'ACTIVE' | 'INACTIVE';
+    remark?: string;
+}) {
+    return request<EquipmentRentalContract>(`${API_BASE}/equipment-rental-fees/contracts/update`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function listEquipmentRentalBills(data: {
+    billMonth?: string;
+    status?: string;
+    userId?: number;
+    onlyRisk?: boolean;
+    page?: number;
+    limit?: number;
+}) {
+    return request<{ list: EquipmentRentalBill[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/equipment-rental-fees/bills/list`,
+        { method: 'POST', data },
+    );
+}
+
+export async function generateEquipmentRentalBills(data: { month: string }) {
+    return request<{ month: string; affected: number }>(`${API_BASE}/equipment-rental-fees/bills/generate`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function waiveEquipmentRentalBill(data: { billId: number; remark?: string }) {
+    return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/bills/waive`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function payEquipmentRentalBill(data: { billId: number; remark?: string }) {
+    return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/bills/pay`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function listMyEquipmentRentalBills() {
+    return request<EquipmentRentalBill[]>(`${API_BASE}/equipment-rental-fees/my/pending`, {
+        method: 'GET',
+    });
+}
+
+export async function confirmMyEquipmentRentalBill(data: { billId: number }) {
+    return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/my/confirm`, {
         method: 'POST',
         data,
     });
@@ -2058,6 +2205,195 @@ export interface SystemAnnouncementItem {
         name?: string;
         phone: string;
     };
+}
+
+export type QuestionnaireScope = 'INTERNAL_STAFF' | 'MEMBER_LOGIN' | 'UNRESTRICTED';
+export type QuestionnaireStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED';
+export type QuestionnaireQuestionType = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TEXT';
+
+export interface QuestionnaireOptionItem {
+    id?: number;
+    label: string;
+    isOther?: boolean;
+    sortOrder?: number;
+}
+
+export interface QuestionnaireQuestionItem {
+    id?: number;
+    title: string;
+    description?: string;
+    type: QuestionnaireQuestionType;
+    required?: boolean;
+    sortOrder?: number;
+    options?: QuestionnaireOptionItem[];
+}
+
+export interface QuestionnaireListItem {
+    id: number;
+    title: string;
+    description?: string;
+    scope: QuestionnaireScope;
+    status: QuestionnaireStatus;
+    publishedAt?: string | null;
+    startAt?: string | null;
+    endAt?: string | null;
+    allowEditSubmit?: boolean;
+    createdAt: string;
+    updatedAt: string;
+    creator?: {
+        id: number;
+        name?: string;
+        phone?: string;
+    } | null;
+    questionCount?: number;
+    submissionCount?: number;
+    isOpen?: boolean;
+}
+
+export interface QuestionnaireDetailItem extends QuestionnaireListItem {
+    questions: QuestionnaireQuestionItem[];
+    mySubmission?: {
+        id: number;
+        createdAt?: string;
+        answers?: Array<{
+            id: number;
+            questionId: number;
+            optionId?: number | null;
+            textValue?: string;
+        }>;
+    } | null;
+    statistics?: Array<{
+        questionId: number;
+        title: string;
+        type: QuestionnaireQuestionType;
+        required: boolean;
+        optionStats: Array<{
+            id: number;
+            label: string;
+            voteCount: number;
+            isOther?: boolean;
+            textAnswers?: Array<{
+                id: number;
+                textValue: string;
+                submitterName?: string;
+                submitterPhone?: string;
+                createdAt?: string;
+            }>;
+        }>;
+        textAnswerCount: number;
+        textAnswers?: Array<{
+            id: number;
+            textValue: string;
+            submitterName?: string;
+            submitterPhone?: string;
+            createdAt?: string;
+        }>;
+    }>;
+    submissions?: Array<{
+        id: number;
+        userId?: number | null;
+        submitterName?: string;
+        submitterPhone?: string;
+        submitterUserType?: string;
+        submitterStaffStatus?: string;
+        visitorToken?: string;
+        clientIp?: string;
+        createdAt?: string;
+        answers?: Array<{
+            id: number;
+            questionId: number;
+            questionTitle?: string;
+            optionId?: number | null;
+            optionLabel?: string;
+            textValue?: string;
+        }>;
+    }>;
+}
+
+export async function adminListQuestionnaires(data: {
+    keyword?: string;
+    scope?: QuestionnaireScope | '';
+    status?: QuestionnaireStatus | '';
+    page?: number;
+    limit?: number;
+}) {
+    return request<{ list: QuestionnaireListItem[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/questionnaires/admin/list`,
+        { method: 'POST', data },
+    );
+}
+
+export async function adminCreateQuestionnaire(data: {
+    title: string;
+    description?: string;
+    scope: QuestionnaireScope;
+    status: QuestionnaireStatus;
+    startAt?: string;
+    endAt?: string;
+    allowEditSubmit?: boolean;
+    questions: QuestionnaireQuestionItem[];
+}) {
+    return request<QuestionnaireDetailItem>(`${API_BASE}/questionnaires/admin/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminUpdateQuestionnaire(data: {
+    id: number;
+    title: string;
+    description?: string;
+    scope: QuestionnaireScope;
+    status: QuestionnaireStatus;
+    startAt?: string;
+    endAt?: string;
+    allowEditSubmit?: boolean;
+    questions: QuestionnaireQuestionItem[];
+}) {
+    return request<QuestionnaireDetailItem>(`${API_BASE}/questionnaires/admin/update`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function adminGetQuestionnaireDetail(id: number) {
+    return request<QuestionnaireDetailItem>(`${API_BASE}/questionnaires/admin/${id}`, {
+        method: 'GET',
+    });
+}
+
+export async function listMyAvailableQuestionnaires() {
+    return request<Array<QuestionnaireListItem & { submitted?: boolean }>>(`${API_BASE}/questionnaires/my/available`, {
+        method: 'GET',
+    });
+}
+
+export async function getMyQuestionnaireDetail(id: number) {
+    return request<QuestionnaireDetailItem & { submitted?: boolean }>(`${API_BASE}/questionnaires/my/${id}`, {
+        method: 'GET',
+    });
+}
+
+export async function submitMyQuestionnaire(
+    id: number,
+    data: {
+        answers: Array<{
+            questionId: number;
+            optionId?: number;
+            optionIds?: number[];
+            optionTexts?: Record<string, string>;
+            otherText?: string;
+            textValue?: string;
+        }>;
+    },
+) {
+    return request<{ success: boolean; questionnaireId: number; submissionId: number }>(
+        `${API_BASE}/questionnaires/my/${id}/submit`,
+        {
+            method: 'POST',
+            data,
+        },
+    );
 }
 
 export async function adminListAnnouncements(data: { keyword?: string; page?: number; limit?: number }) {
