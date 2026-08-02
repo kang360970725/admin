@@ -186,12 +186,12 @@ export default function UsersPage() {
     }, [sceneConfig.key]);
 
     useEffect(() => {
-        if (sceneConfig.key === 'STAFF') {
+        if (sceneConfig.key === 'STAFF' && access.canViewStaffWalletStats) {
             loadWalletStats();
             return;
         }
         setWalletStats(null);
-    }, [sceneConfig.key]);
+    }, [sceneConfig.key, access.canViewStaffWalletStats]);
 
     const loadWalletStats = async () => {
         try {
@@ -1081,7 +1081,7 @@ export default function UsersPage() {
 
     return (
         <PageContainer title={sceneConfig.title}>
-            {sceneConfig.key === 'STAFF' ? (
+            {sceneConfig.key === 'STAFF' && access.canViewStaffWalletStats ? (
             <Row gutter={16} style={{ marginBottom: 20 }}>
 
                 <Col span={6}>

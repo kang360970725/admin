@@ -50,6 +50,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canDeleteUser: isSuperAdmin,
     canEditUser: isSuperAdmin,
     canManageStaffUsers,
+    canViewStaffWalletStats: isSuperAdmin,
     canChangeLevel: isSuperAdmin,
     canResetPassword: isSuperAdmin,
     canCreateRating: isSuperAdmin,
