@@ -90,8 +90,9 @@
 - 当前页面级权限已经按新增岗位拆分为细分 key；历史粗权限如 `system:role:page`、`finance:records:list` 只作为兼容兜底，不应再作为新页面默认权限。
 - 权限管理和角色配置使用后端 `Permission.parentId` 形成权限树；`menu:*` 是目录节点，仅用于呈现菜单位置，角色保存时只保存真实权限节点。
 - 新增页面时必须让权限 key 同时出现在 `config/config.ts` 路由 access、`src/access.ts`、后端 `prisma/seed.ts` 的树形 `parentKey` 和对应 controller 的 `@Permissions` 中。
-- 用户管理入口严格按 `users:member:page`、`users:staff:page`、`users:internal:page` 展示；普通 `ADMIN` 不因身份自动看到会员/后台人员。“全部用户”入口隐藏。按钮权限未细分前，`SUPER_ADMIN` 展示全部用户和会员变更按钮；拥有 `users:staff:page` 的角色（如店长）在打手管理中展示编辑、升降级、退店、清退按钮，但不展示分配角色、重置密码、删除用户、创建用户或会员资产类按钮。
-- 打手管理顶部员工资金统计属于敏感汇总，只允许 `SUPER_ADMIN` 展示和加载，店长等普通打手管理角色不可见。
+- 用户管理入口严格按 `users:member:page`、`users:staff:page`、`users:internal:page` 展示；普通 `ADMIN` 不因身份自动看到会员/后台人员。“全部用户”入口隐藏。用户管理现有按钮已改为可配置权限，并挂在对应页面节点下：会员页使用 `users:member:*:button`，打手页使用 `users:staff:*:button`，后台人员页使用 `users:internal:*:button`。
+- 页面权限只控制入口；按钮权限控制动作。打手管理顶部员工资金统计属于敏感汇总，仅 `SUPER_ADMIN` 或拥有 `users:staff:wallet-stats:button` 的角色展示和加载。
+- 订单模块按钮级权限已落地到对应页面节点：客服工作台创建订单 `orders:workbench:create:button`，订单列表创建/删除 `orders:list:create:button`、`orders:list:delete:button`；订单详情业务按钮统一挂在 `orders:detail:page` 下。详情页刷新、返回、钱包/订单导航不做按钮权限。
 - 待修复：当前后端存在 `User.userType = SUPER_ADMIN` 与 `Role.name = FINANCE_ADMIN` 语义混用。下次权限开发需优先拆清：新增/明确 `SUPER_ADMIN` 角色，`FINANCE_ADMIN` 回归财务管理员，移除 `FINANCE_ADMIN` 全局放行，并通过 Prisma migration 随发布修正。
 
 新增路由时通常需要同时改：

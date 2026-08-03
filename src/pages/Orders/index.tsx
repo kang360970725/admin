@@ -49,6 +49,10 @@ const OrdersPage: React.FC = () => {
     // ✅ 当前用户（用于：敏感字段 customerGameId 在“已结单”状态下脱敏展示）
     const {initialState} = useModel('@@initialState');
     const currentUser: any = initialState?.currentUser;
+    const hasOrderPermission = (key: string) => {
+        const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
+        return String(currentUser?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN' || permissions.includes(key);
+    };
     const canViewOrderOverview = useMemo(() => {
         const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
         const userType = String(currentUser?.userType || '').trim().toUpperCase();
@@ -385,13 +389,15 @@ const OrdersPage: React.FC = () => {
                     >
                         详情
                     </a>,
-                    <a
-                        key="delete"
-                        style={{ color: '#ff4d4f' }}
-                        onClick={() => confirmDeleteOrder(row)}
-                    >
-                        删除
-                    </a>,
+                    hasOrderPermission('orders:list:delete:button') ? (
+                        <a
+                            key="delete"
+                            style={{ color: '#ff4d4f' }}
+                            onClick={() => confirmDeleteOrder(row)}
+                        >
+                            删除
+                        </a>
+                    ) : null,
 
 
                     // canQuickMarkPaid ? (
@@ -525,9 +531,11 @@ const OrdersPage: React.FC = () => {
                 scroll={isMobile ? { x: 760 } : undefined}
                 toolbar={{
                     actions: [
-                        <Button key="new" type="primary" onClick={() => setCreateOpen(true)} style={isMobile ? {width: '100%'} : undefined}>
-                            新建订单
-                        </Button>,
+                        hasOrderPermission('orders:list:create:button') ? (
+                            <Button key="new" type="primary" onClick={() => setCreateOpen(true)} style={isMobile ? {width: '100%'} : undefined}>
+                                新建订单
+                            </Button>
+                        ) : null,
                     ],
                 }}
                 // ✅ 未付款高亮（排除赠送单）
@@ -590,6 +598,7 @@ const OrdersPage: React.FC = () => {
                 onCancel={() => setCreateOpen(false)}
                 onSubmit={async (payload) => {
                     const created = await createOrder({
+                        source: 'LIST',
                         projectId: payload?.projectId,
                         receivableAmount: payload?.receivableAmount,
                         paidAmount: payload?.paidAmount,

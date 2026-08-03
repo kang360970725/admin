@@ -1001,9 +1001,35 @@ export default function UsersPage() {
             fixed: 'right',
             render: (_: any, record: any) => {
                 const isStaffScene = sceneConfig.key === 'STAFF';
-                const canManageCurrentStaff = isStaffScene && access.canManageStaffUsers;
-                const canEditCurrentUser = access.canEditUser || canManageCurrentStaff;
-                const canChangeCurrentLevel = access.canChangeLevel || canManageCurrentStaff;
+                const canEditCurrentUser =
+                    sceneConfig.key === 'MEMBER'
+                        ? access.canEditMemberUser
+                        : sceneConfig.key === 'STAFF'
+                            ? access.canEditStaffUser
+                            : sceneConfig.key === 'INTERNAL'
+                                ? access.canEditInternalUser
+                                : access.canEditUser;
+                const canAssignCurrentRole =
+                    sceneConfig.key === 'STAFF'
+                        ? access.canAssignStaffRole
+                        : sceneConfig.key === 'INTERNAL'
+                            ? access.canAssignInternalRole
+                            : false;
+                const canChangeCurrentLevel = isStaffScene && access.canChangeLevel;
+                const canResetCurrentPassword =
+                    sceneConfig.key === 'STAFF'
+                        ? access.canResetStaffPassword
+                        : sceneConfig.key === 'INTERNAL'
+                            ? access.canResetInternalPassword
+                            : false;
+                const canDeleteCurrentUser =
+                    sceneConfig.key === 'MEMBER'
+                        ? access.canDeleteMemberUser
+                        : sceneConfig.key === 'STAFF'
+                            ? access.canDeleteStaffUser
+                            : sceneConfig.key === 'INTERNAL'
+                                ? access.canDeleteInternalUser
+                                : access.canDeleteUser;
 
                 return (
                     <Space>
@@ -1022,7 +1048,7 @@ export default function UsersPage() {
                                 编辑
                             </Button>
                         ) : null}
-                        {access.canEditUser && sceneConfig.key !== 'MEMBER' ? (
+                        {canAssignCurrentRole ? (
                             <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
                                 分配角色
                             </Button>
@@ -1032,22 +1058,22 @@ export default function UsersPage() {
                                 升降级
                             </Button>
                         ) : null}
-                        {access.canResetPassword ? (
+                        {canResetCurrentPassword ? (
                             <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
                                 重置密码
                             </Button>
                         ) : null}
-                        {canManageCurrentStaff && canExitOrClearStaff(record) ? (
+                        {isStaffScene && access.canStaffExit && canExitOrClearStaff(record) ? (
                             <Button type="link" size="small" danger onClick={() => openStaffExit(record)}>
                                 退店
                             </Button>
                         ) : null}
-                        {canManageCurrentStaff && canExitOrClearStaff(record) ? (
+                        {isStaffScene && access.canStaffClear && canExitOrClearStaff(record) ? (
                             <Button type="link" size="small" danger onClick={() => openStaffClear(record)}>
                                 清退
                             </Button>
                         ) : null}
-                        {access.canDeleteUser && isAnonymousUserRecord(record) ? (
+                        {canDeleteCurrentUser && isAnonymousUserRecord(record) ? (
                             <Popconfirm
                                 title="确定删除这个匿名用户吗？"
                                 description="删除后无法恢复。"
@@ -1078,6 +1104,15 @@ export default function UsersPage() {
             message.error((error as any)?.response?.data?.message || '更新失败');
         }
     };
+
+    const canCreateCurrentSceneUser =
+        sceneConfig.key === 'MEMBER'
+            ? access.canCreateMemberUser
+            : sceneConfig.key === 'STAFF'
+                ? access.canCreateStaffUser
+                : sceneConfig.key === 'INTERNAL'
+                    ? access.canCreateInternalUser
+                    : access.canCreateUser;
 
     return (
         <PageContainer title={sceneConfig.title}>
@@ -1166,7 +1201,7 @@ export default function UsersPage() {
                     labelWidth: 'auto',
                 }}
                 toolBarRender={() => [
-                    access.canCreateUser && (
+                    canCreateCurrentSceneUser && (
                         <Button
                             key="add"
                             type="primary"
@@ -1347,10 +1382,14 @@ export default function UsersPage() {
             >
                 {memberDetail ? (
                     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        {access.canEditUser ? (
+                        {access.canManualMemberRecharge || access.canAdjustMemberGrowth ? (
                             <Space wrap>
-                                <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
-                                <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
+                                {access.canManualMemberRecharge ? (
+                                    <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
+                                ) : null}
+                                {access.canAdjustMemberGrowth ? (
+                                    <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
+                                ) : null}
                             </Space>
                         ) : null}
                         <Descriptions bordered size="small" column={2}>
@@ -1446,7 +1485,7 @@ export default function UsersPage() {
                         <Card
                             size="small"
                             title="游戏名片"
-                            extra={access.canEditUser ? (
+                            extra={access.canManageMemberGameCards ? (
                                 <Button type="link" size="small" onClick={openMemberGameCardModal}>
                                     维护游戏名片
                                 </Button>
@@ -1458,7 +1497,7 @@ export default function UsersPage() {
                                 locale={{ emptyText: '暂无游戏名片' }}
                                 renderItem={(item: any) => (
                                     <List.Item
-                                        actions={access.canEditUser ? [
+                                        actions={access.canManageMemberGameCards ? [
                                             item?.isPrimary ? (
                                                 <Tag color="gold" key="primary">主要</Tag>
                                             ) : (

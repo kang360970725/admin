@@ -14,7 +14,20 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewStaffUsers = isSuperAdmin || has('users:staff:page');
   const canViewInternalUsers = isSuperAdmin || has('users:internal:page');
   const canViewAllUsers = false;
-  const canManageStaffUsers = isSuperAdmin || has('users:staff:page');
+  const canManageStaffUsers = canViewStaffUsers;
+  const canCreateMemberUser = isSuperAdmin || has('users:member:create:button');
+  const canCreateStaffUser = isSuperAdmin || has('users:staff:create:button');
+  const canCreateInternalUser = isSuperAdmin || has('users:internal:create:button');
+  const canEditMemberUser = isSuperAdmin || has('users:member:edit:button');
+  const canEditStaffUser = isSuperAdmin || has('users:staff:edit:button');
+  const canEditInternalUser = isSuperAdmin || has('users:internal:edit:button');
+  const canDeleteMemberUser = isSuperAdmin || has('users:member:delete:button');
+  const canDeleteStaffUser = isSuperAdmin || has('users:staff:delete:button');
+  const canDeleteInternalUser = isSuperAdmin || has('users:internal:delete:button');
+  const canAssignStaffRole = isSuperAdmin || has('users:staff:assign-role:button');
+  const canAssignInternalRole = isSuperAdmin || has('users:internal:assign-role:button');
+  const canResetStaffPassword = isSuperAdmin || has('users:staff:reset-password:button');
+  const canResetInternalPassword = isSuperAdmin || has('users:internal:reset-password:button');
   const hasLegacySystemAdmin = has('system:role:page');
   const hasFinanceRecords = has('finance:records:list');
   const canUseOwnStaffWallet = userType === 'STAFF' && isDispatchEligibleStaff;
@@ -46,13 +59,33 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewAllUsers,
     canViewStaffRatings: has('staff-ratings:page'),
     canSeeAdmin: isSuperAdmin,
-    canCreateUser: isSuperAdmin,
-    canDeleteUser: isSuperAdmin,
-    canEditUser: isSuperAdmin,
+    canCreateUser: canCreateMemberUser || canCreateStaffUser || canCreateInternalUser,
+    canCreateMemberUser,
+    canCreateStaffUser,
+    canCreateInternalUser,
+    canDeleteUser: canDeleteMemberUser || canDeleteStaffUser || canDeleteInternalUser,
+    canDeleteMemberUser,
+    canDeleteStaffUser,
+    canDeleteInternalUser,
+    canEditUser: canEditMemberUser || canEditStaffUser || canEditInternalUser,
+    canEditMemberUser,
+    canEditStaffUser,
+    canEditInternalUser,
+    canAssignUserRole: canAssignStaffRole || canAssignInternalRole,
+    canAssignStaffRole,
+    canAssignInternalRole,
     canManageStaffUsers,
-    canViewStaffWalletStats: isSuperAdmin,
-    canChangeLevel: isSuperAdmin,
-    canResetPassword: isSuperAdmin,
+    canViewStaffWalletStats: isSuperAdmin || has('users:staff:wallet-stats:button'),
+    canChangeLevel: isSuperAdmin || has('users:staff:change-level:button'),
+    canResetPassword: canResetStaffPassword || canResetInternalPassword,
+    canResetStaffPassword,
+    canResetInternalPassword,
+    canStaffExit: isSuperAdmin || has('users:staff:exit:button'),
+    canStaffClear: isSuperAdmin || has('users:staff:clear:button'),
+    canResetWithdrawQrCode: isSuperAdmin || has('users:staff:withdraw-qr-reset:button'),
+    canManualMemberRecharge: isSuperAdmin || has('users:member:recharge:button'),
+    canAdjustMemberGrowth: isSuperAdmin || has('users:member:growth-adjust:button'),
+    canManageMemberGameCards: isSuperAdmin || has('users:member:game-card:button'),
     canCreateRating: isSuperAdmin,
     canEditRating: isSuperAdmin,
     canDeleteRating: isSuperAdmin,

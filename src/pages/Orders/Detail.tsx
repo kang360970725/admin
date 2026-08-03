@@ -1333,6 +1333,27 @@ const OrderDetailPage: React.FC = () => {
     // 创建订单后、复制相关功能模块
     const {initialState} = useModel('@@initialState');
     const currentUser = initialState?.currentUser;
+    const hasOrderPermission = (key: string) => {
+        const permissions = Array.isArray((currentUser as any)?.permissions) ? (currentUser as any).permissions : [];
+        return String((currentUser as any)?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN' || permissions.includes(key);
+    };
+    const canUseReceipt = hasOrderPermission('orders:detail:receipt:button');
+    const canMarkPaid = hasOrderPermission('orders:detail:mark-paid:button');
+    const canRefund = hasOrderPermission('orders:detail:refund:button');
+    const canEditOrder = hasOrderPermission('orders:detail:edit:button');
+    const canDispatchOrder = hasOrderPermission('orders:detail:dispatch:button');
+    const canUpdatePaid = hasOrderPermission('orders:detail:update-paid:button');
+    const canConfirmComplete = hasOrderPermission('orders:detail:confirm-complete:button');
+    const canAdminAccept = hasOrderPermission('orders:detail:admin-accept:button');
+    const canArchiveDispatch = hasOrderPermission('orders:detail:archive:button');
+    const canCompleteDispatch = hasOrderPermission('orders:detail:complete:button');
+    const canRollbackAccepted = hasOrderPermission('orders:detail:rollback-accepted:button');
+    const canRollbackArchived = hasOrderPermission('orders:detail:rollback-archived:button');
+    const canUpdateParticipants = hasOrderPermission('orders:detail:update-participants:button');
+    const canAdjustSettlement = hasOrderPermission('orders:detail:settlement-adjust:button');
+    const canFixArchivedProgress = hasOrderPermission('orders:detail:archived-progress-fix:button');
+    const canRecalculateSettlements = hasOrderPermission('orders:detail:recalculate-settlements:button');
+    const canUseDetailTools = canFixArchivedProgress || canAdjustSettlement || canRecalculateSettlements;
 
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [receiptType, setReceiptType] = useState<'customer' | 'staff'>('customer');
@@ -1520,24 +1541,26 @@ const OrderDetailPage: React.FC = () => {
     }, [order, forbidEdit, canManualDispatchBeforePaid, currentDispatch]);
 
     const canDispatch = useMemo(() => {
-        return !dispatchDisabledReason;
-    }, [dispatchDisabledReason]);
+        return canDispatchOrder && !dispatchDisabledReason;
+    }, [canDispatchOrder, dispatchDisabledReason]);
 
     const canAdminAcceptCurrentDispatch = useMemo(() => {
-        return String(currentDispatch?.status || '') === 'WAIT_ACCEPT' && Number(currentDispatch?.id || 0) > 0;
-    }, [currentDispatch]);
+        return canAdminAccept && String(currentDispatch?.status || '') === 'WAIT_ACCEPT' && Number(currentDispatch?.id || 0) > 0;
+    }, [canAdminAccept, currentDispatch]);
 
     const canRollbackCurrentDispatchToAccepted = useMemo(() => {
-        return String(currentDispatch?.status || '') === 'ARCHIVED'
+        return canRollbackAccepted
+            && String(currentDispatch?.status || '') === 'ARCHIVED'
             && String(order?.status || '') === 'ARCHIVED'
             && Number(currentDispatch?.id || 0) > 0;
-    }, [currentDispatch, order]);
+    }, [canRollbackAccepted, currentDispatch, order]);
 
     const canRollbackCurrentDispatchToArchived = useMemo(() => {
-        return String(currentDispatch?.status || '') === 'COMPLETED'
+        return canRollbackArchived
+            && String(currentDispatch?.status || '') === 'COMPLETED'
             && String(order?.status || '') === 'COMPLETED_PENDING_CONFIRM'
             && Number(currentDispatch?.id || 0) > 0;
-    }, [currentDispatch, order]);
+    }, [canRollbackArchived, currentDispatch, order]);
 
     const currentDispatchHasEffectiveParticipants = useMemo(() => {
         const participants = Array.isArray(currentDispatch?.participants) ? currentDispatch.participants : [];
@@ -2184,6 +2207,7 @@ const OrderDetailPage: React.FC = () => {
                 </Space>
 
                 <Row gutter={[10, 10]}>
+                    {canUseReceipt ? (
                     <Col span={12}>
                         <Button
                             type="primary"
@@ -2195,7 +2219,8 @@ const OrderDetailPage: React.FC = () => {
                             订单小票
                         </Button>
                     </Col>
-                    {!order?.isGifted && order?.isPaid === false ? (
+                    ) : null}
+                    {canMarkPaid && !order?.isGifted && order?.isPaid === false ? (
                         <Col span={12}>
                             <Button
                                 type="primary"
@@ -2207,6 +2232,7 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         </Col>
                     ) : null}
+                    {canUseReceipt ? (
                     <Col span={12}>
                         <Button
                             icon={<CopyOutlined/>}
@@ -2220,7 +2246,9 @@ const OrderDetailPage: React.FC = () => {
                             复制派单话术
                         </Button>
                     </Col>
+                    ) : null}
 
+                    {canDispatchOrder ? (
                     <Col span={12}>
                         <Button
                             icon={<ThunderboltOutlined/>}
@@ -2232,7 +2260,9 @@ const OrderDetailPage: React.FC = () => {
                             {primaryActionText}
                         </Button>
                     </Col>
+                    ) : null}
 
+                    {canUpdatePaid ? (
                     <Col span={12}>
                         <Button
                             icon={<DollarOutlined/>}
@@ -2244,7 +2274,8 @@ const OrderDetailPage: React.FC = () => {
                             修改实付
                         </Button>
                     </Col>
-                    {String(order?.status) === 'COMPLETED' ? (
+                    ) : null}
+                    {canUseDetailTools && String(order?.status) === 'COMPLETED' ? (
                         <Col span={12}>
                             <Button
                                 icon={<ProfileOutlined/>}
@@ -2268,7 +2299,7 @@ const OrderDetailPage: React.FC = () => {
                         </Button>
                     </Col>
 
-                    {String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
+                    {canConfirmComplete && String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
                         <Col span={12}>
                             <Button
                                 type="primary"
@@ -2292,7 +2323,7 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         </Col>
                     ) : null}
-                    {canCustomerServiceFinishStatus ? (
+                    {canArchiveDispatch && canCustomerServiceFinishStatus ? (
                         <Col span={12}>
                             <Tooltip title={customerServiceFinishDisabledReason}>
                                 <Button
@@ -2306,7 +2337,7 @@ const OrderDetailPage: React.FC = () => {
                             </Tooltip>
                         </Col>
                     ) : null}
-                    {canCustomerServiceFinishStatus ? (
+                    {canCompleteDispatch && canCustomerServiceFinishStatus ? (
                         <Col span={12}>
                             <Tooltip title={customerServiceFinishDisabledReason}>
                                 <Button
@@ -2403,7 +2434,7 @@ const OrderDetailPage: React.FC = () => {
                     items={historyDispatches.map((d: any) => {
                         const parts = Array.isArray(d?.participants) ? d.participants : [];
                         const data = parts.map((p: any) => ({...p, dispatchId: d.id, dispatchStatus: d.status}));
-                        const canArchFix = String(order?.status) === 'ARCHIVED' &&
+                        const canArchFix = canFixArchivedProgress && String(order?.status) === 'ARCHIVED' &&
                             isGuaranteed && String(d?.status) === 'ARCHIVED' &&
                             Array.isArray(d?.participants) &&
                             d.participants.length > 0;
@@ -2487,7 +2518,7 @@ const OrderDetailPage: React.FC = () => {
                                                                                  style={{fontSize: 12}}>
                                                                     接单：{row?.acceptedAt ? new Date(row.acceptedAt).toLocaleString() : '-'}
                                                                 </Typography.Text>
-                                                                {s ? (
+                                                                {canAdjustSettlement && s ? (
                                                                     <Button size="small" onClick={() => openAdjust(s)}
                                                                             style={{borderRadius: 10}}>
                                                                         调整收益
@@ -2735,14 +2766,14 @@ const OrderDetailPage: React.FC = () => {
                         <Button icon={<ReloadOutlined/>} onClick={loadDetail}>
                             刷新
                         </Button>
-                        {String(order?.status) === 'COMPLETED' ? (
+                        {canUseDetailTools && String(order?.status) === 'COMPLETED' ? (
                             <Button icon={<ProfileOutlined/>} onClick={openTools}>
                                 工具
                             </Button>
                         ) : null}
 
                         {/* ✅ 两段式结单：客服确认（低频入口，但要可用） */}
-                        {String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
+                        {canConfirmComplete && String(order?.status) === 'COMPLETED_PENDING_CONFIRM' ? (
                             <Button type="primary" icon={<CheckCircleOutlined/>} onClick={openConfirmComplete}>
                                 确认结单
                             </Button>
@@ -2752,7 +2783,7 @@ const OrderDetailPage: React.FC = () => {
                                 客服代接单
                             </Button>
                         ) : null}
-                        {canCustomerServiceFinishStatus ? (
+                        {canArchiveDispatch && canCustomerServiceFinishStatus ? (
                             <Tooltip title={customerServiceFinishDisabledReason}>
                                 <Button
                                     disabled={!canCustomerServiceFinishCurrentDispatch}
@@ -2762,7 +2793,7 @@ const OrderDetailPage: React.FC = () => {
                                 </Button>
                             </Tooltip>
                         ) : null}
-                        {canCustomerServiceFinishStatus ? (
+                        {canCompleteDispatch && canCustomerServiceFinishStatus ? (
                             <Tooltip title={customerServiceFinishDisabledReason}>
                                 <Button
                                     disabled={!canCustomerServiceFinishCurrentDispatch}
@@ -2783,26 +2814,26 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         ) : null}
 
-                        <Button onClick={() => openReceipt('staff')}>订单小票</Button>
-                        {!order?.isGifted && order?.isPaid === false ? (
+                        {canUseReceipt ? <Button onClick={() => openReceipt('staff')}>订单小票</Button> : null}
+                        {canMarkPaid && !order?.isGifted && order?.isPaid === false ? (
                             <Button
                                 type="primary"
                                 onClick={openMarkPaidModal}>
                                 确认收款
                             </Button>
                         ) : null}
-                        {order?.status !== 'REFUNDED' && <Button danger onClick={openRefundModal}>退款</Button>}
-                        <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button>
+                        {canRefund && order?.status !== 'REFUNDED' && <Button danger onClick={openRefundModal}>退款</Button>}
+                        {canEditOrder ? <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button> : null}
 
-                        <Tooltip title={!canDispatch ? dispatchDisabledReason : ''}>
+                        {canDispatchOrder ? <Tooltip title={!canDispatch ? dispatchDisabledReason : ''}>
                             <Button onClick={openDispatchModal} disabled={!canDispatch || forbidEdit}>
                                 {primaryActionText}
                             </Button>
-                        </Tooltip>
+                        </Tooltip> : null}
 
-                        <Button disabled={!isHourly} onClick={openPaidModal}>
+                        {canUpdatePaid ? <Button disabled={!isHourly} onClick={openPaidModal}>
                             小时单补收修改实付
-                        </Button>
+                        </Button> : null}
                     </Space>
                 }
             >
@@ -2907,7 +2938,7 @@ const OrderDetailPage: React.FC = () => {
                             //     isGuaranteed && String(dispatchRow?.status) === 'ARCHIVED' &&
                             //     Array.isArray(dispatchRow?.participants) &&
                             //     dispatchRow.participants.length > 0;
-                            const canArchFix = String(order?.status) === 'ARCHIVED' && (isGuaranteed || isHourly) &&
+                            const canArchFix = canFixArchivedProgress && String(order?.status) === 'ARCHIVED' && (isGuaranteed || isHourly) &&
                                 String(dispatchRow?.status) === 'ARCHIVED' &&
                                 Array.isArray(dispatchRow?.participants) &&
                                 dispatchRow.participants.length > 0;
@@ -3093,13 +3124,13 @@ const OrderDetailPage: React.FC = () => {
                                 <Space direction="vertical" size={12} style={{width: '100%'}}>
                                     <Card style={cardStyleMobile} bodyStyle={cardBodyMobile}>
                                         <Space direction="vertical" size={10} style={{width: '100%'}}>
-                                            <Button block icon={<FileImageOutlined/>}
+                                            {canUseReceipt ? <Button block icon={<FileImageOutlined/>}
                                                     onClick={() => openReceipt('customer')}
                                                     style={{borderRadius: 14, height: 44}}>
                                                 订单小票
-                                            </Button>
+                                            </Button> : null}
 
-                                            {order?.status !== 'REFUNDED' ? (
+                                            {canRefund && order?.status !== 'REFUNDED' ? (
                                                 <>
                                                     <Button danger block onClick={openRefundModal}
                                                             style={{borderRadius: 14, height: 44}}>
@@ -3108,7 +3139,7 @@ const OrderDetailPage: React.FC = () => {
                                                 </>
                                             ) : null}
 
-                                            <Button
+                                            {canEditOrder ? <Button
                                                 type="primary"
                                                 block
                                                 icon={<EditOutlined/>}
@@ -3117,7 +3148,7 @@ const OrderDetailPage: React.FC = () => {
                                                 style={{borderRadius: 14, height: 44}}
                                             >
                                                 编辑订单
-                                            </Button>
+                                            </Button> : null}
                                         </Space>
                                     </Card>
                                 </Space>
@@ -3141,7 +3172,7 @@ const OrderDetailPage: React.FC = () => {
                     }}
                 >
                     <Space style={{width: '100%', justifyContent: 'space-between'}}>
-                        <Tooltip title={!canDispatch ? dispatchDisabledReason : ''}>
+                        {canDispatchOrder ? <Tooltip title={!canDispatch ? dispatchDisabledReason : ''}>
                             <Button
                                 type="primary"
                                 icon={<ThunderboltOutlined/>}
@@ -3151,7 +3182,7 @@ const OrderDetailPage: React.FC = () => {
                             >
                                 {primaryActionText}
                             </Button>
-                        </Tooltip>
+                        </Tooltip> : null}
 
                         <Button onClick={() => history.push('/orders')} icon={<ProfileOutlined/>}
                                 style={{borderRadius: 14, height: 44}}>
@@ -3188,12 +3219,12 @@ const OrderDetailPage: React.FC = () => {
                     open={dispatchModalOpen}
                     onClose={() => setDispatchModalOpen(false)}
                     destroyOnClose
-                    extra={
+                    extra={(canDispatchOrder || canUpdateParticipants) ? (
                         <Button type="primary" onClick={submitDispatchOrUpdate} loading={dispatchSubmitting}
                                 style={{borderRadius: 12}}>
                             确认
                         </Button>
-                    }
+                    ) : null}
                 >
                     <div style={{marginBottom: 12}}>
                         <div style={{
@@ -4073,7 +4104,7 @@ const OrderDetailPage: React.FC = () => {
                             </div>
 
                             <Space wrap>
-                                <Button
+                                {canRecalculateSettlements ? <Button
                                     loading={toolsLoading}
                                     type="primary"
                                     onClick={runRecalcPreview} // ✅ ① 只预览（不落库）
@@ -4087,9 +4118,9 @@ const OrderDetailPage: React.FC = () => {
                                     })()}
                                 >
                                     ① 重新核算（预览）
-                                </Button>
+                                </Button> : null}
 
-                                <Button
+                                {canRecalculateSettlements ? <Button
                                     loading={toolsLoading}
                                     danger
                                     onClick={runRecalcApply}   // ✅ ② 确认覆盖（落库）
@@ -4106,7 +4137,7 @@ const OrderDetailPage: React.FC = () => {
                                     style={{borderRadius: 12}}
                                 >
                                     ② 确认重算（覆盖收益）
-                                </Button>
+                                </Button> : null}
 
                                 <Button
                                     loading={toolsLoading}
@@ -4624,7 +4655,7 @@ const OrderDetailPage: React.FC = () => {
                     <FloatButton icon={<ProfileOutlined/>} tooltip="订单列表" onClick={() => history.push('/orders')}/>
                     <FloatButton icon={<WalletOutlined/>} tooltip="钱包"
                                  onClick={() => history.push('/wallet/overview')}/>
-                    <FloatButton icon={<FileImageOutlined/>} tooltip="订单小票" onClick={() => openReceipt('customer')}/>
+                    {canUseReceipt ? <FloatButton icon={<FileImageOutlined/>} tooltip="订单小票" onClick={() => openReceipt('customer')}/> : null}
                 </FloatButton.Group>
             ) : null}
 

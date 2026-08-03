@@ -34,7 +34,7 @@ import {
     CopyOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import {history, useNavigate} from '@umijs/max';
+import {history, useModel, useNavigate} from '@umijs/max';
 import {
     assignDispatch,
     createOrder,
@@ -133,11 +133,23 @@ export default function CSWorkbenchPage() {
     const actionRef = useRef<ActionType>();
     const navigate = useNavigate();
     const isMobile = useIsMobile(768);
+    const { initialState } = useModel('@@initialState');
+    const currentUser: any = initialState?.currentUser;
+    const hasOrderPermission = (key: string) => {
+        const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
+        return String(currentUser?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN' || permissions.includes(key);
+    };
+    const canCreateWorkbenchOrder = hasOrderPermission('orders:workbench:create:button');
 
     const [createOpen, setCreateOpen] = useState(false);
 
     // TAB：create / archived / wait_assign / wait_accept
     const [tab, setTab] = useState<'create' | 'ARCHIVED' | 'WAIT_ASSIGN' | 'WAIT_ACCEPT'>('create');
+    useEffect(() => {
+        if (!canCreateWorkbenchOrder && tab === 'create') {
+            setTab('ARCHIVED');
+        }
+    }, [canCreateWorkbenchOrder, tab]);
 
     // 列表筛选
     const [loading, setLoading] = useState(false);
@@ -559,6 +571,7 @@ export default function CSWorkbenchPage() {
             setCreating(true);
 
             const payload: any = {
+                source: 'WORKBENCH',
                 projectId,
                 receivableAmount,
                 paidAmount,
@@ -1053,15 +1066,17 @@ export default function CSWorkbenchPage() {
                                 重置
                             </Button>
 
-                            <Button
-                                type="primary"
-                                icon={<CheckCircleOutlined />}
-                                onClick={submitCreateOrder}
-                                loading={creating}
-                                style={{ borderRadius: 12, minWidth: 150 }}
-                            >
-                                创建订单
-                            </Button>
+                            {canCreateWorkbenchOrder ? (
+                                <Button
+                                    type="primary"
+                                    icon={<CheckCircleOutlined />}
+                                    onClick={submitCreateOrder}
+                                    loading={creating}
+                                    style={{ borderRadius: 12, minWidth: 150 }}
+                                >
+                                    创建订单
+                                </Button>
+                            ) : null}
                         </Space>
                     </Form>
                 </Space>
@@ -1565,9 +1580,11 @@ export default function CSWorkbenchPage() {
 
                 <Card style={{ borderRadius: 16, maxWidth: 720, margin: '0 auto' }}>
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                        <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }} onClick={() => setCreateOpen(true)}>
-                            快捷发单
-                        </Button>
+                        {canCreateWorkbenchOrder ? (
+                            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }} onClick={() => setCreateOpen(true)}>
+                                快捷发单
+                            </Button>
+                        ) : null}
                     </Space>
                 </Card>
             </Space>
@@ -1579,6 +1596,7 @@ export default function CSWorkbenchPage() {
                 onCancel={() => setCreateOpen(false)}
                 onSubmit={async (payload) => {
                     const created = await createOrder({
+                        source: 'WORKBENCH',
                         projectId: payload?.projectId,
                         receivableAmount: payload?.receivableAmount,
                         paidAmount: payload?.paidAmount,
@@ -1620,7 +1638,7 @@ export default function CSWorkbenchPage() {
                         activeKey={tab}
                         onChange={(k) => setTab(k as any)}
                         items={[
-                            { key: 'create', label: '创建订单', children: CreatePanel },
+                            ...(canCreateWorkbenchOrder ? [{ key: 'create', label: '创建订单', children: CreatePanel }] : []),
                             { key: 'ARCHIVED', label: '存单', children: ListPanel },
                             { key: 'WAIT_ASSIGN', label: '待派单', children: ListPanel },
                             { key: 'WAIT_ACCEPT', label: '待接单', children: ListPanel },
