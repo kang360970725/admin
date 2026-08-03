@@ -137,7 +137,10 @@ export default function CSWorkbenchPage() {
     const currentUser: any = initialState?.currentUser;
     const hasOrderPermission = (key: string) => {
         const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
-        return String(currentUser?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN' || permissions.includes(key);
+        const userType = String(currentUser?.userType || '').trim().toUpperCase();
+        const roleName = String(currentUser?.role?.name || currentUser?.Role?.name || currentUser?.roleName || '').trim().toUpperCase();
+        const roleCode = String(currentUser?.role?.code || currentUser?.Role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim().toUpperCase();
+        return userType === 'SUPER_ADMIN' || roleName === 'SUPER_ADMIN' || roleCode === 'SUPER_ADMIN' || permissions.includes(key);
     };
     const canCreateWorkbenchOrder = hasOrderPermission('orders:workbench:create:button');
 

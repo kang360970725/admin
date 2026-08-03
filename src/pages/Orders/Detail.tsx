@@ -1335,7 +1335,10 @@ const OrderDetailPage: React.FC = () => {
     const currentUser = initialState?.currentUser;
     const hasOrderPermission = (key: string) => {
         const permissions = Array.isArray((currentUser as any)?.permissions) ? (currentUser as any).permissions : [];
-        return String((currentUser as any)?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN' || permissions.includes(key);
+        const userType = String((currentUser as any)?.userType || '').trim().toUpperCase();
+        const roleName = String((currentUser as any)?.role?.name || (currentUser as any)?.Role?.name || (currentUser as any)?.roleName || '').trim().toUpperCase();
+        const roleCode = String((currentUser as any)?.role?.code || (currentUser as any)?.Role?.code || (currentUser as any)?.roleCode || (currentUser as any)?.roleKey || '').trim().toUpperCase();
+        return userType === 'SUPER_ADMIN' || roleName === 'SUPER_ADMIN' || roleCode === 'SUPER_ADMIN' || permissions.includes(key);
     };
     const canUseReceipt = hasOrderPermission('orders:detail:receipt:button');
     const canMarkPaid = hasOrderPermission('orders:detail:mark-paid:button');

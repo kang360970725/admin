@@ -23,7 +23,7 @@ export default function ChestDemoPage() {
   const currentUser: any = initialState?.currentUser;
   const canViewRewardConfig = useMemo(() => {
     const userType = String(currentUser?.userType || '').trim().toUpperCase();
-    if (userType === 'SUPER_ADMIN' || userType === 'FINANCE_ADMIN') return true;
+    if (userType === 'SUPER_ADMIN') return true;
 
     const roleName = String(
       currentUser?.role?.name
@@ -33,7 +33,6 @@ export default function ChestDemoPage() {
     ).trim().toUpperCase();
     if (
       roleName.includes('SUPER_ADMIN')
-      || roleName.includes('FINANCE_ADMIN')
       || roleName.includes('超级管理员')
     ) return true;
 
@@ -44,7 +43,7 @@ export default function ChestDemoPage() {
       || currentUser?.roleKey
       || '',
     ).trim().toUpperCase();
-    if (roleCode === 'SUPER_ADMIN' || roleCode === 'FINANCE_ADMIN') return true;
+    if (roleCode === 'SUPER_ADMIN') return true;
 
     const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
     // 兼容历史账号模型：若拥有系统最高管理权限，也放开奖池配置可见

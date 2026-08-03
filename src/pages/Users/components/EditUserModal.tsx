@@ -12,6 +12,7 @@ interface EditUserModalProps {
     onSuccess: () => void;
     availableRatings?: any[];
     staffTagOptions?: Array<{ label: string; value: string }>;
+    isSuperAdmin?: boolean;
 }
 
 const EditUserModal: React.FC<EditUserModalProps> = ({
@@ -21,6 +22,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     onSuccess,
     availableRatings = [],
     staffTagOptions = [],
+    isSuperAdmin = false,
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
@@ -73,11 +75,19 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
         }
     }, [user, visible, form]);
 
+    const isStaff = userType === 'STAFF';
+    const staffEditLocked = isStaff && !isSuperAdmin;
+
     const handleOk = async () => {
         try {
-            const values = await form.validateFields();
+            const values = staffEditLocked
+                ? await form.validateFields(['staffEmploymentStatus'])
+                : await form.validateFields();
 
             const buildPayload = () => {
+                if (staffEditLocked) {
+                    return { staffEmploymentStatus: values.staffEmploymentStatus };
+                }
                 const payload: any = { ...values };
 
                 // 统一在前端将员工工作模式字段转换为后端最终格式
@@ -122,7 +132,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
         onCancel();
     };
 
-    const isStaff = userType === 'STAFF';
     const currentRating = user?.staffRating;
     const hasWithdrawQrCode = Boolean(user?.withdrawQrCodeKey);
 
@@ -148,7 +157,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             name="userType"
                             rules={[{ required: true, message: '请选择用户身份' }]}
                         >
-                            <Select placeholder="请选择用户身份" onChange={handleUserTypeChange}>
+                            <Select placeholder="请选择用户身份" onChange={handleUserTypeChange} disabled={staffEditLocked}>
                                 <Option value="REGISTERED_USER">注册用户</Option>
                                 <Option value="STAFF">员工</Option>
                                 <Option value="CUSTOMER_SERVICE">客服</Option>
@@ -164,14 +173,14 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             name="status"
                             rules={[{ required: true, message: '请选择账号状态' }]}
                         >
-                            <Select placeholder="请选择账号状态">
+                            <Select placeholder="请选择账号状态" disabled={staffEditLocked}>
                                 <Option value="ACTIVE">正常</Option>
                                 <Option value="DISABLED">停用</Option>
                             </Select>
                         </Form.Item>
 
                         <Form.Item label="需重置密码" name="needResetPwd">
-                            <Select placeholder="请选择">
+                            <Select placeholder="请选择" disabled={staffEditLocked}>
                                 <Option value={true}>是</Option>
                                 <Option value={false}>否</Option>
                             </Select>
@@ -180,7 +189,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                     <div>
                         <Form.Item label="姓名" name="name">
-                            <Input placeholder="请输入姓名" />
+                            <Input placeholder="请输入姓名" disabled={staffEditLocked} />
                         </Form.Item>
 
                         <Form.Item
@@ -188,16 +197,16 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             name="email"
                             rules={[{ type: 'email', message: '邮箱格式不正确' }]}
                         >
-                            <Input placeholder="请输入邮箱" />
+                            <Input placeholder="请输入邮箱" disabled={staffEditLocked} />
                         </Form.Item>
 
                         <>
                             <Form.Item label="真实姓名" name="realName">
-                                <Input placeholder="请输入真实姓名" />
+                                <Input placeholder="请输入真实姓名" disabled={staffEditLocked} />
                             </Form.Item>
 
                             <Form.Item label="身份证号" name="idCard">
-                                <Input placeholder="请输入身份证号" />
+                                <Input placeholder="请输入身份证号" disabled={staffEditLocked} />
                             </Form.Item>
                         </>
                     </div>
@@ -205,7 +214,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                     <Form.Item label="等级" name="level">
-                        <InputNumber min={1} max={10} placeholder="等级" style={{ width: '100%' }} />
+                        <InputNumber min={1} max={10} placeholder="等级" style={{ width: '100%' }} disabled={staffEditLocked} />
                     </Form.Item>
 
                     {isStaff ? (
@@ -214,7 +223,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             name="rating"
                             rules={[{ required: true, message: '员工必须设置评级' }]}
                         >
-                            <Select placeholder="请选择评级" style={{ width: '100%' }}>
+                            <Select placeholder="请选择评级" style={{ width: '100%' }} disabled={staffEditLocked}>
                                 {availableRatings.map((rating) => (
                                     <Option key={rating.id} value={rating.id}>
                                         {rating.name}
@@ -238,6 +247,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             precision={2}
                             placeholder="余额"
                             style={{ width: '100%' }}
+                            disabled
                             formatter={(value) => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                             parser={(value) => value?.replace(/¥\s?|(,*)/g, '') as any}
                         />
@@ -253,8 +263,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 <Select placeholder="请选择员工在职状态">
                                     <Option value="ACTIVE">正常</Option>
                                     <Option value="FROZEN">冻结</Option>
-                                    <Option value="EXITED">退店</Option>
-                                    <Option value="BLACKLISTED">黑名单</Option>
+                                    {isSuperAdmin ? <Option value="EXITED">退店</Option> : null}
+                                    {isSuperAdmin ? <Option value="BLACKLISTED">黑名单</Option> : null}
                                 </Select>
                             </Form.Item>
                             <Form.Item label="当前已交押金">
@@ -269,6 +279,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                     allowClear
                                     options={staffTagOptions}
                                     placeholder="请选择员工标签"
+                                    disabled={staffEditLocked}
                                 />
                             </Form.Item>
                         </>
@@ -290,7 +301,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             description="清理后用户需要重新上传收款码。"
                             okText="确认清理"
                             cancelText="取消"
-                            disabled={!hasWithdrawQrCode}
+                            disabled={!hasWithdrawQrCode || staffEditLocked}
                             onConfirm={async () => {
                                 if (!user?.id) return;
                                 try {
@@ -308,7 +319,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 }
                             }}
                         >
-                            <Button loading={resetQrLoading} disabled={!hasWithdrawQrCode}>
+                            <Button loading={resetQrLoading} disabled={!hasWithdrawQrCode || staffEditLocked}>
                                 重新上传收款码
                             </Button>
                         </Popconfirm>
@@ -322,7 +333,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             name="workMode"
                             rules={[{ required: true, message: '请选择员工工作模式' }]}
                         >
-                            <Select onChange={handleWorkModeChange}>
+                            <Select onChange={handleWorkModeChange} disabled={staffEditLocked}>
                                 <Option value="ONLINE">线上</Option>
                                 <Option value="OFFLINE">线下</Option>
                             </Select>
@@ -345,7 +356,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             <DatePicker
                                 style={{ width: '100%' }}
                                 placeholder="请选择线下入职时间"
-                                disabled={workMode !== 'OFFLINE'}
+                                disabled={workMode !== 'OFFLINE' || staffEditLocked}
                                 allowClear
                             />
                         </Form.Item>
@@ -378,7 +389,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 )}
 
                 <Form.Item label="头像URL" name="avatar">
-                    <Input placeholder="请输入头像URL地址" />
+                    <Input placeholder="请输入头像URL地址" disabled={staffEditLocked} />
                 </Form.Item>
 
                 {isStaff && (

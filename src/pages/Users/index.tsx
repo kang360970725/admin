@@ -1011,7 +1011,7 @@ export default function UsersPage() {
                                 : access.canEditUser;
                 const canAssignCurrentRole =
                     sceneConfig.key === 'STAFF'
-                        ? access.canAssignStaffRole
+                        ? false
                         : sceneConfig.key === 'INTERNAL'
                             ? access.canAssignInternalRole
                             : false;
@@ -1221,6 +1221,8 @@ export default function UsersPage() {
                 visible={createModalVisible}
                 availableRatings={availableRatings}
                 staffTagOptions={staffTagOptions}
+                defaultUserType={sceneConfig.defaultUserType}
+                lockUserType={sceneConfig.key === 'STAFF'}
                 onCancel={() => setCreateModalVisible(false)}
                 onSuccess={() => {
                     setCreateModalVisible(false);
@@ -1233,6 +1235,7 @@ export default function UsersPage() {
                 user={editingUser}
                 availableRatings={availableRatings}
                 staffTagOptions={staffTagOptions}
+                isSuperAdmin={access.canSeeAdmin}
                 onCancel={() => {
                     setEditModalVisible(false);
                     setEditingUser(null);

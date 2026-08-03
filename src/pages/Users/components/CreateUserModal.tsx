@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Form, Input, Select, InputNumber, message, DatePicker } from 'antd';
 import dayjs from 'dayjs';
 import { createUser } from '@/services/api';
@@ -11,6 +11,8 @@ interface CreateUserModalProps {
     onSuccess: () => void;
     availableRatings?: any[];
     staffTagOptions?: Array<{ label: string; value: string }>;
+    defaultUserType?: string;
+    lockUserType?: boolean;
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({
@@ -19,11 +21,26 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
     onSuccess,
     availableRatings = [],
     staffTagOptions = [],
+    defaultUserType = 'REGISTERED_USER',
+    lockUserType = false,
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
-    const [userType, setUserType] = useState('REGISTERED_USER');
+    const initialUserType = useMemo(() => defaultUserType || 'REGISTERED_USER', [defaultUserType]);
+    const [userType, setUserType] = useState(initialUserType);
     const [workMode, setWorkMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
+
+    useEffect(() => {
+        if (!visible) return;
+        setUserType(initialUserType);
+        setWorkMode('ONLINE');
+        form.setFieldsValue({
+            userType: initialUserType,
+            balance: 0,
+            workMode: 'ONLINE',
+            offlineJoinedAt: null,
+        });
+    }, [visible, initialUserType, form]);
 
     const handleUserTypeChange = (value: string) => {
         setUserType(value);
@@ -66,7 +83,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
             await createUser(payload);
             form.resetFields();
-            setUserType('REGISTERED_USER');
+            setUserType(initialUserType);
             setWorkMode('ONLINE');
             onSuccess();
         } catch (error: any) {
@@ -101,7 +118,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             await createUser(retryPayload);
                             message.success('员工已重新入店');
                             form.resetFields();
-                            setUserType('REGISTERED_USER');
+                            setUserType(initialUserType);
                             setWorkMode('ONLINE');
                             onSuccess();
                         },
@@ -117,7 +134,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
     const handleCancel = () => {
         form.resetFields();
-        setUserType('REGISTERED_USER');
+        setUserType(initialUserType);
         setWorkMode('ONLINE');
         onCancel();
     };
@@ -139,7 +156,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                 layout="vertical"
                 name="createUserForm"
                 initialValues={{
-                    userType: 'REGISTERED_USER',
+                    userType: initialUserType,
                     status: 'ACTIVE',
                     level: 1,
                     balance: 0,
@@ -175,7 +192,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             name="userType"
                             rules={[{ required: true, message: '请选择用户身份' }]}
                         >
-                            <Select placeholder="请选择用户身份" onChange={handleUserTypeChange}>
+                            <Select placeholder="请选择用户身份" onChange={handleUserTypeChange} disabled={lockUserType}>
                                 <Option value="REGISTERED_USER">注册用户</Option>
                                 <Option value="STAFF">员工</Option>
                                 <Option value="CUSTOMER_SERVICE">客服</Option>
@@ -264,6 +281,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         <Form.Item
                             label="员工标签"
                             name="staffTags"
+                            rules={[{ required: true, message: '员工必须选择员工标签' }]}
                         >
                             <Select
                                 mode="multiple"
@@ -281,6 +299,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             precision={2}
                             placeholder="初始余额"
                             style={{ width: '100%' }}
+                            disabled
                             formatter={(value) => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                             parser={(value) => value?.replace(/¥\s?|(,*)/g, '') as any}
                         />

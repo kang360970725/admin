@@ -51,16 +51,23 @@ const OrdersPage: React.FC = () => {
     const currentUser: any = initialState?.currentUser;
     const hasOrderPermission = (key: string) => {
         const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
-        return String(currentUser?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN' || permissions.includes(key);
+        const userType = String(currentUser?.userType || '').trim().toUpperCase();
+        const roleName = String(currentUser?.role?.name || currentUser?.Role?.name || currentUser?.roleName || '').trim().toUpperCase();
+        const roleCode = String(currentUser?.role?.code || currentUser?.Role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim().toUpperCase();
+        return userType === 'SUPER_ADMIN' || roleName === 'SUPER_ADMIN' || roleCode === 'SUPER_ADMIN' || permissions.includes(key);
     };
     const canViewOrderOverview = useMemo(() => {
         const permissions = Array.isArray(currentUser?.permissions) ? currentUser.permissions : [];
         const userType = String(currentUser?.userType || '').trim().toUpperCase();
+        const roleName = String(currentUser?.role?.name || currentUser?.Role?.name || currentUser?.roleName || '').trim().toUpperCase();
+        const roleCode = String(currentUser?.role?.code || currentUser?.Role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim().toUpperCase();
         return (
             permissions.includes('orders:detail:page') ||
             permissions.includes('finance:dashboard:view') ||
             userType === 'ADMIN' ||
-            userType === 'SUPER_ADMIN'
+            userType === 'SUPER_ADMIN' ||
+            roleName === 'SUPER_ADMIN' ||
+            roleCode === 'SUPER_ADMIN'
         );
     }, [currentUser]);
     /**
@@ -77,11 +84,12 @@ const OrdersPage: React.FC = () => {
         if (!currentUser) return false;
 
         // 1) 常见：userType
-        if (String(currentUser?.userType || '') === 'SUPER_ADMIN') return true;
+        if (String(currentUser?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN') return true;
 
         // 2) 常见：role / roles
         const roleName = String(currentUser?.role?.name || currentUser?.roleName || '').trim();
         const roleCode = String(currentUser?.role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim();
+        if (roleName.toUpperCase() === 'SUPER_ADMIN' || roleCode.toUpperCase() === 'SUPER_ADMIN') return true;
 
         // 你提到的是“客服主管”，这里做最小兼容：包含关键字即可（后续可再收敛）
         if (roleName.includes('客服主管')) return true;

@@ -3,8 +3,21 @@ export default function access(initialState: { currentUser?: any } | undefined) 
 
   const permissions = currentUser?.permissions || [];
   const userType = String(currentUser?.userType || '').trim().toUpperCase();
+  const roleName = String(
+    currentUser?.role?.name
+    || currentUser?.Role?.name
+    || currentUser?.roleName
+    || '',
+  ).trim().toUpperCase();
+  const roleCode = String(
+    currentUser?.role?.code
+    || currentUser?.Role?.code
+    || currentUser?.roleCode
+    || currentUser?.roleKey
+    || '',
+  ).trim().toUpperCase();
   const staffEmploymentStatus = String(currentUser?.staffEmploymentStatus || '').trim().toUpperCase();
-  const isSuperAdmin = userType === 'SUPER_ADMIN';
+  const isSuperAdmin = userType === 'SUPER_ADMIN' || roleName === 'SUPER_ADMIN' || roleCode === 'SUPER_ADMIN';
   const isDispatchEligibleStaff = !(
     userType === 'STAFF' &&
     (staffEmploymentStatus === 'EXITED' || staffEmploymentStatus === 'BLACKLISTED')
