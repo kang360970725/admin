@@ -1011,7 +1011,7 @@ export default function UsersPage() {
                                 : access.canEditUser;
                 const canAssignCurrentRole =
                     sceneConfig.key === 'STAFF'
-                        ? access.canSeeAdmin && access.canAssignStaffRole
+                        ? access.canAssignStaffRole
                         : sceneConfig.key === 'INTERNAL'
                             ? access.canAssignInternalRole
                             : false;

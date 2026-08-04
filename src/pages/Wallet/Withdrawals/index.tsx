@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic} from 'antd';
+import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic, DatePicker} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { history, useModel } from '@umijs/max';
@@ -25,6 +25,8 @@ const WithdrawalsPage: React.FC = () => {
     const [reviewOpen, setReviewOpen] = useState(false);
     const [currentRow, setCurrentRow] = useState<any>(null);
     const [reviewError, setReviewError] = useState('');
+    const [reviewSummaryDate, setReviewSummaryDate] = useState(dayjs());
+    const reviewSummaryDateRef = useRef(dayjs().format('YYYY-MM-DD'));
 
     // ✅ 新增统计状态
     const [pendingCount, setPendingCount] = useState<number>(0);
@@ -154,8 +156,21 @@ const WithdrawalsPage: React.FC = () => {
                         />
                     </Col>
                     <Col>
+                        <DatePicker
+                            allowClear={false}
+                            value={reviewSummaryDate}
+                            onChange={(value) => {
+                                const next = value || dayjs();
+                                reviewSummaryDateRef.current = next.format('YYYY-MM-DD');
+                                setReviewSummaryDate(next);
+                                setTimeout(() => actionRef.current?.reload(), 0);
+                            }}
+                        />
+                        <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>审核统计日期</div>
+                    </Col>
+                    <Col>
                         <Statistic
-                            title="今日审核通过总计"
+                            title={`${reviewSummaryDate.format('YYYY-MM-DD')} 审核通过总计`}
                             value={todayReviewSummary.approvedAmount}
                             precision={2}
                             prefix="¥"
@@ -164,7 +179,7 @@ const WithdrawalsPage: React.FC = () => {
                     </Col>
                     <Col>
                         <Statistic
-                            title="今日审核放款总计"
+                            title={`${reviewSummaryDate.format('YYYY-MM-DD')} 审核放款总计`}
                             value={todayReviewSummary.paidAmount}
                             precision={2}
                             prefix="¥"
@@ -181,7 +196,9 @@ const WithdrawalsPage: React.FC = () => {
                 actionRef={actionRef}
                 search={false}
                 request={async () => {
-                    const res = await getPendingWithdrawals();
+                    const res = await getPendingWithdrawals({
+                        reviewDate: reviewSummaryDateRef.current,
+                    });
 
                     const list = Array.isArray(res)
                         ? res

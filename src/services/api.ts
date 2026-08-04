@@ -1466,9 +1466,10 @@ export interface WalletWithdrawalRequest {
  * ✅ 管理端：待审核列表
  * GET /wallet/withdrawals/pending
  */
-export async function getPendingWithdrawals() {
+export async function getPendingWithdrawals(params?: { reviewDate?: string }) {
     return request<WalletWithdrawalRequest[]>(`${API_BASE}/wallet/withdrawals/pending`, {
         method: 'GET',
+        params,
     });
 }
 
