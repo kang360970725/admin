@@ -95,6 +95,7 @@
 - 打手管理新增员工使用安全模式：新增弹窗默认并锁定员工身份，员工标签必选，余额不可编辑；后端非超管创建员工时固定绑定默认角色 `id=3/name=陪玩/description=俱乐部陪玩`。打手编辑时余额不可编辑；非超管只允许修改员工在职状态，且仅限正常/冻结，退店和黑名单必须走独立退店/清退流程。
 - 订单模块按钮级权限已落地到对应页面节点：客服工作台创建订单 `orders:workbench:create:button`，订单列表创建/删除 `orders:list:create:button`、`orders:list:delete:button`；订单详情业务按钮统一挂在 `orders:detail:page` 下。详情页刷新、返回、钱包/订单导航不做按钮权限。
 - 超级管理员语义已统一：`User.userType = SUPER_ADMIN` 或 `Role.name/roleCode = SUPER_ADMIN` 都视为超管；`FINANCE_ADMIN` 已由后端 migration `20260803033000_fix_super_admin_finance_role` 拆分/重命名为 `FINANCE_MANAGER`（财务管理员）。`FINANCE_MANAGER` 不再全局放行，必须依赖显式权限。
+- 保证金对账入口在“钱包/保证金对账”，权限 key 为 `wallet:deposit-reconciliation:page`；页面用于全局查询员工当前保证金、规则应交、线下手动录入、净变动、退店/黑名单状态。有效保证金口径为员工状态正常/冻结且当前保证金 > 0，无效/需处理包含退店、黑名单或无保证金员工；`MANUAL_DEPOSIT` 表示线下收款手动录入。
 
 新增路由时通常需要同时改：
 

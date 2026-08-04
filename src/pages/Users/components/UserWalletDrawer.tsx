@@ -217,7 +217,18 @@ export default function UserWalletDrawer(props: any) {
         {
             title: '操作人',
             dataIndex: 'operatorId',
-            width: 120,
+            width: 160,
+            render: (_: any, record: any) => {
+                if (record.operatorName || record.operatorPhone) {
+                    return (
+                        <div>
+                            <div>{record.operatorName || record.operatorPhone}</div>
+                            <div style={{ color: '#999', fontSize: 12 }}>ID: {record.operatorId || '-'}</div>
+                        </div>
+                    );
+                }
+                return record.operatorId ? `ID: ${record.operatorId}` : '-';
+            },
         },
 
         {

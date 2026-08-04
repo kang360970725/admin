@@ -275,6 +275,7 @@ export default defineConfig({
         { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels', access: 'canViewWalletMemberLevels' },
         { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans', access: 'canViewWalletRechargePlans' },
         { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions', access: 'canViewWalletTransactions' },
+        { path: '/wallet/deposit-reconciliation', name: '保证金对账', component: '@/pages/Wallet/DepositReconciliation', access: 'canViewWalletDepositReconciliation' },
         { path: '/wallet/replay-preview', name: '单用户预核算', component: '@/pages/Wallet/ReplayPreview', access: 'canViewWalletReplayPreview' },
         { path: '/wallet/withdrawals', name: '提现审批', component: '@/pages/Wallet/Withdrawals', access: 'canViewWithdrawals' },
         { path: '/wallet/withdrawals/records', name: '提现记录', component: '@/pages/Wallet/Withdrawals/Records', access: 'canViewWithdrawals' },

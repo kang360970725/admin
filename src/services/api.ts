@@ -2957,6 +2957,13 @@ export async function manualDeposit(data:any) {
     })
 }
 
+export async function getWalletDepositReconciliation(params: any) {
+    return request(`${API_BASE}/wallet/deposit-reconciliation`, {
+        method: 'GET',
+        params,
+    });
+}
+
 /**
  * 获取业绩数据
  */
