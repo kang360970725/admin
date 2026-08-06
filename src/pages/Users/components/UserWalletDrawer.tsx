@@ -64,9 +64,14 @@ export default function UserWalletDrawer(props: any) {
 
     const isReversedSourceTx = (row: any) =>
         String(row?.status || '') === 'REVERSED' &&
-        ['SETTLEMENT_EARNING', 'SETTLEMENT_EARNING_BASE', 'SETTLEMENT_EARNING_CARRY', 'SETTLEMENT_EARNING_CS', 'SETTLEMENT_BOMB_LOSS'].includes(
-            String(row?.bizType || ''),
-        );
+        [
+            'SETTLEMENT_EARNING',
+            'SETTLEMENT_EARNING_BASE',
+            'SETTLEMENT_EARNING_CARRY',
+            'SETTLEMENT_EARNING_CS',
+            'SETTLEMENT_BOMB_LOSS',
+            'ORDER_RENEWAL_BONUS',
+        ].includes(String(row?.bizType || ''));
 
     const getAmountSign = (row: any) => {
         if (isReversedSourceTx(row)) return '-';
@@ -86,11 +91,24 @@ export default function UserWalletDrawer(props: any) {
         SETTLEMENT_RECALC: 'green',
         SETTLEMENT_BOMB_LOSS: 'red',
         SETTLEMENT_EARNING_CS: 'orange',
+        ORDER_RENEWAL_BONUS: 'gold',
+        ORDER_RENEWAL_BONUS_REVERSAL: 'volcano',
         RELEASE_FROZEN: 'blue',
         REFUND_REVERSAL: 'volcano',
         WITHDRAW_RESERVE: 'purple',
         WITHDRAW_RELEASE: 'cyan',
         WITHDRAW_PAYOUT: 'magenta',
+        DEPOSIT_REFUND: 'blue',
+        DEPOSIT_ADD: 'green',
+        DEPOSIT_DEDUCT: 'red',
+        OFFLINE_FEE_PAYMENT: 'red',
+        EQUIPMENT_RENTAL_FEE: 'red',
+        MEMBER_RECHARGE: 'green',
+        MEMBER_RECHARGE_BONUS: 'cyan',
+        MEMBER_ORDER_CONSUME: 'red',
+        MEMBER_RECHARGE_REFUND: 'volcano',
+        STAFF_EXIT_RELEASE: 'blue',
+        STAFF_EXIT_CLEAR: 'red',
     };
 
     const walletColumns: any = [
@@ -118,7 +136,7 @@ export default function UserWalletDrawer(props: any) {
             render: (_: any, r: any) => {
                 const label = resolveBizTypeLabel(r);
                 const color = bizTypeColorMap[r.bizType] ?? 'default';
-                if (String(r.status || '') === 'REVERSED' && ['SETTLEMENT_EARNING', 'SETTLEMENT_EARNING_BASE', 'SETTLEMENT_EARNING_CARRY', 'SETTLEMENT_EARNING_CS', 'SETTLEMENT_BOMB_LOSS'].includes(String(r.bizType || ''))) {
+                if (isReversedSourceTx(r)) {
                     return <Tag color="default">{label}（已冲正）</Tag>;
                 }
                 return <Tag color={color}>{label}</Tag>;

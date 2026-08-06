@@ -37,6 +37,8 @@ const BIZ_LABELS: Record<string, string> = {
   SETTLEMENT_EARNING_CARRY: '补差收益',
   SETTLEMENT_EARNING_CS: '客服收益',
   SETTLEMENT_BOMB_LOSS: '炸单扣款',
+  ORDER_RENEWAL_BONUS: '续单额外分红',
+  ORDER_RENEWAL_BONUS_REVERSAL: '续单分红冲正',
   RELEASE_FROZEN: '收益解冻',
   REFUND_REVERSAL: '退款冲正',
   WITHDRAW_RESERVE: '提现预扣',
@@ -46,8 +48,15 @@ const BIZ_LABELS: Record<string, string> = {
   DEPOSIT_ADD: '押金变动',
   DEPOSIT_DEDUCT: '押金扣减',
   OFFLINE_FEE_PAYMENT: '线下费用',
+  EQUIPMENT_RENTAL_FEE: '设备租赁费',
   SETTLEMENT_REVERSAL: '结算冲正',
   SETTLEMENT_RECALC: '结算重算',
+  MEMBER_RECHARGE: '会员充值',
+  MEMBER_RECHARGE_BONUS: '会员充值赠送',
+  MEMBER_ORDER_CONSUME: '会员订单消费',
+  MEMBER_RECHARGE_REFUND: '会员充值退款',
+  STAFF_EXIT_RELEASE: '退店解冻转可用',
+  STAFF_EXIT_CLEAR: '退店一键清零',
 };
 
 const STATUS_LABELS: Record<string, string> = {

@@ -12,6 +12,8 @@ export type WalletEarningsSummary = {
 export type ReconcileHint = {
     status: 'MATCHED' | 'MISMATCHED' | 'EMPTY';
     settlementTotal: number;
+    settlementFinalEarningsTotal?: number;
+    renewalBonusTotal?: number;
     walletTotal: number;
     diff: number; // wallet - settlement
 };
@@ -22,6 +24,7 @@ export type EarningsSummary = {
     // 你现有的“参考”拆分口径（兼容旧字段）
     payoutIncome: number;
     payoutExpenseAbs: number;
+    renewalBonus: number;
     platformSuggested: number;
 
     // 兼容旧字段（你页面 Mobile 还在用 payout/platform） :contentReference[oaicite:1]{index=1}
@@ -50,6 +53,14 @@ const centsToMoney = (cents: number) => {
     return Number.isFinite(yuan) ? yuan.toFixed(2) : '0.00';
 };
 
+const getActiveRenewalBonuses = (order: any) => {
+    const groups = Array.isArray(order?.renewalGroups) ? order.renewalGroups : [];
+    return groups
+        .filter((group: any) => String(group?.status || '') === 'SETTLED')
+        .flatMap((group: any) => Array.isArray(group?.bonuses) ? group.bonuses : [])
+        .filter((bonus: any) => String(bonus?.status || '') === 'PAID');
+};
+
 export function useOrderReconcile(order: any): {
     earningsSummary: EarningsSummary;
     walletEarningsSummary: WalletEarningsSummary | null;
@@ -60,16 +71,23 @@ export function useOrderReconcile(order: any): {
     // ✅ 结算参考总额
     const settlementTotal = useMemo(() => {
         const list = Array.isArray(order?.settlements) ? order.settlements : [];
-        return list.reduce((sum: number, s: any) => sum + Number(s?.finalEarnings || 0), 0);
+        const finalEarningsTotal = list.reduce((sum: number, s: any) => sum + Number(s?.finalEarnings || 0), 0);
+        const renewalBonusTotal = getActiveRenewalBonuses(order).reduce(
+            (sum: number, bonus: any) => sum + Number(bonus?.bonusShareAmount || 0),
+            0,
+        );
+        return Number((finalEarningsTotal + renewalBonusTotal).toFixed(2));
     }, [order]);
 
     // ✅ 1) 参考收益概览（保持你现有逻辑不变，只是搬家） :contentReference[oaicite:2]{index=2}
     const earningsSummary = useMemo<EarningsSummary>(() => {
         const incomeCents = order?.isGifted ? 0 : toCents(order?.paidAmount);
         const list = Array.isArray(order?.settlements) ? order.settlements : [];
+        const renewalBonuses = getActiveRenewalBonuses(order);
 
         let payoutIncomeCents = 0;     // 正向收益合计（分）
         let payoutExpenseAbsCents = 0; // 支出合计（分，绝对值）
+        let renewalBonusCents = 0;
 
         const perUser: Record<
             string,
@@ -108,6 +126,32 @@ export function useOrderReconcile(order: any): {
             }
         }
 
+        for (const bonus of renewalBonuses) {
+            const v = Number(bonus?.bonusShareAmount ?? 0);
+            if (!Number.isFinite(v) || v <= 0) continue;
+
+            const centsAbs = Math.abs(toCents(v));
+            renewalBonusCents += centsAbs;
+            payoutIncomeCents += centsAbs;
+
+            const u = (bonus as any)?.user || {};
+            const key = String(bonus?.userId ?? u?.id ?? '0');
+
+            if (!perUser[key]) {
+                perUser[key] = {
+                    userId: Number(bonus?.userId ?? u?.id ?? 0),
+                    name: u?.name || '-',
+                    phone: u?.phone || '-',
+                    incomeCents: 0,
+                    expenseAbsCents: 0,
+                    netCents: 0,
+                };
+            }
+
+            perUser[key].incomeCents += centsAbs;
+            perUser[key].netCents += centsAbs;
+        }
+
         const platformSuggestedCents = incomeCents - payoutIncomeCents + payoutExpenseAbsCents;
 
         const perUserList = Object.values(perUser)
@@ -125,6 +169,7 @@ export function useOrderReconcile(order: any): {
             income: Number(centsToMoney(incomeCents)),
             payoutIncome: Number(centsToMoney(payoutIncomeCents)),
             payoutExpenseAbs: Number(centsToMoney(payoutExpenseAbsCents)),
+            renewalBonus: Number(centsToMoney(renewalBonusCents)),
             platformSuggested: Number(centsToMoney(platformSuggestedCents)),
 
             // 兼容旧字段（你现在页面还在用 payout/platform） :contentReference[oaicite:3]{index=3}
@@ -153,6 +198,8 @@ export function useOrderReconcile(order: any): {
             return {
                 status: rh.status,
                 settlementTotal: Number(rh.settlementTotal || 0),
+                settlementFinalEarningsTotal: Number(rh.settlementFinalEarningsTotal || 0),
+                renewalBonusTotal: Number(rh.renewalBonusTotal || 0),
                 walletTotal: Number(rh.walletTotal || 0),
                 diff: Number(rh.diff || 0),
             };

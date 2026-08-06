@@ -2691,8 +2691,11 @@ const OrderDetailPage: React.FC = () => {
                                         <Descriptions.Item label="钱包净额（IN-OUT）">
                                             ¥{ws ? Number(ws.netTotal ?? ws.total ?? 0).toFixed(2) : '-'}
                                         </Descriptions.Item>
-                                        <Descriptions.Item label="结算参考（finalEarnings 汇总）">
+                                        <Descriptions.Item label="结算参考（结算收益+续单分红）">
                                             ¥{reconcileHint ? Number(reconcileHint.settlementTotal || 0).toFixed(2) : '-'}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="其中续单分红">
+                                            ¥{reconcileHint ? Number((reconcileHint as any).renewalBonusTotal || earningsSummary.renewalBonus || 0).toFixed(2) : '-'}
                                         </Descriptions.Item>
                                         <Descriptions.Item label="差额（钱包净额-结算）">
                                             {reconcileHint
@@ -3037,6 +3040,10 @@ const OrderDetailPage: React.FC = () => {
                                         订单成本(总支出)：¥{earningsSummary.payoutIncome}
                                     </Tag>
 
+                                    <Tag color="gold" style={{borderRadius: 999}}>
+                                        续单分红：¥{earningsSummary.renewalBonus}
+                                    </Tag>
+
                                     <Tag color="red" style={{borderRadius: 999}}>
                                         打手炸单贡献收益：¥{earningsSummary.payoutExpenseAbs}
                                     </Tag>
@@ -3142,6 +3149,9 @@ const OrderDetailPage: React.FC = () => {
                                                             style={{borderRadius: 999}}>收入：¥{earningsSummary.income}</Tag>
                                                         <Tag
                                                             style={{borderRadius: 999}}>支出：¥{earningsSummary.payout}</Tag>
+                                                        <Tag color="gold" style={{borderRadius: 999}}>
+                                                            续单：¥{earningsSummary.renewalBonus}
+                                                        </Tag>
                                                         <Tag color={earningsSummary.platform >= 0 ? 'green' : 'red'}
                                                              style={{borderRadius: 999}}>
                                                             平台：¥{earningsSummary.platform}
