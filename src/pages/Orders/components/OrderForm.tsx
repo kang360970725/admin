@@ -599,9 +599,10 @@ export default function OrderUpsertModal(props: {
             onOk={handleOk}
             confirmLoading={submitting}
             destroyOnClose
-            centered
+            rootClassName="bc-order-upsert-modal-root"
+            className="bc-order-upsert-modal"
             width={isMobile ? '96vw' : 700}
-            style={isMobile ? { top: 12 } : undefined}
+            style={{ top: isMobile ? 8 : 24 }}
             okText="保存"
             cancelText="取消"
         >
@@ -840,15 +841,18 @@ export default function OrderUpsertModal(props: {
                                         label="续单打手"
                                         rules={[{ required: true, message: '请选择续单打手' }]}
                                     >
-                                        <Select
-                                            mode="multiple"
-                                            placeholder="从当前派单打手中选择"
-                                            maxTagCount={2}
-                                            options={(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => ({
-                                                value: Number(id),
-                                                label: playerMap?.[Number(id)] || `#${id}`,
-                                            }))}
-                                        />
+                                        <Checkbox.Group style={{ width: '100%' }}>
+                                            <Space wrap size={[8, 8]}>
+                                                {(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => {
+                                                    const playerId = Number(id);
+                                                    return (
+                                                        <Checkbox key={playerId} value={playerId}>
+                                                            {playerMap?.[playerId] || `#${playerId}`}
+                                                        </Checkbox>
+                                                    );
+                                                })}
+                                            </Space>
+                                        </Checkbox.Group>
                                     </Form.Item>
                                 ) : null}
                             </Space>

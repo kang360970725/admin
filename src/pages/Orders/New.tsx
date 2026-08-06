@@ -258,15 +258,19 @@ const NewOrderPage: React.FC = () => {
                                         label="续单打手"
                                         rules={[{ required: true, message: '请选择续单打手' }]}
                                     >
-                                        <Select
-                                            mode="multiple"
-                                            placeholder="从当前派单打手中选择"
-                                            maxTagCount={2}
-                                            options={(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => {
-                                                const item = playerOptions.find((p) => Number(p.value) === Number(id));
-                                                return { value: Number(id), label: item?.label || `#${id}` };
-                                            })}
-                                        />
+                                        <Checkbox.Group style={{ width: '100%' }}>
+                                            <Space wrap size={[8, 8]}>
+                                                {(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => {
+                                                    const playerId = Number(id);
+                                                    const item = playerOptions.find((p) => Number(p.value) === playerId);
+                                                    return (
+                                                        <Checkbox key={playerId} value={playerId}>
+                                                            {item?.label || `#${playerId}`}
+                                                        </Checkbox>
+                                                    );
+                                                })}
+                                            </Space>
+                                        </Checkbox.Group>
                                     </Form.Item>
                                 ) : null}
                             </Space>

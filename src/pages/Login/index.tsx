@@ -158,6 +158,13 @@ export default function LoginPage() {
     const [rememberCredentials, setRememberCredentials] = useState(false);
 
     useEffect(() => {
+        document.body.classList.add('bc-login-page');
+        return () => {
+            document.body.classList.remove('bc-login-page');
+        };
+    }, []);
+
+    useEffect(() => {
         let cancelled = false;
         const init = async () => {
             if (initOnceRef.current) return;
@@ -448,15 +455,17 @@ export default function LoginPage() {
             <style>
                 {`
         /* ===== 通用背景（PC） ===== */
-        .bc-login{
-          min-height: 100vh;
-          position: relative;
-          overflow: hidden;
-          background: #070A12;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
+	        .bc-login{
+	          min-height: 100vh;
+	          position: relative;
+	          overflow: hidden;
+	          background: #070A12;
+	          display: flex;
+	          align-items: center;
+	          justify-content: center;
+	          padding-bottom: 42px;
+	          box-sizing: border-box;
+	        }
 
         .bc-bg{ position:absolute; inset:0; pointer-events:none; }
         .bc-grid{
@@ -628,14 +637,14 @@ export default function LoginPage() {
 
           /* 隐藏 PC 卡片，展示移动端布局 */
           .bc-card{ display:none; }
-          .bc-mobile{
-            display:flex;
-            flex-direction: column;
-            width: 100%;
-            min-height: 100vh;
-            padding: 18px 16px 14px;
-            box-sizing: border-box;
-          }
+	          .bc-mobile{
+	            display:flex;
+	            flex-direction: column;
+	            width: 100%;
+	            min-height: 100vh;
+	            padding: 18px 16px 54px;
+	            box-sizing: border-box;
+	          }
 
           .bc-m-top{
             padding-top: 12px;

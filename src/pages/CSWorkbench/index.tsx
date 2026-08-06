@@ -1055,18 +1055,18 @@ export default function CSWorkbenchPage() {
                                     label="续单打手"
                                     rules={[{ required: true, message: '请选择续单打手' }]}
                                 >
-                                    <Select
-                                        mode="multiple"
-                                        allowClear
-                                        placeholder="从当前派单打手中选择"
-                                        maxTagCount={2}
-                                        options={safeArray(watchedCreatePlayerIds).map((id: any) => ({
-                                            value: Number(id),
-                                            label: playerMap?.[Number(id)] || `#${id}`,
-                                        }))}
-                                        style={{ width: '100%' }}
-                                        {...commonSelectProps}
-                                    />
+                                    <Checkbox.Group style={{ width: '100%' }}>
+                                        <Space wrap size={[8, 8]}>
+                                            {safeArray(watchedCreatePlayerIds).map((id: any) => {
+                                                const playerId = Number(id);
+                                                return (
+                                                    <Checkbox key={playerId} value={playerId}>
+                                                        {playerMap?.[playerId] || `#${playerId}`}
+                                                    </Checkbox>
+                                                );
+                                            })}
+                                        </Space>
+                                    </Checkbox.Group>
                                 </Form.Item>
                             ) : null}
                         </Space>

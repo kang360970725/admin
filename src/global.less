@@ -4,28 +4,259 @@ body{
 
 .bc-icp-footer {
   box-sizing: border-box;
-  width: 100%;
-  padding: 12px 16px;
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 90;
+  width: auto;
+  padding: 8px 16px;
   text-align: center;
   font-size: 12px;
-  line-height: 20px;
+  line-height: 18px;
   color: rgba(0, 0, 0, 0.45);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
 }
 
 .bc-icp-footer a {
   color: inherit;
   text-decoration: none;
+  pointer-events: auto;
 }
 
 .bc-icp-footer a:hover {
   color: rgba(0, 0, 0, 0.65);
 }
 
+body.bc-login-page .bc-icp-footer {
+  color: rgba(255, 255, 255, 0.62);
+  background: rgba(7, 10, 18, 0.34);
+}
+
+body.bc-login-page .bc-icp-footer a:hover {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+body.bc-mobile-fullscreen .bc-icp-footer {
+  display: none;
+}
+
+.ant-pro-layout-content {
+  padding-bottom: 44px;
+}
+
+.bc-order-upsert-modal-root .ant-modal-wrap {
+  overflow: hidden;
+}
+
+.bc-order-upsert-modal {
+  max-width: calc(100vw - 32px);
+  padding-bottom: 0;
+}
+
+.bc-order-upsert-modal .ant-modal-content {
+  display: flex;
+  max-height: calc(100vh - 48px);
+  flex-direction: column;
+  padding: 20px 24px 0;
+}
+
+.bc-order-upsert-modal .ant-modal-header,
+.bc-order-upsert-modal .ant-modal-footer {
+  flex: 0 0 auto;
+}
+
+.bc-order-upsert-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.bc-order-upsert-modal .ant-modal-footer {
+  margin-top: 12px;
+  padding: 12px 0 20px;
+  background: #fff;
+}
+
+@media (max-width: 767px) {
+  .bc-order-upsert-modal {
+    max-width: calc(100vw - 16px);
+  }
+
+  .bc-order-upsert-modal .ant-modal-content {
+    max-height: calc(100vh - 16px);
+    padding: 16px 16px 0;
+  }
+
+  .bc-order-upsert-modal .ant-modal-body {
+    padding-right: 0;
+  }
+
+  .bc-order-upsert-modal .ant-modal-footer {
+    padding-bottom: 16px;
+  }
+}
+
+.bc-sider-user-footer {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-top: 1px solid rgba(5, 5, 5, 0.06);
+}
+
+.bc-sider-user-footer.collapsed {
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.bc-sider-user-meta {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bc-sider-user-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bc-sider-user-level {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bc-announcement-center {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(5, 5, 5, 0.06);
+  border-radius: 8px;
+}
+
+.bc-announcement-list {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid rgba(5, 5, 5, 0.06);
+  background: #fafafa;
+}
+
+.bc-announcement-item {
+  padding: 14px 16px !important;
+  cursor: pointer;
+  border-block-end: 1px solid rgba(5, 5, 5, 0.06) !important;
+}
+
+.bc-announcement-item:hover,
+.bc-announcement-item.active {
+  background: #fff;
+}
+
+.bc-announcement-item.active {
+  box-shadow: inset 3px 0 0 #1677ff;
+}
+
+.bc-announcement-item-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bc-announcement-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 20px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.bc-announcement-detail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: #fff;
+}
+
+.bc-announcement-detail-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid rgba(5, 5, 5, 0.06);
+}
+
+.bc-announcement-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 28px;
+  color: rgba(0, 0, 0, 0.78);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.bc-announcement-content * {
+  max-width: 100%;
+}
+
+.bc-announcement-empty {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .bc-announcement-center {
+    grid-template-columns: 1fr;
+  }
+
+  .bc-announcement-list {
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(5, 5, 5, 0.06);
+  }
+
+  .bc-announcement-detail-head {
+    padding: 14px 16px 12px;
+  }
+
+  .bc-announcement-content {
+    padding: 16px;
+  }
+}
+
 /* 防止 header 右侧用户区在侧栏折叠/窄屏时穿模 */
 .bm-user-center {
   display: flex;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   cursor: pointer;
 
@@ -64,22 +295,26 @@ body{
 
 @media (max-width: 992px) {
   .bm-user-center {
-    max-width: 160px;
+    max-width: 120px;
   }
   .bm-user-name {
-    max-width: 90px;
+    display: inline-block;
+    max-width: 74px;
+  }
+  .bm-user-tag {
+    display: none;
   }
 }
 
-:global(.ant-pro-global-header-right) {
+.ant-pro-global-header-right {
   overflow: hidden;
 }
-:global(.ant-pro-sider-collapsed) .bm-user-name,
-:global(.ant-pro-sider-collapsed) .bm-user-tag {
+.ant-pro-sider .ant-pro-sider-footer .bm-user-name,
+.ant-pro-sider .ant-pro-sider-footer .bm-user-tag {
   display: none !important;
 }
 
-:global(.ant-pro-sider-collapsed) .bm-user-center {
+.ant-pro-sider .ant-pro-sider-footer .bm-user-center {
   /* 收起后只保留头像居中 */
   justify-content: center;
   max-width: 100%;
@@ -119,12 +354,12 @@ body.bc-mobile-fullscreen .ant-pro-layout-content {
 }
 
 /* 保险：侧栏区域不允许溢出到外面 */
-:global(.ant-pro-sider) {
+.ant-pro-sider {
   overflow: hidden;
 }
 
-:global(.ant-pro-sider-collapsed .ant-pro-sider-footer) {
-  display: none !important;
+.ant-pro-sider-collapsed .ant-pro-sider-footer {
+  padding-inline: 0 !important;
 }
 /* ✅ 修复 ProComponents Login 容器在移动端产生的横向溢出 */
 @media (max-width: 767px) {

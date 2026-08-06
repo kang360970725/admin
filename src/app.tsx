@@ -61,7 +61,7 @@ const LOCAL_BUILD_PLACEHOLDER_REGEX = /^(development|test|pre|production)-0\.0\.
 const ICP_RECORD_TEXT = '蜀ICP备2026039511号-1';
 
 const IcpRecordFooter: React.FC = () => (
-    <div className="bc-icp-footer">
+    <div className="bc-icp-footer" aria-label="ICP备案信息">
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">
             {ICP_RECORD_TEXT}
         </a>
@@ -289,6 +289,7 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
     const isMobile = useIsMobile(768);
     const [announcementOpen, setAnnouncementOpen] = React.useState(false);
     const [announcementList, setAnnouncementList] = React.useState<any[]>([]);
+    const [selectedAnnouncementId, setSelectedAnnouncementId] = React.useState<number | null>(null);
     const [forceUnread, setForceUnread] = React.useState<any[]>([]);
     const [realtimeOpen, setRealtimeOpen] = React.useState(false);
     const [realtimeList, setRealtimeList] = React.useState<RealtimeNotificationItem[]>([]);
@@ -328,6 +329,11 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
     const activePenaltyTicket = penaltyPendingTickets[0] || null;
     const penaltyForceOpen = isStaffUser && penaltyPendingTickets.length > 0;
     const currentForceAnnouncement = forceQueue[0] || null;
+    const selectedAnnouncement = React.useMemo(() => {
+        if (!announcementList.length) return null;
+        const matched = announcementList.find((item: any) => Number(item?.id) === Number(selectedAnnouncementId));
+        return matched || announcementList[0] || null;
+    }, [announcementList, selectedAnnouncementId]);
 
     const checkForceReadReachedBottom = React.useCallback(() => {
         const el = forceReadContentRef.current;
@@ -347,7 +353,12 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         try {
             setLoadingAnnouncements(true);
             const [list, force] = await Promise.all([myAnnouncements(), myPendingForceAnnouncements()]);
-            setAnnouncementList(Array.isArray(list) ? list : []);
+            const rows = Array.isArray(list) ? list : [];
+            setAnnouncementList(rows);
+            setSelectedAnnouncementId((current) => {
+                if (current && rows.some((item: any) => Number(item?.id) === Number(current))) return current;
+                return rows[0]?.id ? Number(rows[0].id) : null;
+            });
             setForceUnread(Array.isArray(force?.list) ? force.list : []);
         } catch (e: any) {
             console.error('[announcement] load failed', e?.message || e);
@@ -682,6 +693,42 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         // ✅ pure 模式（可选，支持则更干净）
         pure: isMobile ? true : undefined,
 
+        menuFooterRender: (props: any) => {
+            if (isMobile) return null;
+            const collapsed = Boolean(props?.collapsed);
+            const name = getDisplayName(currentUser);
+            const levelText = getLevelText(currentUser);
+            const avatar = currentUser?.avatar ? (
+                <Avatar size={collapsed ? 32 : 36} src={currentUser.avatar} />
+            ) : (
+                <Avatar size={collapsed ? 32 : 36} icon={<UserOutlined />} />
+            );
+
+            return (
+                <Dropdown
+                    menu={{
+                        items: [{ key: 'logout', label: '退出登录' }],
+                        onClick: ({ key }) => {
+                            if (key === 'logout') doLogout();
+                        },
+                    }}
+                    placement="top"
+                >
+                    <div className={collapsed ? 'bc-sider-user-footer collapsed' : 'bc-sider-user-footer'}>
+                        {avatar}
+                        {!collapsed ? (
+                            <div className="bc-sider-user-meta">
+                                <Text className="bc-sider-user-name">{name}</Text>
+                                <Text className="bc-sider-user-level" type="secondary">
+                                    {levelText}
+                                </Text>
+                            </div>
+                        ) : null}
+                    </div>
+                </Dropdown>
+            );
+        },
+
         // ✅ 右上角个人信息区域（保留你原逻辑）
         avatarProps: {
             size: 'small',
@@ -708,15 +755,15 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                             },
                         }}
                     >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <span className="bm-user-center">
               {currentUser?.avatar ? (
                   <Avatar size="small" src={currentUser.avatar} />
               ) : (
                   <Avatar size="small" icon={<UserOutlined />} />
               )}
-                <Text>{name}</Text>
+                <Text className="bm-user-name">{name}</Text>
                 {/* 你之前的“评级文案”，保留但不抢眼 */}
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text className="bm-user-tag" type="secondary" style={{ fontSize: 12 }}>
                 {levelText}
               </Text>
             </span>
@@ -861,56 +908,84 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                     <Modal
                         title="公告中心"
                         open={announcementOpen}
-                        width="min(960px, calc(100vw - 32px))"
+                        width="min(1040px, calc(100vw - 32px))"
                         styles={{
                             body: {
-                                maxHeight: 'calc(100vh - 220px)',
-                                overflowY: 'auto',
+                                height: 'min(680px, calc(100vh - 180px))',
+                                overflowY: 'hidden',
                                 overflowX: 'hidden',
+                                paddingTop: 8,
                             },
                         }}
                         footer={null}
                         onCancel={() => setAnnouncementOpen(false)}
                     >
-                        <List
-                            loading={loadingAnnouncements}
-                            dataSource={announcementList}
-                            locale={{ emptyText: '暂无公告' }}
-                            renderItem={(item: any) => (
-                                <List.Item
-                                    actions={[
-                                        item.isRead ? (
-                                            <Typography.Text key="read" type="secondary">已读</Typography.Text>
-                                        ) : (
-                                            <a
-                                                key="markRead"
-                                                onClick={async () => {
-                                                    await readAnnouncement({ announcementId: item.id });
-                                                    await loadAnnouncements();
-                                                }}
+                        <div className="bc-announcement-center">
+                            <div className="bc-announcement-list">
+                                <List
+                                    loading={loadingAnnouncements}
+                                    dataSource={announcementList}
+                                    locale={{ emptyText: '暂无公告' }}
+                                    renderItem={(item: any) => {
+                                        const active = Number(item?.id) === Number(selectedAnnouncement?.id);
+                                        const summary = stripNoteTrailingTime(String(item?.content || '').replace(/<[^>]+>/g, ' '));
+                                        return (
+                                            <List.Item
+                                                className={active ? 'bc-announcement-item active' : 'bc-announcement-item'}
+                                                onClick={() => setSelectedAnnouncementId(Number(item.id))}
                                             >
-                                                标记已读
-                                            </a>
-                                        ),
-                                    ]}
-                                >
-                                    <List.Item.Meta
-                                        title={
-                                            <Space>
-                                                <span>{item.title}</span>
-                                                {item.forceRead ? <Typography.Text type="danger">强制阅读</Typography.Text> : null}
-                                            </Space>
-                                        }
-                                        description={
-                                            <div
-                                                style={{ maxHeight: 200, overflow: 'auto' }}
-                                                dangerouslySetInnerHTML={{ __html: item.content || '' }}
-                                            />
-                                        }
-                                    />
-                                </List.Item>
-                            )}
-                        />
+                                                <div className="bc-announcement-item-main">
+                                                    <Space size={6} wrap>
+                                                        <Text strong={!item.isRead}>{item.title || '-'}</Text>
+                                                        {item.forceRead ? <Text type="danger">强制阅读</Text> : null}
+                                                        {!item.isRead ? <Badge status="processing" text="未读" /> : null}
+                                                    </Space>
+                                                    <Text className="bc-announcement-summary" type="secondary">
+                                                        {summary || '暂无正文'}
+                                                    </Text>
+                                                </div>
+                                            </List.Item>
+                                        );
+                                    }}
+                                />
+                            </div>
+                            <div className="bc-announcement-detail">
+                                {selectedAnnouncement ? (
+                                    <>
+                                        <div className="bc-announcement-detail-head">
+                                            <div>
+                                                <Typography.Title level={5} style={{ margin: 0 }}>
+                                                    {selectedAnnouncement.title || '-'}
+                                                </Typography.Title>
+                                                <Space size={8} wrap style={{ marginTop: 6 }}>
+                                                    {selectedAnnouncement.forceRead ? <Text type="danger">强制阅读</Text> : null}
+                                                    <Text type="secondary">{selectedAnnouncement.isRead ? '已读' : '未读'}</Text>
+                                                </Space>
+                                            </div>
+                                            {!selectedAnnouncement.isRead ? (
+                                                <Button
+                                                    type="primary"
+                                                    onClick={async () => {
+                                                        await readAnnouncement({ announcementId: selectedAnnouncement.id });
+                                                        await loadAnnouncements();
+                                                    }}
+                                                >
+                                                    标记已读
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                        <div
+                                            className="bc-announcement-content"
+                                            dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content || '' }}
+                                        />
+                                    </>
+                                ) : (
+                                    <div className="bc-announcement-empty">
+                                        <Text type="secondary">暂无公告</Text>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </Modal>
 
                     <Modal
