@@ -123,7 +123,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewWalletTransactions: has('wallet:transactions:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet,
     canViewWalletReplayPreview: has('wallet:replay-preview:page') || has('wallet:withdrawals:page'),
     canViewWithdrawals: has('wallet:withdrawals:page'),
-    canViewWalletDepositReconciliation: has('wallet:deposit-reconciliation:page') || has('wallet:withdrawals:page') || hasFinanceRecords,
+    canViewWalletDepositReconciliation: has('wallet:deposit-reconciliation:page'),
 
     // ✅ 业绩数据看板
     canViewPerformanceDashboard: has('performance:dashboard:view'),

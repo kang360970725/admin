@@ -96,7 +96,7 @@
 - 员工评级下拉来自 `GET /users/ratings/available`，这是打手新增、编辑、升降级弹窗的基础数据依赖；允许用户管理页、打手新增/编辑/升降级按钮或 `staff-ratings:page` 读取，前端不应把“能选择评级”绑定成必须拥有评级管理页面权限。
 - 订单模块按钮级权限已落地到对应页面节点：客服工作台创建订单 `orders:workbench:create:button`，订单列表创建/删除 `orders:list:create:button`、`orders:list:delete:button`；订单详情业务按钮统一挂在 `orders:detail:page` 下。详情页刷新、返回、钱包/订单导航不做按钮权限。
 - 超级管理员语义已统一：`User.userType = SUPER_ADMIN` 或 `Role.name/roleCode = SUPER_ADMIN` 都视为超管；`FINANCE_ADMIN` 已由后端 migration `20260803033000_fix_super_admin_finance_role` 拆分/重命名为 `FINANCE_MANAGER`（财务管理员）。`FINANCE_MANAGER` 不再全局放行，必须依赖显式权限。
-- 保证金对账入口在“钱包/保证金对账”，权限 key 为 `wallet:deposit-reconciliation:page`；页面用于全局查询员工当前保证金、规则应交、线下手动录入、净变动、退店/黑名单状态。有效保证金口径为员工状态正常/冻结且当前保证金 > 0，无效/需处理包含退店、黑名单或无保证金员工；`MANUAL_DEPOSIT` 表示线下收款手动录入。
+- 保证金对账入口在“钱包/保证金对账”，权限 key 为 `wallet:deposit-reconciliation:page`；前端入口和后端接口都只认该专用权限，不能用 `wallet:withdrawals:page` 或 `finance:records:list` 兜底。页面用于全局查询员工当前保证金、规则应交、线下手动录入、净变动、退店/黑名单状态。有效保证金口径为员工状态正常/冻结且当前保证金 > 0，无效/需处理包含退店、黑名单或无保证金员工；`MANUAL_DEPOSIT` 表示线下收款手动录入。后端对账统计会合并历史旧表 `WalletDepositTransaction` 与当前表 `wallet_deposit_transactions`。
 
 新增路由时通常需要同时改：
 
