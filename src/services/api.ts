@@ -2090,6 +2090,8 @@ export interface EquipmentRentalBill {
     dueAt?: string | null;
     confirmedAt?: string | null;
     generatedAt?: string;
+    walletTxId?: number | null;
+    remark?: string | null;
     totalAssets?: number;
     insufficient?: boolean;
     user?: {
@@ -2169,6 +2171,13 @@ export async function waiveEquipmentRentalBill(data: { billId: number; remark?: 
 
 export async function payEquipmentRentalBill(data: { billId: number; remark?: string }) {
     return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/bills/pay`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function confirmEquipmentRentalBillPaidExternal(data: { billId: number; remark: string }) {
+    return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/bills/confirm-paid-external`, {
         method: 'POST',
         data,
     });

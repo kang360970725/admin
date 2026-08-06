@@ -4,6 +4,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import {
+  confirmEquipmentRentalBillPaidExternal,
   createEquipmentRentalContract,
   EquipmentRentalBill,
   EquipmentRentalContract,
@@ -26,11 +27,14 @@ const EquipmentRentalFeesPage: React.FC = () => {
   const [contractOpen, setContractOpen] = useState(false);
   const [editingContract, setEditingContract] = useState<EquipmentRentalContract | null>(null);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [externalPaidOpen, setExternalPaidOpen] = useState(false);
+  const [externalPaidBill, setExternalPaidBill] = useState<EquipmentRentalBill | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<Array<{ label: string; value: number }>>([]);
   const [contractForm] = Form.useForm();
   const [generateForm] = Form.useForm();
+  const [externalPaidForm] = Form.useForm();
 
   const fetchStaffOptions = async (keyword?: string) => {
     try {
@@ -138,10 +142,17 @@ const EquipmentRentalFeesPage: React.FC = () => {
       dataIndex: 'status',
       width: 110,
       valueType: 'select',
-      valueEnum: { PENDING: { text: '待确认' }, PAID: { text: '已扣费' }, WAIVED: { text: '已减免' } },
+      valueEnum: { PENDING: { text: '待确认' }, PAID: { text: '已缴费' }, WAIVED: { text: '已减免' } },
       render: (_, row) => {
         const color = row.status === 'PAID' ? 'success' : row.status === 'WAIVED' ? 'default' : 'warning';
-        return <Tag color={color}>{row.status}</Tag>;
+        const label = row.status === 'PENDING'
+          ? '待确认'
+          : row.status === 'WAIVED'
+            ? '已减免'
+            : row.walletTxId
+              ? '已扣费'
+              : '已缴费';
+        return <Tag color={color}>{label}</Tag>;
       },
     },
     { title: '金额', dataIndex: 'amount', width: 100, search: false, render: (_, row) => `¥${money(row.amount)}` },
@@ -205,6 +216,19 @@ const EquipmentRentalFeesPage: React.FC = () => {
         >
           <a>手动缴费</a>
         </Popconfirm>,
+        <a
+          key="externalPaid"
+          onClick={() => {
+            setExternalPaidBill(row);
+            externalPaidForm.resetFields();
+            externalPaidForm.setFieldsValue({
+              remark: '',
+            });
+            setExternalPaidOpen(true);
+          }}
+        >
+          其他渠道已缴
+        </a>,
         <Popconfirm
           key="waive"
           title="确认减免该设备租赁费？"
@@ -290,8 +314,55 @@ const EquipmentRentalFeesPage: React.FC = () => {
               />
             ),
           },
-        ]}
+      ]}
       />
+
+      <Modal
+        title="确认其他渠道已缴费"
+        open={externalPaidOpen}
+        confirmLoading={submitting}
+        onCancel={() => {
+          setExternalPaidOpen(false);
+          setExternalPaidBill(null);
+        }}
+        onOk={async () => {
+          try {
+            const values = await externalPaidForm.validateFields();
+            if (!externalPaidBill?.id) return;
+            setSubmitting(true);
+            await confirmEquipmentRentalBillPaidExternal({
+              billId: externalPaidBill.id,
+              remark: String(values.remark || '').trim(),
+            });
+            message.success('已确认其他渠道缴费');
+            setExternalPaidOpen(false);
+            setExternalPaidBill(null);
+            billActionRef.current?.reload();
+          } catch (e: any) {
+            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '确认失败');
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            type="info"
+            showIcon
+            message="该操作不会扣除员工钱包余额"
+            description={`账单将标记为已缴费，已缴金额 ¥${money(externalPaidBill?.remainingAmount || externalPaidBill?.amount || 0)}。请填写实际收款渠道或凭证说明。`}
+          />
+          <Form form={externalPaidForm} layout="vertical">
+            <Form.Item
+              label="缴费说明"
+              name="remark"
+              rules={[{ required: true, message: '请填写其他渠道缴费说明' }]}
+            >
+              <Input.TextArea rows={3} placeholder="例如：微信收款码已收 / 现金已收 / 银行转账流水号..." />
+            </Form.Item>
+          </Form>
+        </Space>
+      </Modal>
 
       <Modal
         title={editingContract ? '编辑租赁配置' : '新增租赁配置'}
