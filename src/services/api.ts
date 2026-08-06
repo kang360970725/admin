@@ -2739,7 +2739,7 @@ export async function updateArchivedParticipantProgress(
  *
  * 等你后端补好后，这个 API 就能直接用，前端不用再改。
  */
-export async function confirmCompleteOrder(opts:any) {
+export async function confirmCompleteOrder(opts: any) {
     return request(`${API_BASE}/orders/confirm-complete`, {
         method: 'POST',
         data: opts,
@@ -2867,6 +2867,8 @@ export async function repairWalletBySettlements(data: {
     reason?: string;
     scope?: string;
     dryRun?: boolean;
+    invalidateRenewal?: boolean;
+    renewalInvalidateReason?: string;
 }) {
     return request(`${API_BASE}/orders/repair-wallet-by-settlements`, {
         method: 'POST',
@@ -2899,6 +2901,8 @@ export async function recalculateOrderSettlements(data: {
     playerEvaluations?: any[];
     orderTipEnabled?: boolean;
     orderTipUserIds?: number[];
+    invalidateRenewal?: boolean;
+    renewalInvalidateReason?: string;
 }) {
     return request(`${API_BASE}/orders/repair-wallet-by-settlementsV1`, {
         method: 'POST',

@@ -36,7 +36,6 @@ import {
 import dayjs from 'dayjs';
 import {history, useModel, useNavigate} from '@umijs/max';
 import {
-    assignDispatch,
     createOrder,
     getGameProjectOptions,
     getOrders,
@@ -315,6 +314,7 @@ export default function CSWorkbenchPage() {
     const debouncedFetchOnlinePlayers = useDebouncedFn(fetchOnlinePlayers, 250);
 
     const watchedCreatePlayerIds = Form.useWatch('playerIds', createForm) || [];
+    const watchedCreateIsRenewal = Boolean(Form.useWatch('isRenewal', createForm));
     const watchedDispatchPlayerIds = Form.useWatch('playerIds', dispatchForm) || [];
     const visibleOnlinePlayers = useMemo(
         () => {
@@ -334,9 +334,14 @@ export default function CSWorkbenchPage() {
     const updatePlayerSelection = (targetForm: any, nextIds: number[]) => {
         const limitedIds = nextIds.slice(0, MAX_PLAYERS);
         const names = limitedIds.map((id) => playerMap?.[Number(id)]).filter(Boolean);
+        const currentRenewalIds = Array.isArray(targetForm.getFieldValue?.('renewalPlayerIds'))
+            ? targetForm.getFieldValue('renewalPlayerIds').map((id: any) => Number(id)).filter((id: number) => limitedIds.includes(id))
+            : [];
         targetForm.setFieldsValue({
             playerIds: limitedIds,
             playerNames: names,
+            renewalPlayerIds: currentRenewalIds,
+            isRenewal: limitedIds.length ? targetForm.getFieldValue?.('isRenewal') : false,
         });
     };
 
@@ -543,6 +548,23 @@ export default function CSWorkbenchPage() {
                 syncSettlementAmount(currentPaid || p);
             }
         }
+
+        if (Array.isArray(changed?.playerIds)) {
+            const nextPlayerIds = changed.playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n));
+            const currentRenewalIds = Array.isArray(createForm.getFieldValue('renewalPlayerIds'))
+                ? createForm.getFieldValue('renewalPlayerIds').map((x: any) => Number(x)).filter((n: number) => nextPlayerIds.includes(n))
+                : [];
+            createForm.setFieldsValue({ renewalPlayerIds: currentRenewalIds, isRenewal: nextPlayerIds.length ? createForm.getFieldValue('isRenewal') : false });
+        }
+
+        if (changed?.isRenewal === false) {
+            createForm.setFieldValue('renewalPlayerIds', []);
+        }
+
+        if (changed?.isRenewal === true && !safeArray(createForm.getFieldValue('playerIds')).length) {
+            message.warning('请先选择派单打手，再标记续单');
+            createForm.setFieldValue('isRenewal', false);
+        }
     };
 
     // ============ 创建订单（手机端） ============
@@ -560,6 +582,25 @@ export default function CSWorkbenchPage() {
             if (playerIds.length > MAX_PLAYERS) {
                 message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
                 return;
+            }
+
+            const isRenewal = Boolean(values.isRenewal);
+            const renewalPlayerIds: number[] = isRenewal
+                ? safeArray(values.renewalPlayerIds).map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                : [];
+            if (isRenewal) {
+                if (!playerIds.length) {
+                    message.warning('续单必须先选择派单打手');
+                    return;
+                }
+                if (!renewalPlayerIds.length) {
+                    message.warning('请选择续单打手');
+                    return;
+                }
+                if (renewalPlayerIds.some((id) => !playerIds.includes(id))) {
+                    message.warning('续单打手必须从当前派单打手中选择');
+                    return;
+                }
             }
 
             const projectId = Number(values.projectId);
@@ -585,21 +626,20 @@ export default function CSWorkbenchPage() {
 
                 orderTime: values.orderTime ? dayjs(values.orderTime).toISOString() : now.toISOString(),
                 paymentTime: values.paymentTime ? dayjs(values.paymentTime).toISOString() : now.toISOString(),
-                inviter: values.inviter?.trim() || undefined,
+                inviter: isRenewal ? undefined : (values.inviter?.trim() || undefined),
                 csRate: values.csRate != null && values.csRate !== '' ? Number(values.csRate) : undefined,
-                inviteRate: values.inviteRate != null && values.inviteRate !== '' ? Number(values.inviteRate) : undefined,
+                inviteRate: isRenewal ? 0 : (values.inviteRate != null && values.inviteRate !== '' ? Number(values.inviteRate) : undefined),
                 customClubRate: values.customClubRate != null && values.customClubRate !== '' ? Number(values.customClubRate) : undefined,
                 userCouponId: values.userCouponId != null && values.userCouponId !== '' ? Number(values.userCouponId) : undefined,
                 remark: values.remark?.trim() || undefined,
+                playerIds,
+                isRenewal,
+                renewalPlayerIds: isRenewal ? renewalPlayerIds : undefined,
             };
 
             const created = await createOrder(payload);
             const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
             if (!orderId) throw new Error('创建订单失败：未返回订单ID');
-
-            if (playerIds.length > 0) {
-                await assignDispatch(orderId, { playerIds, remark: '新建订单时派单' });
-            }
 
             message.success('创建成功');
             history.push(`/orders/${orderId}`);
@@ -1005,6 +1045,32 @@ export default function CSWorkbenchPage() {
                             )}
                         </Form.Item>
 
+                        <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 8 }}>
+                            <Form.Item name="isRenewal" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                <Checkbox disabled={!Array.isArray(watchedCreatePlayerIds) || !watchedCreatePlayerIds.length}>标记为续单</Checkbox>
+                            </Form.Item>
+                            {watchedCreateIsRenewal ? (
+                                <Form.Item
+                                    name="renewalPlayerIds"
+                                    label="续单打手"
+                                    rules={[{ required: true, message: '请选择续单打手' }]}
+                                >
+                                    <Select
+                                        mode="multiple"
+                                        allowClear
+                                        placeholder="从当前派单打手中选择"
+                                        maxTagCount={2}
+                                        options={safeArray(watchedCreatePlayerIds).map((id: any) => ({
+                                            value: Number(id),
+                                            label: playerMap?.[Number(id)] || `#${id}`,
+                                        }))}
+                                        style={{ width: '100%' }}
+                                        {...commonSelectProps}
+                                    />
+                                </Form.Item>
+                            ) : null}
+                        </Space>
+
                         <details style={{ marginTop: 2 }}>
                             <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
                                 <Text type="secondary">展开高级项（比例/邀请人/自定义保底/备注/时间）</Text>
@@ -1020,7 +1086,7 @@ export default function CSWorkbenchPage() {
                                 </Col>
                                 <Col span={12}>
                                     <Form.Item name="inviter" label="邀请人（可选）">
-                                        <Input allowClear placeholder="邀请人" style={{ borderRadius: 12 }} />
+                                        <Input allowClear placeholder={watchedCreateIsRenewal ? "续单时推荐人失效" : "邀请人"} disabled={watchedCreateIsRenewal} style={{ borderRadius: 12 }} />
                                     </Form.Item>
                                 </Col>
                             </Row>
@@ -1033,7 +1099,7 @@ export default function CSWorkbenchPage() {
                                 </Col>
                                 <Col span={8}>
                                     <Form.Item name="inviteRate" label="邀请比例">
-                                        <InputNumber min={0} max={1} step={0.01} precision={2} style={{ width: '100%', borderRadius: 12 }} />
+                                        <InputNumber min={0} max={1} step={0.01} precision={2} disabled={watchedCreateIsRenewal} style={{ width: '100%', borderRadius: 12 }} />
                                     </Form.Item>
                                 </Col>
                                 <Col span={8}>
@@ -1608,21 +1674,20 @@ export default function CSWorkbenchPage() {
                         orderTime: payload?.orderTime,
                         paymentTime: payload?.paymentTime,
                         csRate: payload?.csRate,
-                        inviteRate: payload?.inviteRate,
-                        inviter: payload?.inviter,
+                        inviteRate: payload?.isRenewal ? 0 : payload?.inviteRate,
+                        inviter: payload?.isRenewal ? undefined : payload?.inviter,
                         customClubRate: payload?.customClubRate,
                         remark: payload?.remark,
                         // ✅ 新增：赠送单标识
                         isGifted: Boolean(payload?.isGifted),
                         userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
+                        playerIds: payload?.playerIds,
+                        isRenewal: Boolean(payload?.isRenewal),
+                        renewalPlayerIds: payload?.isRenewal ? payload?.renewalPlayerIds : undefined,
                     });
 
                     const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
                     if (!orderId) throw new Error('创建订单失败：未返回订单ID');
-
-                    if (payload?.playerIds?.length) {
-                        await assignDispatch(orderId, { playerIds: payload?.playerIds, remark: '新建订单时派单' });
-                    }
 
                     message.success('创建成功');
                     setCreateOpen(false);

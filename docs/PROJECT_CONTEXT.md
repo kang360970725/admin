@@ -6,6 +6,8 @@
 
 `system-admin` 是 Umi Max + Ant Design Pro 的后台/员工 Web 应用。
 
+本项目路径：`/Users/allen/Desktop/BlueCat-App/newObject/system-admin`。关联后端项目路径：`/Users/allen/Desktop/BlueCat-App/newObject/server`。订单、钱包、权限、系统配置等业务改动通常需要前后端一起检查。
+
 关键入口：
 
 - 配置与路由：`config/config.ts`
@@ -129,6 +131,8 @@
 - 两个入口都可按客户游戏 ID 查询订单消费记录，并支持 `YYYY-MM` 月份维度筛选。
 - 查询客户游戏 ID 后，需要展示当前筛选命中的全量统计，不只统计当前分页：订单数、应付合计、实付合计。
 - 统计数据来自 `getOrders` 返回的 `summary.receivableAmount/paidAmount`；前端不要自行用当前页数据累加。
+- 创建订单时的首轮派单仍限制 `1~2` 名打手。续单只能在创建订单并选择首轮派单打手时标记，`renewalPlayerIds` 必须来自本次 `playerIds`。
+- 标记续单后推荐人/邀请比例失效，前端创建 payload 应传 `isRenewal`、`renewalPlayerIds`，并将 `inviter` 置空、`inviteRate` 置 `0` 或不传。不要再采用“先 createOrder、再 assignDispatch”的创建派单拆分流程，否则无法保证续单首轮约束。
 
 ### 我的提现 / 钱包概览
 
@@ -211,6 +215,8 @@
 - 订单详情页包含修复/重算工具；以后端服务行为为准，不要只改前端按钮或文案。
 - 订单回退/客服强制存结单要检查当前派单是否有有效打手：`Orders/Detail.tsx` 会在当前轮无活跃且未拒单参与者时禁用“客服存单/客服结单”；后端 `orders.service.ts` 仍会做最终校验。
 - 后端结算允许跳过历史 `ARCHIVED` 空轮次，但当前 `COMPLETED` 结单轮为空必须失败；前端不要通过隐藏历史轮次来规避后端核算规则。
+- 续单分红在客服确认结单时随正常结算批次处理并到账；确认结单弹窗必须允许把待处理续单置为无效并填写原因。
+- 订单重算/修复工具支持 `invalidateRenewal` 与 `renewalInvalidateReason`，用于将续单置无效并触发已产生分红的冲正；前端预览只能辅助核对，最终以后端返回为准。
 
 ### 小程序配置
 

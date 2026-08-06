@@ -150,6 +150,26 @@ const OrderDetailPage: React.FC = () => {
     const [confirmCompleteLoading, setConfirmCompleteLoading] = useState(false);
     const [confirmCompleteRemark, setConfirmCompleteRemark] = useState('');
     const [confirmCompleteSettlementBaseMode, setConfirmCompleteSettlementBaseMode] = useState<'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT'>('SETTLEMENT_BASE_AMOUNT');
+    const [confirmRenewalInvalid, setConfirmRenewalInvalid] = useState(false);
+    const [confirmRenewalInvalidReason, setConfirmRenewalInvalidReason] = useState('');
+    const [toolsInvalidateRenewal, setToolsInvalidateRenewal] = useState(false);
+    const [toolsRenewalInvalidateReason, setToolsRenewalInvalidateReason] = useState('');
+
+    const renewalGroup = useMemo(() => {
+        const groups = Array.isArray(order?.renewalGroups) ? order.renewalGroups : [];
+        return groups[0] || null;
+    }, [order]);
+    const renewalGroupPending = String(renewalGroup?.status || '') === 'PENDING';
+    const renewalGroupMembers = useMemo(() => {
+        const snapshot = Array.isArray(renewalGroup?.memberNamesSnapshot) ? renewalGroup.memberNamesSnapshot : [];
+        if (snapshot.length) {
+            return snapshot
+                .map((member: any) => member?.name || member?.phone || (member?.id ? `#${member.id}` : ''))
+                .filter(Boolean);
+        }
+        const userIds = Array.isArray(renewalGroup?.memberUserIds) ? renewalGroup.memberUserIds : [];
+        return userIds.map((id: any) => `#${id}`).filter(Boolean);
+    }, [renewalGroup]);
 
     // 重算工具 - 玩法单分轮输入
     const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<any>(null);
@@ -1016,6 +1036,11 @@ const OrderDetailPage: React.FC = () => {
             setToolsLoading(true);
             setToolsResult(null);
 
+            if (toolsInvalidateRenewal && !toolsRenewalInvalidateReason.trim()) {
+                message.warning('请填写续单置无效原因');
+                return;
+            }
+
             const res = await recalculateOrderSettlements({
                 id: Number(order.id),
                 reason: toolsRemark || undefined,
@@ -1028,6 +1053,8 @@ const OrderDetailPage: React.FC = () => {
                 playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
                 orderTipEnabled: Boolean(orderTip.enabled),
                 orderTipUserIds: orderTip.enabled ? orderTip.tippedUserIds : [],
+                invalidateRenewal: Boolean(toolsInvalidateRenewal),
+                renewalInvalidateReason: toolsInvalidateRenewal ? toolsRenewalInvalidateReason.trim() : undefined,
             } as any);
 
             setToolsResult(res);
@@ -1272,12 +1299,23 @@ const OrderDetailPage: React.FC = () => {
                 }
             }
 
+            if (renewalGroupPending && confirmRenewalInvalid && !confirmRenewalInvalidReason.trim()) {
+                message.warning('请填写续单置无效原因');
+                return;
+            }
+
             const payload: any = {
                 id: Number(order.id),
                 remark: confirmCompleteRemark || undefined,
                 paidAmount: cashAmount,
                 confirmPaid: true,
             };
+
+            if (renewalGroupPending) {
+                payload.renewalAction = confirmRenewalInvalid ? 'INVALIDATE' : 'SETTLE';
+                payload.invalidateRenewal = confirmRenewalInvalid;
+                payload.renewalInvalidateReason = confirmRenewalInvalid ? confirmRenewalInvalidReason.trim() : undefined;
+            }
 
             if (isModePlay) payload.modePlayAllocList = modePlayAllocList;
             payload.playerEvaluations = buildExpandedPlayerEvaluations(playerEvalRows);
@@ -1289,6 +1327,8 @@ const OrderDetailPage: React.FC = () => {
 
             message.success('已确认结单');
             setConfirmCompleteOpen(false);
+            setConfirmRenewalInvalid(false);
+            setConfirmRenewalInvalidReason('');
             await loadDetail();
         } catch (e: any) {
             message.error(e?.response?.data?.message || '确认结单失败');
@@ -3806,6 +3846,39 @@ const OrderDetailPage: React.FC = () => {
                                     addonAfter="¥"
                                 />
                             </div>
+                            {renewalGroupPending ? (
+                                <Card size="small" style={{borderRadius: 12, border: '1px solid #bae0ff', background: '#f0f5ff'}}>
+                                    <Space direction="vertical" size={8} style={{width: '100%'}}>
+                                        <Space wrap>
+                                            <Typography.Text strong>续单修正</Typography.Text>
+                                            {renewalGroupMembers.map((name: string, idx: number) => (
+                                                <Tag key={`${name}-${idx}`}>{name}</Tag>
+                                            ))}
+                                        </Space>
+                                        <Checkbox
+                                            checked={toolsInvalidateRenewal}
+                                            onChange={(e) => {
+                                                setToolsInvalidateRenewal(e.target.checked);
+                                                setRepairPreview(null);
+                                                setRecalcResult(null);
+                                                setToolsResult(null);
+                                                setToolsStep('INIT');
+                                            }}
+                                        >
+                                            确认应用重算时将续单置为无效
+                                        </Checkbox>
+                                        {toolsInvalidateRenewal ? (
+                                            <Input.TextArea
+                                                rows={2}
+                                                value={toolsRenewalInvalidateReason}
+                                                onChange={(e) => setToolsRenewalInvalidateReason(e.target.value)}
+                                                placeholder="请填写置无效原因；已产生续单分红时后端会冲正"
+                                            />
+                                        ) : null}
+                                    </Space>
+                                </Card>
+                            ) : null}
+
                             {isModePlay ? (
                                 <Card size="small"
                                       style={{borderRadius: 12, background: '#fffbe6', border: '1px solid #ffe58f'}}
@@ -4199,7 +4272,11 @@ const OrderDetailPage: React.FC = () => {
             <Modal
                 open={confirmCompleteOpen}
                 title={`确认结单：${order?.autoSerial || ''}`}
-                onCancel={() => setConfirmCompleteOpen(false)}
+                onCancel={() => {
+                    setConfirmCompleteOpen(false);
+                    setConfirmRenewalInvalid(false);
+                    setConfirmRenewalInvalidReason('');
+                }}
                 onOk={submitConfirmComplete}
                 confirmLoading={confirmCompleteLoading}
                 okText="确认"
@@ -4220,6 +4297,61 @@ const OrderDetailPage: React.FC = () => {
                 }}
             >
                 <Space direction="vertical" size={12} style={{width: '100%'}}>
+
+                    {renewalGroup ? (
+                        <Card size="small" style={{borderRadius: 12, borderColor: renewalGroupPending ? '#91caff' : '#d9d9d9'}}>
+                            <Space direction="vertical" size={8} style={{width: '100%'}}>
+                                <Space wrap>
+                                    <Typography.Text strong>续单归因</Typography.Text>
+                                    <Tag color={renewalGroupPending ? 'blue' : String(renewalGroup?.status) === 'SETTLED' ? 'green' : 'default'}>
+                                        {String(renewalGroup?.status || '-')}
+                                    </Tag>
+                                    {renewalGroupMembers.map((name: string, idx: number) => (
+                                        <Tag key={`${name}-${idx}`}>{name}</Tag>
+                                    ))}
+                                </Space>
+                                {renewalGroupPending ? (
+                                    <>
+                                        <Typography.Text type="secondary" style={{fontSize: 12}}>
+                                            确认结单时默认按后端续单分红配置结算并到账；如核对后不是续单，可在本步骤置为无效。
+                                        </Typography.Text>
+                                        {(() => {
+                                            const base = getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
+                                            const rate = base <= 300 ? 0.01 : 0.02;
+                                            const totalBonus = Math.round(base * rate * 100) / 100;
+                                            const count = renewalGroupMembers.length || 1;
+                                            return (
+                                                <Space wrap>
+                                                    <Tag color="blue">预估基数 ¥{base.toFixed(2)}</Tag>
+                                                    <Tag color="cyan">兜底比例 {(rate * 100).toFixed(0)}%</Tag>
+                                                    <Tag color="green">预估总分红 ¥{totalBonus.toFixed(2)}</Tag>
+                                                    <Tag>约 ¥{(totalBonus / count).toFixed(2)} / 人</Tag>
+                                                </Space>
+                                            );
+                                        })()}
+                                        <Checkbox
+                                            checked={confirmRenewalInvalid}
+                                            onChange={(e) => setConfirmRenewalInvalid(e.target.checked)}
+                                        >
+                                            将本单续单置为无效
+                                        </Checkbox>
+                                        {confirmRenewalInvalid ? (
+                                            <Input.TextArea
+                                                rows={2}
+                                                value={confirmRenewalInvalidReason}
+                                                onChange={(e) => setConfirmRenewalInvalidReason(e.target.value)}
+                                                placeholder="请填写置无效原因，后端会记录并用于冲正追溯"
+                                            />
+                                        ) : null}
+                                    </>
+                                ) : (
+                                    <Typography.Text type="secondary" style={{fontSize: 12}}>
+                                        当前续单状态已确定，确认结单不会重复处理续单分红。
+                                    </Typography.Text>
+                                )}
+                            </Space>
+                        </Card>
+                    ) : null}
 
                     {/* ✅ 玩法单：多轮不同参与者 -> 分轮收入输入 */}
                     {isModePlay && modePlayAlloc?.need ? (() => {

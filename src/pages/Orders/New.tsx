@@ -1,13 +1,12 @@
 // src/pages/Orders/New.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Form, Input, InputNumber, Select, DatePicker, Button, Row, Col, Space, message } from 'antd';
+import { Card, Checkbox, Form, Input, InputNumber, Select, DatePicker, Button, Row, Col, Space, message } from 'antd';
 import dayjs from 'dayjs';
 import { history } from '@umijs/max';
 
 import {
     createOrder,
-    assignDispatch,
     getGameProjectOptions,
     getPlayerOptions,
 } from '@/services/api';
@@ -36,6 +35,9 @@ const NewOrderPage: React.FC = () => {
     const [playerLoading, setPlayerLoading] = useState(false);
 
     const now = useMemo(() => dayjs(), []);
+    const watchedPlayerIds = Form.useWatch('playerIds', form) || [];
+    const watchedIsRenewal = Boolean(Form.useWatch('isRenewal', form));
+
 
     useEffect(() => {
         // 默认时间：当前时间
@@ -102,6 +104,25 @@ const NewOrderPage: React.FC = () => {
                 return;
             }
 
+            const isRenewal = Boolean(values.isRenewal);
+            const renewalPlayerIds: number[] = isRenewal && Array.isArray(values.renewalPlayerIds)
+                ? values.renewalPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                : [];
+            if (isRenewal) {
+                if (!playerIds.length) {
+                    message.warning('续单必须先选择派单打手');
+                    return;
+                }
+                if (!renewalPlayerIds.length) {
+                    message.warning('请选择续单打手');
+                    return;
+                }
+                if (renewalPlayerIds.some((id) => !playerIds.includes(id))) {
+                    message.warning('续单打手必须从当前派单打手中选择');
+                    return;
+                }
+            }
+
             const payload = {
                 projectId: Number(values.projectId),
                 receivableAmount: Number(values.receivableAmount),
@@ -116,17 +137,20 @@ const NewOrderPage: React.FC = () => {
                 orderTime: values.orderTime ? dayjs(values.orderTime).toISOString() : now.toISOString(),
                 paymentTime: values.paymentTime ? dayjs(values.paymentTime).toISOString() : now.toISOString(),
 
-                inviter: values.inviter?.trim() || undefined,
+                inviter: isRenewal ? undefined : (values.inviter?.trim() || undefined),
 
                 // 比例：例如 0.01/0.05
                 csRate: values.csRate != null && values.csRate !== '' ? Number(values.csRate) : undefined,
-                inviteRate: values.inviteRate != null && values.inviteRate !== '' ? Number(values.inviteRate) : undefined,
+                inviteRate: isRenewal ? 0 : (values.inviteRate != null && values.inviteRate !== '' ? Number(values.inviteRate) : undefined),
                 customClubRate:
                     values.customClubRate != null && values.customClubRate !== ''
                         ? Number(values.customClubRate)
                         : undefined,
 
                 remark: values.remark?.trim() || undefined,
+                playerIds,
+                isRenewal,
+                renewalPlayerIds: isRenewal ? renewalPlayerIds : undefined,
             };
 
             // 1) 创建订单（✅ 以表单传递值为准）
@@ -135,11 +159,6 @@ const NewOrderPage: React.FC = () => {
             const orderId = Number(created?.id ?? created?.data?.id);
             if (!orderId) {
                 throw new Error('创建订单失败：未返回订单ID');
-            }
-
-            // 2) 新建即派单（可选）
-            if (playerIds.length > 0) {
-                await assignDispatch(orderId, { playerIds, remark: '新建订单时派单' });
             }
 
             message.success('创建成功');
@@ -206,12 +225,51 @@ const NewOrderPage: React.FC = () => {
                                         if (Array.isArray(vals) && vals.length > MAX_PLAYERS) {
                                             message.warning(`最多选择 ${MAX_PLAYERS} 名打手`);
                                             // 自动截断到前 MAX_PLAYERS 个
-                                            form.setFieldValue('playerIds', vals.slice(0, MAX_PLAYERS));
+                                            const nextIds = vals.slice(0, MAX_PLAYERS);
+                                            form.setFieldsValue({
+                                                playerIds: nextIds,
+                                                renewalPlayerIds: Array.isArray(form.getFieldValue('renewalPlayerIds'))
+                                                    ? form.getFieldValue('renewalPlayerIds').filter((id: number) => nextIds.includes(id))
+                                                    : [],
+                                            });
+                                            return;
                                         }
+                                        const nextIds = Array.isArray(vals) ? vals.map((id: any) => Number(id)) : [];
+                                        form.setFieldsValue({
+                                            renewalPlayerIds: Array.isArray(form.getFieldValue('renewalPlayerIds'))
+                                                ? form.getFieldValue('renewalPlayerIds').filter((id: number) => nextIds.includes(id))
+                                                : [],
+                                            isRenewal: nextIds.length ? form.getFieldValue('isRenewal') : false,
+                                        });
                                     }}
                                     allowClear
                                 />
                             </Form.Item>
+                        </Col>
+
+                        <Col span={24}>
+                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                <Form.Item name="isRenewal" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                    <Checkbox disabled={!Array.isArray(watchedPlayerIds) || !watchedPlayerIds.length}>标记为续单</Checkbox>
+                                </Form.Item>
+                                {watchedIsRenewal ? (
+                                    <Form.Item
+                                        name="renewalPlayerIds"
+                                        label="续单打手"
+                                        rules={[{ required: true, message: '请选择续单打手' }]}
+                                    >
+                                        <Select
+                                            mode="multiple"
+                                            placeholder="从当前派单打手中选择"
+                                            maxTagCount={2}
+                                            options={(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => {
+                                                const item = playerOptions.find((p) => Number(p.value) === Number(id));
+                                                return { value: Number(id), label: item?.label || `#${id}` };
+                                            })}
+                                        />
+                                    </Form.Item>
+                                ) : null}
+                            </Space>
                         </Col>
 
                         <Col span={12}>
@@ -283,7 +341,7 @@ const NewOrderPage: React.FC = () => {
 
                         <Col span={12}>
                             <Form.Item name="inviter" label="邀请/推广人">
-                                <Input placeholder="可填写昵称/来源" allowClear />
+                                <Input placeholder={watchedIsRenewal ? '续单时推荐人失效' : '可填写昵称/来源'} disabled={watchedIsRenewal} allowClear />
                             </Form.Item>
                         </Col>
 
@@ -320,6 +378,7 @@ const NewOrderPage: React.FC = () => {
                                     max={1}
                                     step={0.01}
                                     precision={2}
+                                    disabled={watchedIsRenewal}
                                     style={{ width: '100%' }}
                                     placeholder="例如 0.05 表示 5%"
                                 />

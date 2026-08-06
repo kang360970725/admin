@@ -1,8 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {useModel, useNavigate} from '@umijs/max';
-import {Button, Card, Checkbox, Col, Collapse, DatePicker, Form, Input, InputNumber, message, Modal, Row, Space, Tag, Tooltip} from 'antd';
+import {Button, Card, Checkbox, Col, Collapse, DatePicker, Form, Input, InputNumber, List, message, Modal, Pagination, Row, Select, Space, Tag, Tooltip, Typography} from 'antd';
 import {
-    assignDispatch,
     createOrder,
     deleteOrder,
     getOrderSourceOptions,
@@ -36,6 +35,8 @@ const statusText: Record<string, { text: string; color?: string }> = {
     AFTERSALE_DONE: {text: '已售后', color: 'magenta'},
     REFUNDED: {text: '已退款', color: 'red'},
 };
+
+const { Text } = Typography;
 
 const OrdersPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
@@ -122,6 +123,18 @@ const OrdersPage: React.FC = () => {
     const [markPaidOrder, setMarkPaidOrder] = useState<any>(null);
     const [markPaidForm] = Form.useForm();
     const [orderSourceOptions, setOrderSourceOptions] = useState<Array<{ label: string; value: string }>>([]);
+    const [mobileLoading, setMobileLoading] = useState(false);
+    const [mobileOrders, setMobileOrders] = useState<any[]>([]);
+    const [mobileTotal, setMobileTotal] = useState(0);
+    const [mobilePage, setMobilePage] = useState(1);
+    const [mobileFilters, setMobileFilters] = useState<{
+        keyword?: string;
+        status?: string;
+        isPaid?: boolean;
+        customerGameId?: string;
+        orderMonth?: string;
+        orderSource?: string;
+    }>({});
 
     useEffect(() => {
         (async () => {
@@ -197,12 +210,143 @@ const OrdersPage: React.FC = () => {
                 try {
                     await deleteOrder({ id: Number(row?.id), remark: '后台列表页手动删除订单' });
                     message.success('订单已删除');
-                    actionRef.current?.reload?.();
+                    if (isMobile) {
+                        await loadMobileOrders(mobilePage, mobileFilters);
+                    } else {
+                        actionRef.current?.reload?.();
+                    }
                 } catch (e: any) {
                     message.error(e?.response?.data?.message || '删除订单失败');
                 }
             },
         });
+    };
+
+    const renderCustomerGameId = (row: any) => {
+        const raw = row?.customerGameId;
+        if (raw == null || raw === '') return '-';
+        if (!isCompletedLikeStatus(row?.status)) return String(raw);
+        if (canViewCustomerGameIdAfterCompleted) return String(raw);
+        return '******';
+    };
+
+    const getCurrentPlayerNames = (row: any) => {
+        return row?.currentDispatch?.participants
+            ?.map((p: any) => p?.user?.name || p?.user?.phone)
+            ?.filter(Boolean) || [];
+    };
+
+    const loadMobileOrders = async (page = mobilePage, filters = mobileFilters) => {
+        setMobileLoading(true);
+        try {
+            const res: any = await getOrders({
+                page,
+                limit: 10,
+                serial: undefined,
+                status: filters.status,
+                customerGameId: String(filters.customerGameId || '').trim(),
+                orderMonth: filters.orderMonth,
+                keyword: filters.keyword,
+                isPaid: filters.isPaid,
+                orderSource: filters.orderSource,
+            });
+            const customerGameId = String(filters.customerGameId || '').trim();
+            if (customerGameId) {
+                setConsumptionSummary({
+                    customerGameId,
+                    orderMonth: filters.orderMonth,
+                    orderCount: Number(res.total || 0),
+                    receivableAmount: Number(res?.summary?.receivableAmount || 0),
+                    paidAmount: Number(res?.summary?.paidAmount || 0),
+                });
+            } else {
+                setConsumptionSummary(null);
+            }
+            setMobileOrders(Array.isArray(res?.data) ? res.data : []);
+            setMobileTotal(Number(res?.total || 0));
+            setMobilePage(page);
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || '获取订单列表失败');
+        } finally {
+            setMobileLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!isMobile) return;
+        void loadMobileOrders(1, mobileFilters);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isMobile]);
+
+    const renderMobileOrderCard = (row: any) => {
+        const s = statusText[row?.status] || { text: row?.status || '-' };
+        const players = getCurrentPlayerNames(row);
+        const canQuickMarkPaid = !row?.isGifted && row?.isPaid === false;
+        return (
+            <List.Item style={{ padding: 0, borderBlockEnd: 'none' }}>
+                <Card
+                    size="small"
+                    hoverable
+                    onClick={() => navigate(`/orders/${row.id}`)}
+                    style={{
+                        width: '100%',
+                        borderRadius: 12,
+                        borderColor: row?.isPaid === false && !row?.isGifted ? 'rgba(255,77,79,.35)' : '#f0f0f0',
+                    }}
+                    bodyStyle={{ padding: 12 }}
+                >
+                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                        <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.25, wordBreak: 'break-all' }}>
+                                    {row?.autoSerial || `#${row?.id}`}
+                                </div>
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {row?.createdAt ? dayjs(row.createdAt).format('MM-DD HH:mm') : '-'}
+                                </Text>
+                            </div>
+                            <Space size={4} wrap style={{ justifyContent: 'flex-end' }}>
+                                <Tag color={s.color}>{s.text}</Tag>
+                                {row?.isGifted ? <Tag>赠送</Tag> : row?.isPaid === false ? <Tag color="red">未收款</Tag> : <Tag color="green">已收款</Tag>}
+                            </Space>
+                        </Space>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>项目</Text>
+                                <div style={{ fontWeight: 600, wordBreak: 'break-word' }}>{row?.project?.name || '-'}</div>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <Text type="secondary" style={{ fontSize: 12 }}>实付</Text>
+                                <div style={{ fontWeight: 800, fontSize: 18 }}>¥{Number(row?.paidAmount || 0).toFixed(2)}</div>
+                            </div>
+                        </div>
+
+                        <Space size={6} wrap>
+                            {row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : null}
+                            <Tag>客户：{renderCustomerGameId(row)}</Tag>
+                            {players.length ? players.map((name: string, idx: number) => <Tag key={`${name}-${idx}`}>{name}</Tag>) : <Tag>未派单</Tag>}
+                        </Space>
+
+                        <Space style={{ width: '100%', justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+                            {canQuickMarkPaid ? (
+                                <Button size="small" type="primary" onClick={() => openMarkPaidModal(row)}>
+                                    确认收款
+                                </Button>
+                            ) : null}
+                            {hasOrderPermission('orders:list:delete:button') ? (
+                                <Button size="small" danger onClick={() => confirmDeleteOrder(row)}>
+                                    删除
+                                </Button>
+                            ) : null}
+                            <Button size="small" onClick={() => navigate(`/orders/${row.id}`)}>
+                                详情
+                            </Button>
+                        </Space>
+                    </Space>
+                </Card>
+            </List.Item>
+        );
     };
 
     const submitMarkPaid = async () => {
@@ -220,7 +364,11 @@ const OrdersPage: React.FC = () => {
 
             message.success('已确认收款');
             setMarkPaidOpen(false);
-            actionRef.current?.reload?.();
+            if (isMobile) {
+                await loadMobileOrders(mobilePage, mobileFilters);
+            } else {
+                actionRef.current?.reload?.();
+            }
         } catch (e: any) {
             if (e?.errorFields) return;
             message.error(e?.response?.data?.message || '确认收款失败');
@@ -315,21 +463,8 @@ const OrdersPage: React.FC = () => {
             ellipsis: true,
             hideInTable: isMobile,
             render: (_: any, row: any) => {
-                const raw = row?.customerGameId;
-
-                // 1) 后端已经脱敏/不返回
-                if (raw == null || raw === '') return '-';
-
-                // 2) 仅在“已结单状态”做限制
-                if (!isCompletedLikeStatus(row?.status)) {
-                    return String(raw);
-                }
-
-                // 3) 已结单：仅允许 SUPER_ADMIN / 客服主管查看
-                if (canViewCustomerGameIdAfterCompleted) {
-                    return String(raw);
-                }
-
+                const value = renderCustomerGameId(row);
+                if (value !== '******') return value;
                 return (
                     <Tooltip title="已结单订单：非超级管理员/客服主管不允许查看客户游戏ID">
                         <span style={{letterSpacing: 2}}>******</span>
@@ -525,8 +660,122 @@ const OrdersPage: React.FC = () => {
                 </Card>
             ) : null}
 
-            <ProTable<any>
-                rowKey="id"
+            {isMobile ? (
+                <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                    <Card size="small" style={{ borderRadius: 12 }} bodyStyle={{ padding: 12 }}>
+                        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                            <Input.Search
+                                allowClear
+                                placeholder="订单号 / 客服 / 陪玩昵称"
+                                enterButton="搜索"
+                                value={mobileFilters.keyword}
+                                onChange={(e) => setMobileFilters((prev) => ({ ...prev, keyword: e.target.value }))}
+                                onSearch={(value) => {
+                                    const next = { ...mobileFilters, keyword: value };
+                                    setMobileFilters(next);
+                                    void loadMobileOrders(1, next);
+                                }}
+                            />
+                            <Row gutter={[8, 8]}>
+                                <Col span={12}>
+                                    <Select
+                                        allowClear
+                                        placeholder="状态"
+                                        value={mobileFilters.status}
+                                        options={Object.entries(statusText).map(([value, meta]) => ({ value, label: meta.text }))}
+                                        onChange={(value) => setMobileFilters((prev) => ({ ...prev, status: value }))}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Col>
+                                <Col span={12}>
+                                    <Select
+                                        allowClear
+                                        placeholder="收款"
+                                        value={mobileFilters.isPaid as any}
+                                        options={[
+                                            { value: true, label: '已收款' },
+                                            { value: false, label: '未收款' },
+                                        ]}
+                                        onChange={(value) => setMobileFilters((prev) => ({ ...prev, isPaid: value }))}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Col>
+                                <Col span={12}>
+                                    <Select
+                                        allowClear
+                                        placeholder="渠道"
+                                        value={mobileFilters.orderSource}
+                                        options={orderSourceOptions}
+                                        onChange={(value) => setMobileFilters((prev) => ({ ...prev, orderSource: value }))}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Col>
+                                <Col span={12}>
+                                    <DatePicker
+                                        picker="month"
+                                        allowClear
+                                        placeholder="月份"
+                                        value={mobileFilters.orderMonth ? dayjs(mobileFilters.orderMonth, 'YYYY-MM') : undefined}
+                                        style={{ width: '100%' }}
+                                        onChange={(value) => setMobileFilters((prev) => ({
+                                            ...prev,
+                                            orderMonth: value ? dayjs(value).format('YYYY-MM') : undefined,
+                                        }))}
+                                    />
+                                </Col>
+                                <Col span={24}>
+                                    <Input
+                                        allowClear
+                                        placeholder="客户游戏ID"
+                                        value={mobileFilters.customerGameId}
+                                        onChange={(e) => setMobileFilters((prev) => ({ ...prev, customerGameId: e.target.value }))}
+                                    />
+                                </Col>
+                            </Row>
+                            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                                <Button
+                                    onClick={() => {
+                                        setMobileFilters({});
+                                        void loadMobileOrders(1, {});
+                                    }}
+                                >
+                                    重置
+                                </Button>
+                                <Space>
+                                    <Button onClick={() => void loadMobileOrders(1, mobileFilters)}>筛选</Button>
+                                    {hasOrderPermission('orders:list:create:button') ? (
+                                        <Button type="primary" onClick={() => setCreateOpen(true)}>
+                                            新建
+                                        </Button>
+                                    ) : null}
+                                </Space>
+                            </Space>
+                        </Space>
+                    </Card>
+
+                    <List
+                        loading={mobileLoading}
+                        dataSource={mobileOrders}
+                        rowKey={(row: any) => String(row.id)}
+                        renderItem={renderMobileOrderCard}
+                        locale={{ emptyText: '暂无订单' }}
+                        split={false}
+                        style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 12px' }}>
+                        <Pagination
+                            simple
+                            current={mobilePage}
+                            pageSize={10}
+                            total={mobileTotal}
+                            onChange={(page) => void loadMobileOrders(page, mobileFilters)}
+                        />
+                    </div>
+                </Space>
+            ) : (
+                <ProTable<any>
+                    rowKey="id"
                 actionRef={actionRef}
                 columns={columns}
                 search={isMobile ? { labelWidth: 72, defaultCollapsed: true } : { labelWidth: 90 }}
@@ -597,7 +846,8 @@ const OrdersPage: React.FC = () => {
                         total: res.total || 0,
                     };
                 }}
-            />
+                />
+            )}
 
             <OrderUpsertModal
                 open={createOpen}
@@ -617,11 +867,14 @@ const OrdersPage: React.FC = () => {
                         orderTime: payload?.orderTime,
                         paymentTime: payload?.paymentTime,
                         csRate: payload?.csRate,
-                        inviteRate: payload?.inviteRate,
-                        inviter: payload?.inviter,
+                        inviteRate: payload?.isRenewal ? 0 : payload?.inviteRate,
+                        inviter: payload?.isRenewal ? undefined : payload?.inviter,
                         customClubRate: payload?.customClubRate,
                         remark: payload?.remark,
                         isGifted: Boolean(payload?.isGifted),
+                        playerIds: payload?.playerIds,
+                        isRenewal: Boolean(payload?.isRenewal),
+                        renewalPlayerIds: payload?.isRenewal ? payload?.renewalPlayerIds : undefined,
 
                         // ✅ 是否已收款（不再由 paymentTime 推断）
                         isPaid: Boolean(payload?.isPaid),
@@ -629,10 +882,6 @@ const OrdersPage: React.FC = () => {
 
                     const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
                     if (!orderId) throw new Error('创建订单失败：未返回订单ID');
-
-                    if (payload?.playerIds?.length) {
-                        await assignDispatch(orderId, {playerIds: payload?.playerIds, remark: '新建订单时派单'});
-                    }
 
                     message.success('创建成功');
                     setCreateOpen(false);
