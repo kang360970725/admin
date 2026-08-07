@@ -1315,13 +1315,18 @@ export default function UsersPage() {
                         <div>标签：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
                         <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
                         <div>入店天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
+                        <div>有效接单量：{Number(staffExitPreview?.effectiveAcceptedOrderCount ?? 0)} / {Number(staffExitPreview?.minAcceptedOrdersForDepositRefund ?? 50)} 单</div>
                         <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedDays ?? 15)} 天</div>
                         <div>退店冷却期：{Number(staffExitPreview?.quitCoolingDays ?? 180)} 天</div>
                         <div>押金不退限制：{Number(staffExitPreview?.depositForfeitDays ?? 0)} 天</div>
+                        <div>保证金阈值：¥{Number(staffExitPreview?.depositAmountRule ?? 0)}</div>
                         <div>当前可用/冻结/保证金：¥{Number(staffExitPreview?.availableBalance ?? 0)} / ¥{Number(staffExitPreview?.frozenBalance ?? 0)} / ¥{Number(staffExitPreview?.depositBalance ?? 0)}</div>
                         <div>本次应退保证金：¥{Number(staffExitPreview?.refundDepositAmount ?? 0)}</div>
                         <div>本次不退保证金：¥{Number(staffExitPreview?.forfeitDepositAmount ?? 0)}</div>
+                        <div>保证金未缴满补扣：¥{Number(staffExitPreview?.depositTopUpForfeitAmount ?? 0)}</div>
+                        <div>余额不足未补齐保证金：¥{Number(staffExitPreview?.depositTopUpUnpaidAmount ?? 0)}</div>
                         <div>退店后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
+                        <div>退店后预计可用余额：¥{Number(staffExitPreview?.finalAvailableBalance ?? 0)}</div>
                     </div>
                     <Form.Item label="退店方式" name="mode" rules={[{ required: true, message: '请选择退店方式' }]}>
                         <Select

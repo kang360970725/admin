@@ -266,6 +266,8 @@ function getDefaultStaffRuleEngineConfig(): StaffRuleEngineConfig {
     quitCoolingDays: 180,
     depositForfeitDays: 30,
     dormantFreezeDays: 7,
+    settlementFreezeExperienceDays: 3,
+    settlementFreezeRegularDays: 7,
     refundWhenDepositInsufficient: true,
   };
   return {
@@ -301,6 +303,8 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
       enabled: true,
       tagCodes: [],
       dormantFreezeDays: Number(parsed?.defaultRule?.dormantFreezeDays ?? fallback.defaultRule.dormantFreezeDays),
+      settlementFreezeExperienceDays: Number(parsed?.defaultRule?.settlementFreezeExperienceDays ?? fallback.defaultRule.settlementFreezeExperienceDays),
+      settlementFreezeRegularDays: Number(parsed?.defaultRule?.settlementFreezeRegularDays ?? fallback.defaultRule.settlementFreezeRegularDays),
     };
     const rules = Array.isArray(parsed?.rules)
       ? parsed.rules.map((item: any, index: number) => {
@@ -319,6 +323,8 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
             tagCodes: tagCode ? [tagCode] : [],
             firstWithdrawMinAcceptedDays: Number(item?.firstWithdrawMinAcceptedDays ?? 15),
             dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
+            settlementFreezeExperienceDays: Number(item?.settlementFreezeExperienceDays ?? 3),
+            settlementFreezeRegularDays: Number(item?.settlementFreezeRegularDays ?? 7),
           };
         })
       : [];
@@ -356,6 +362,8 @@ function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
     quitCoolingDays: Number(current?.defaultRule?.quitCoolingDays ?? 180),
     depositForfeitDays: Number(current?.defaultRule?.depositForfeitDays ?? 30),
     dormantFreezeDays: Number(current?.defaultRule?.dormantFreezeDays ?? 7),
+    settlementFreezeExperienceDays: Number(current?.defaultRule?.settlementFreezeExperienceDays ?? 3),
+    settlementFreezeRegularDays: Number(current?.defaultRule?.settlementFreezeRegularDays ?? 7),
     refundWhenDepositInsufficient: true,
   };
   const rules = rawRules
@@ -373,6 +381,8 @@ function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
         quitCoolingDays: Number(item?.quitCoolingDays ?? 0),
         depositForfeitDays: Number(item?.depositForfeitDays ?? 0),
         dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
+        settlementFreezeExperienceDays: Number(item?.settlementFreezeExperienceDays ?? 3),
+        settlementFreezeRegularDays: Number(item?.settlementFreezeRegularDays ?? 7),
         refundWhenDepositInsufficient: true,
       };
     });
@@ -772,6 +782,22 @@ const SystemConfigsPage: React.FC = () => {
                           >
                             <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
                           </Form.Item>
+                          <Form.Item
+                            label="体验单结算冻结"
+                            name={['staffRuleEngine', 'defaultRule', 'settlementFreezeExperienceDays']}
+                            initialValue={3}
+                            rules={[{ required: true, message: '请输入体验单结算冻结周期' }]}
+                          >
+                            <InputNumber min={0} precision={0} style={{ width: 190 }} addonAfter="天" />
+                          </Form.Item>
+                          <Form.Item
+                            label="普通单结算冻结"
+                            name={['staffRuleEngine', 'defaultRule', 'settlementFreezeRegularDays']}
+                            initialValue={7}
+                            rules={[{ required: true, message: '请输入普通单结算冻结周期' }]}
+                          >
+                            <InputNumber min={0} precision={0} style={{ width: 190 }} addonAfter="天" />
+                          </Form.Item>
                         </Space>
                       </Space>
                     </Card>
@@ -864,11 +890,27 @@ const SystemConfigsPage: React.FC = () => {
                                     >
                                       <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
                                     </Form.Item>
+                                    <Form.Item
+                                      label="体验单结算冻结"
+                                      name={[field.name, 'settlementFreezeExperienceDays']}
+                                      initialValue={3}
+                                      rules={[{ required: true, message: '请输入体验单结算冻结周期' }]}
+                                    >
+                                      <InputNumber min={0} precision={0} style={{ width: 190 }} addonAfter="天" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      label="普通单结算冻结"
+                                      name={[field.name, 'settlementFreezeRegularDays']}
+                                      initialValue={7}
+                                      rules={[{ required: true, message: '请输入普通单结算冻结周期' }]}
+                                    >
+                                      <InputNumber min={0} precision={0} style={{ width: 190 }} addonAfter="天" />
+                                    </Form.Item>
                                   </Space>
                                 </Space>
                               </Card>
                             ))}
-                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, firstWithdrawMinAcceptedDays: 15, quitCoolingDays: 0, depositForfeitDays: 0, dormantFreezeDays: 7 })}>
+                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, firstWithdrawMinAcceptedDays: 15, quitCoolingDays: 0, depositForfeitDays: 0, dormantFreezeDays: 7, settlementFreezeExperienceDays: 3, settlementFreezeRegularDays: 7 })}>
                               新增标签规则
                             </Button>
                           </Space>

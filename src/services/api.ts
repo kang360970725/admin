@@ -117,6 +117,8 @@ export interface StaffRuleItem {
     quitCoolingDays: number;
     depositForfeitDays: number;
     dormantFreezeDays: number;
+    settlementFreezeExperienceDays: number;
+    settlementFreezeRegularDays: number;
     refundWhenDepositInsufficient?: boolean;
 }
 
@@ -134,13 +136,21 @@ export interface StaffExitPreview {
     inShopDays: number;
     quitCoolingDays: number;
     depositForfeitDays: number;
+    effectiveAcceptedOrderCount: number;
+    minAcceptedOrdersForDepositRefund: number;
     isDepositForfeit: boolean;
+    isDepositForfeitByDays?: boolean;
+    isDepositForfeitByOrders?: boolean;
+    isDepositInsufficient?: boolean;
     availableBalance: number;
     frozenBalance: number;
     depositBalance: number;
     refundDepositAmount: number;
     forfeitDepositAmount: number;
+    depositTopUpForfeitAmount?: number;
+    depositTopUpUnpaidAmount?: number;
     releaseAmount: number;
+    finalAvailableBalance?: number;
     clearAmount: number;
     depositAmountRule: number;
     firstWithdrawMinBalance: number;
