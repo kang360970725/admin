@@ -121,7 +121,7 @@ export default function DepositReconciliationPage() {
       },
     },
     {
-      title: '员工标签',
+      title: '员工规则分组',
       dataIndex: 'staffTags',
       width: 180,
       search: false,

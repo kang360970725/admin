@@ -179,7 +179,7 @@ export default function UsersPage() {
                         .map((item: any) => ({ label: item?.name || item?.code, value: item?.code })),
                 );
             } catch (error) {
-                console.error('加载员工标签失败:', error);
+                console.error('加载员工规则分组失败:', error);
             }
         };
         loadStaffRuleEngine();
@@ -813,7 +813,7 @@ export default function UsersPage() {
         //     }
         // },
         {
-            title: '员工标签',
+            title: '员工规则分组',
             dataIndex: 'staffTags',
             width: 180,
             search: false,
@@ -1312,7 +1312,7 @@ export default function UsersPage() {
             >
                 <Form form={staffExitForm} layout="vertical">
                     <div style={{ background: '#fafafa', padding: 12, borderRadius: 8, marginBottom: 16, lineHeight: '22px' }}>
-                        <div>标签：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
+                        <div>规则分组：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
                         <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
                         <div>入店天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
                         <div>有效接单量：{Number(staffExitPreview?.effectiveAcceptedOrderCount ?? 0)} / {Number(staffExitPreview?.minAcceptedOrdersForDepositRefund ?? 50)} 单</div>

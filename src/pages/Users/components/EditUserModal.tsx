@@ -68,7 +68,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 rating: user.rating,
                 balance: user.balance,
                 needResetPwd: user.needResetPwd,
-                staffTags: Array.isArray(user.staffTags) ? user.staffTags : [],
+                staffTags: Array.isArray(user.staffTags) ? user.staffTags[0] : undefined,
                 workMode: currentWorkMode,
                 offlineJoinedAt: user.offlineJoinedAt ? dayjs(user.offlineJoinedAt) : null,
             });
@@ -92,6 +92,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                 // 统一在前端将员工工作模式字段转换为后端最终格式
                 if (values.userType === 'STAFF') {
+                    payload.staffTags = values.staffTags ? [values.staffTags] : [];
                     payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
                     payload.offlineJoinedAt =
                         payload.workMode === 'OFFLINE' && values.offlineJoinedAt
@@ -271,14 +272,13 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 <Tag color="blue">¥{Number(user?.walletAccount?.depositBalance ?? 0)}</Tag>
                             </Form.Item>
                             <Form.Item
-                                label="员工标签"
+                                label="员工规则分组"
                                 name="staffTags"
                             >
                                 <Select
-                                    mode="multiple"
                                     allowClear
                                     options={staffTagOptions}
-                                    placeholder="请选择员工标签"
+                                    placeholder="请选择员工规则分组"
                                     disabled={staffEditLocked}
                                 />
                             </Form.Item>

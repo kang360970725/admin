@@ -71,6 +71,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
             const payload: any = { ...values };
 
             if (values.userType === 'STAFF') {
+                payload.staffTags = values.staffTags ? [values.staffTags] : [];
                 payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
                 payload.offlineJoinedAt =
                     payload.workMode === 'OFFLINE' && values.offlineJoinedAt
@@ -110,6 +111,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         onOk: async () => {
                             const retryValues = await form.validateFields();
                             const retryPayload: any = { ...retryValues, forceRejoin: true };
+                            retryPayload.staffTags = retryValues.staffTags ? [retryValues.staffTags] : [];
                             retryPayload.workMode = (retryValues.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
                             retryPayload.offlineJoinedAt =
                                 retryPayload.workMode === 'OFFLINE' && retryValues.offlineJoinedAt
@@ -279,15 +281,14 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
                     {isStaff && (
                         <Form.Item
-                            label="员工标签"
+                            label="员工规则分组"
                             name="staffTags"
-                            rules={[{ required: true, message: '员工必须选择员工标签' }]}
+                            rules={[{ required: true, message: '员工必须选择员工规则分组' }]}
                         >
                             <Select
-                                mode="multiple"
                                 allowClear
                                 options={staffTagOptions}
-                                placeholder="请选择员工标签"
+                                placeholder="请选择员工规则分组"
                             />
                         </Form.Item>
                     )}

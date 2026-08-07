@@ -404,7 +404,7 @@ function formatConfigValue(row: SystemConfigItem) {
       const parsed = parseStaffRuleEngineConfig(row);
       return `标签 ${parsed.tags.length} 个，规则 ${parsed.rules.length} 条`;
     } catch {
-      return '员工标签与提现/退店规则配置';
+      return '员工规则分组与提现/退店规则配置';
     }
   }
   const raw = String(row.value ?? '');
@@ -729,8 +729,8 @@ const SystemConfigsPage: React.FC = () => {
                       type="info"
                       showIcon
                       style={{ marginBottom: 16 }}
-                      message="这里维护员工标签规则"
-                      description="默认规则用于未配置标签、未命中标签规则的员工；下方每条标签规则为一对一绑定，不再支持一个规则关联多个标签。"
+                      message="这里维护员工规则分组"
+                      description="默认规则用于未配置或未命中规则分组的员工；下方每条分组规则为一对一绑定，员工资料中只能选择一个规则分组。"
                     />
 
                     <Card size="small" title="默认规则" style={{ marginBottom: 16 }}>
@@ -802,7 +802,7 @@ const SystemConfigsPage: React.FC = () => {
                       </Space>
                     </Card>
 
-                    <Card size="small" title="标签规则">
+                    <Card size="small" title="分组规则">
                       <Form.List name={['staffRuleEngine', 'rules']}>
                         {(fields, { add, remove }) => (
                           <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -817,16 +817,16 @@ const SystemConfigsPage: React.FC = () => {
                                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                                   <Space size={16} wrap>
                                     <Form.Item
-                                      label="标签名称"
+                                      label="分组名称"
                                       name={[field.name, 'tagName']}
-                                      rules={[{ required: true, message: '请输入标签名称' }]}
+                                      rules={[{ required: true, message: '请输入分组名称' }]}
                                     >
                                       <Input placeholder="例如：线上高端、大神、金牌陪玩" />
                                     </Form.Item>
                                     <Form.Item
-                                      label="标签编码"
+                                      label="分组编码"
                                       name={[field.name, 'tagCode']}
-                                      rules={[{ required: true, message: '请输入标签编码' }]}
+                                      rules={[{ required: true, message: '请输入分组编码' }]}
                                       extra="建议使用英文字母或拼音缩写，系统会自动转成小写。"
                                     >
                                       <Input placeholder="例如：vip_online / high_rank" />
@@ -911,7 +911,7 @@ const SystemConfigsPage: React.FC = () => {
                               </Card>
                             ))}
                             <Button onClick={() => add({ enabled: true, sort: fields.length + 1, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, firstWithdrawMinAcceptedDays: 15, quitCoolingDays: 0, depositForfeitDays: 0, dormantFreezeDays: 7, settlementFreezeExperienceDays: 3, settlementFreezeRegularDays: 7 })}>
-                              新增标签规则
+                              新增分组规则
                             </Button>
                           </Space>
                         )}
