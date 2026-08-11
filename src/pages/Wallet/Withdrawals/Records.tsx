@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Tag, Space, Typography, Card, Statistic, Row, Col, Table } from 'antd';
+import { Button, message, Popconfirm, Tag, Space, Typography, Card, Statistic, Row, Col, Table } from 'antd';
 import type { ActionType, ProFormInstance } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
+    cancelWithdrawal,
     postWithdrawalsList,
     postWithdrawalsReconcileSummary,
     type WalletWithdrawalRequest,
@@ -25,9 +26,11 @@ const renderStatusTag = (s: any) => {
     if (s === 'PAYING') return <Tag color="warning">打款中</Tag>;
     if (s === 'PAID') return <Tag color="success">已打款</Tag>;
     if (s === 'FAILED') return <Tag color="error">打款失败</Tag>;
-    if (s === 'CANCELED') return <Tag>已取消</Tag>;
+    if (s === 'CANCELED') return <Tag>已废除</Tag>;
     return <Tag>{String(s || '-')}</Tag>;
 };
+
+const canCancelWithdrawal = (status: any) => !['PAID', 'REJECTED', 'CANCELED'].includes(String(status || ''));
 
 // ✅ 返回 dayjs 范围：startOfMonth 00:00:00 ~ endOfMonth 23:59:59
 const getMonthRange = (opts: { offsetMonthsStart?: number; monthsCount?: number }) => {
@@ -166,7 +169,7 @@ const WithdrawalRecords: React.FC = () => {
                 PAYING: { text: '打款中' },
                 PAID: { text: '已打款' },
                 FAILED: { text: '打款失败' },
-                CANCELED: { text: '已取消' },
+                CANCELED: { text: '已废除' },
             },
             render: (_: any, row: any) => renderStatusTag(row.status),
         },
@@ -185,6 +188,36 @@ const WithdrawalRecords: React.FC = () => {
             render: (_: any, row: any) => {
                 const v = row?.reviewTime || row?.reviewedAt;
                 return v ? dayjs(v).format('YYYY-MM-DD HH:mm:ss') : '-';
+            },
+        },
+        {
+            title: '操作',
+            valueType: 'option',
+            width: 120,
+            render: (_: any, row: any) => {
+                if (!canCancelWithdrawal(row.status)) return null;
+                return (
+                    <Popconfirm
+                        title="废除该提现申请？"
+                        description="将申请单置为已废除；如仍存在提现冻结，会同步释放回可用余额。"
+                        okText="确认废除"
+                        cancelText="取消"
+                        onConfirm={async () => {
+                            try {
+                                await cancelWithdrawal({
+                                    requestId: Number(row.id),
+                                    remark: '管理员在提现记录页废除异常提现申请',
+                                });
+                                message.success('提现申请已废除');
+                                actionRef.current?.reload();
+                            } catch (e: any) {
+                                message.error(e?.data?.message || e?.response?.data?.message || e?.message || '废除失败');
+                            }
+                        }}
+                    >
+                        <Button danger size="small">废除</Button>
+                    </Popconfirm>
+                );
             },
         },
 

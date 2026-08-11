@@ -53,6 +53,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewGameProjectManagement: has('system:game-project:page'),
     canViewSystemConfigs: has('system:configs:page') || hasLegacySystemAdmin,
     canViewMiniappHomeConfig: has('miniapp:home:page') || hasLegacySystemAdmin,
+    canViewMiniappCustomerServiceConfig: has('miniapp:customer-service:page') || hasLegacySystemAdmin,
     canViewMiniappProtocols: has('miniapp:protocols:page') || hasLegacySystemAdmin,
     canViewAppVersions: has('system:app-versions:page') || hasLegacySystemAdmin,
     canViewAnnouncements: has('system:announcements:page') || hasLegacySystemAdmin,
@@ -103,7 +104,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canEditRating: isSuperAdmin,
     canDeleteRating: isSuperAdmin,
 
-    // 陪玩中心
+    // 服务者中心
     canViewMyOrders: has('staff:my-orders:page') && isDispatchEligibleStaff,
     canViewWorkbench: has('staff:workbench:page') && isDispatchEligibleStaff,
     canViewStaffQuestionnaires: (has('staff:questionnaires:page') || has('staff:workbench:page')) && isDispatchEligibleStaff,
@@ -112,10 +113,12 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewOrdersList: has('orders:list:page'),
     canViewOrderDetail: has('orders:detail:page'),
     canViewOrderComplaints: has('orders:complaints:page') || has('orders:list:page'),
+    canViewRenewalLeaderboard: has('orders:list:page'),
     canViewSettlementExperience: has('settlements:experience:page'),
     canViewSettlementMonthly: has('settlements:monthly:page'),
 
-    canViewCSWorkbench: has('orders:workbench:page') || has('orders:list:page'),
+    canViewCSWorkbench: has('orders:workbench:page') || has('orders:list:page') || has('service:online-board:page'),
+    canViewServiceOnlineBoard: has('service:online-board:page') || has('orders:workbench:page'),
 
     canViewWalletOverview,
     canViewWalletMemberLevels: has('wallet:member-levels:page') || has('wallet:withdrawals:page'),

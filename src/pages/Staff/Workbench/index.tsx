@@ -1002,7 +1002,7 @@ const WorkbenchPage: React.FC = () => {
     };
 
     return (
-        <PageContainer title="打手工作台" loading={false}>
+        <PageContainer title="服务者工作台" loading={false}>
             {/* ✅ 移动端：收窄边距，避免两侧过宽 */}
             <div className="bc-workbench-wrap">
                 <div

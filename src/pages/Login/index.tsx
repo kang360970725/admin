@@ -225,7 +225,6 @@ export default function LoginPage() {
                         passwordCipher,
                         remember: true,
                     }));
-                    localStorage.removeItem(REMEMBER_SECRET_KEY);
                 } else {
                     localStorage.setItem(REMEMBER_LOGIN_KEY, JSON.stringify({
                         mode: 'plain',
@@ -355,7 +354,7 @@ export default function LoginPage() {
                                 onChange={(e) => setRememberCredentials(e.target.checked)}
                                 style={{color: 'rgba(255,255,255,0.72)'}}
                             >
-                                记住账号密码
+                                记住登录信息
                             </Checkbox>
                         </div>
 
@@ -436,7 +435,7 @@ export default function LoginPage() {
                                 onChange={(e) => setRememberCredentials(e.target.checked)}
                                 style={{color: 'rgba(255,255,255,0.72)'}}
                             >
-                                记住账号密码
+                                记住登录信息
                             </Checkbox>
                             </div>
 

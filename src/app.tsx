@@ -285,7 +285,7 @@ export async function getInitialState(): Promise<{
 export const layout: RuntimeConfig['layout'] = (props: any) => {
     const { location } = props || {};
     const pathname = location?.pathname || window.location.pathname;
-    const isMobileShell = pathname.startsWith('/m');
+    const isMobileShell = pathname === '/m' || pathname.startsWith('/m/');
     const isMobile = useIsMobile(768);
     const [announcementOpen, setAnnouncementOpen] = React.useState(false);
     const [announcementList, setAnnouncementList] = React.useState<any[]>([]);
@@ -678,23 +678,23 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         title: '蓝猫陪玩管理系统',
         collapsible: false,
 
-        // ✅ 关键：移动端隐藏 ProLayout 外壳
-        menuRender: isMobile ? false : undefined,
-        menuHeaderRender: isMobile ? false : undefined,
-        headerRender: isMobile ? false : undefined,
-        footerRender: isMobile ? false : undefined,
-        collapsedButtonRender: isMobile ? false : undefined,
-        siderWidth: isMobile ? 0 : undefined,
-        pageTitleRender: isMobile ? false : undefined,
+        // ✅ /m/* 仍走纯内容；普通后台页面在移动端保留 ProLayout 顶部菜单入口，避免竖屏无菜单。
+        menuRender: isMobileShell ? false : undefined,
+        menuHeaderRender: isMobileShell ? false : undefined,
+        headerRender: isMobileShell ? false : undefined,
+        footerRender: isMobileShell ? false : undefined,
+        collapsedButtonRender: isMobileShell ? false : undefined,
+        siderWidth: isMobileShell ? 0 : undefined,
+        pageTitleRender: isMobileShell ? false : undefined,
 
         // ✅ 关键：移动端去掉内容区域 padding，让页面成为“纯内容”
-        contentStyle: isMobile ? { padding: 0, margin: 0 } : undefined,
+        contentStyle: isMobileShell ? { padding: 0, margin: 0 } : undefined,
 
         // ✅ pure 模式（可选，支持则更干净）
-        pure: isMobile ? true : undefined,
+        pure: isMobileShell ? true : undefined,
 
         menuFooterRender: (props: any) => {
-            if (isMobile) return null;
+            if (isMobileShell) return null;
             const collapsed = Boolean(props?.collapsed);
             const name = getDisplayName(currentUser);
             const levelText = getLevelText(currentUser);
@@ -874,7 +874,12 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         onPageChange: ({ location }: any) => {
             const token = localStorage.getItem('token');
             const path = window.location.pathname;
-            const allowAnonymous = path === '/login' || path === '/reset-password';
+            const allowAnonymous =
+                path === '/login' ||
+                path === '/reset-password' ||
+                path === '/menu' ||
+                path.startsWith('/menu/') ||
+                path === '/chest-event';
 
             if (!token && !allowAnonymous) {
                 window.location.href = '/login';
@@ -882,10 +887,7 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
 
             const pathname = location?.pathname || window.location.pathname;
 
-            const isMobileRoute =
-                pathname.startsWith('/workbench') ||
-                pathname.startsWith('/orders/') || // 订单详情
-                pathname.startsWith('/m/'); // 如果你后面有 m 端路由
+            const isMobileRoute = pathname === '/m' || pathname.startsWith('/m/');
 
             const cls = 'bc-mobile-fullscreen';
             if (isMobileRoute) {
@@ -1132,8 +1134,13 @@ export const request: RuntimeConfig['request'] = {
         errorHandler: (error: any) => {
             const status = error?.response?.status;
             const data = error?.data; // umi-request 常见在这里
+            const isPublicMenu = isPublicMenuPath(window.location.pathname);
 
             if (status === 401) {
+                if (isPublicMenu) {
+                    message.error(data?.message || '公开菜单加载失败，请稍后重试');
+                    return;
+                }
                 message.error(data?.message || '登录已过期，请重新登录');
                 doLogout();
                 return;
@@ -1159,6 +1166,10 @@ export const request: RuntimeConfig['request'] = {
                 }
 
                 // 其他 403：最简单——进 403 路由（Layout 仍然保留）
+                if (isPublicMenu) {
+                    message.error(msg);
+                    return;
+                }
                 message.error(msg);
                 history.push(`/403?code=${encodeURIComponent(code)}&msg=${encodeURIComponent(msg)}`);
                 return;

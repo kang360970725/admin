@@ -99,7 +99,7 @@ export default function WelcomePage() {
                         <div style={{ marginTop: 8 }}>
                             <Spin />
                             <div style={{ marginTop: 10, color: 'rgba(0,0,0,0.65)' }}>
-                                正在进入{isPlayer ? '打手工作台' : '客服工作台'}…
+                                正在进入{isPlayer ? '服务者工作台' : '服务者在线看板'}…
                             </div>
                         </div>
                     ) : (

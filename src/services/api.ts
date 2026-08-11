@@ -457,6 +457,13 @@ export async function createPermission(data: any) {
     });
 }
 
+export async function updatePermission(id: number, data: any) {
+    return request(`${API_BASE}/permissions/${id}`, {
+        method: 'PATCH',
+        data,
+    });
+}
+
 export async function deletePermission(id: number) {
     return request(`${API_BASE}/permissions/${id}`, {
         method: 'DELETE',
@@ -654,6 +661,20 @@ export async function getOrders(data: any) {
     });
 }
 
+export async function getRenewalLeaderboard(data: {
+    dimension?: 'DAY' | 'WEEK' | 'MONTH' | string;
+    startAt?: string;
+    endAt?: string;
+    keyword?: string;
+    page?: number;
+    limit?: number;
+}) {
+    return request(`${API_BASE}/orders/renewals/leaderboard`, {
+        method: 'POST',
+        data,
+    });
+}
+
 /** 订单详情：POST /orders/detail */
 export async function getOrderDetail(id: number) {
     return request(`${API_BASE}/orders/detail`, {
@@ -721,7 +742,7 @@ export async function rollbackDispatchToArchived(dispatchId: number, data?: { re
     });
 }
 
-/** 我的接单记录：POST /orders/my-dispatches */
+/** 我的服务记录：POST /orders/my-dispatches */
 // export async function getMyDispatches(data: any) {
 //     return request(`${API_BASE}/orders/my-dispatches`, {
 //         method: 'POST',
@@ -764,6 +785,12 @@ export interface PublicMenuDetail extends PublicMenuItem {
     updatedAt?: string;
 }
 
+export type MiniappCustomerServiceConfig = {
+    consultText: string;
+    qrCodeUrl?: string;
+    remark?: string;
+};
+
 export async function postPublicMenuList(data: {
     keyword?: string;
     gameType?: string;
@@ -796,6 +823,14 @@ export async function postPublicMenuList(data: {
 export async function getPublicMenuDetail(id: number) {
     return request<PublicMenuDetail>(`${API_BASE}/game-project/public/menu/${id}`, {
         method: 'GET',
+        skipErrorHandler: true,
+    });
+}
+
+export async function getPublicMiniappCustomerServiceConfig() {
+    return request<MiniappCustomerServiceConfig>(`${API_BASE}/system-configs/miniapp/customer-service/public/get`, {
+        method: 'POST',
+        data: {},
         skipErrorHandler: true,
     });
 }
@@ -928,7 +963,7 @@ export async function markSettlementsPaid(data: { settlementIds: number[]; remar
         data,
     });
 }
-// 我的接单记录（陪玩端）
+// 我的服务记录（服务者端）
 export async function getMyDispatches(data: { page?: number; limit?: number; status?: string,mode?: string }) {
     return request(`${API_BASE}/orders/my-dispatches`, {
         method: 'POST',
@@ -1503,6 +1538,16 @@ export async function reviewWithdrawal(data: {
     });
 }
 
+export async function cancelWithdrawal(data: {
+    requestId: number;
+    remark?: string;
+}) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/cancel`, {
+        method: 'POST',
+        data,
+    });
+}
+
 // ---------------------- Withdrawal (提现) API - 扩展：list/mine/apply ----------------------
 
 /**
@@ -1745,6 +1790,20 @@ export async function getMiniappHomeConfig() {
 
 export async function upsertMiniappHomeConfig(config: MiniappHomeConfig) {
     return request(`${API_BASE}/system-configs/miniapp/home-config/upsert`, {
+        method: 'POST',
+        data: { config },
+    });
+}
+
+export async function getMiniappCustomerServiceConfig() {
+    return request<MiniappCustomerServiceConfig>(`${API_BASE}/system-configs/miniapp/customer-service/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertMiniappCustomerServiceConfig(config: MiniappCustomerServiceConfig) {
+    return request(`${API_BASE}/system-configs/miniapp/customer-service/upsert`, {
         method: 'POST',
         data: { config },
     });

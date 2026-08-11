@@ -90,7 +90,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 }
                 const payload: any = { ...values };
 
-                // 统一在前端将员工工作模式字段转换为后端最终格式
+                // 统一在前端将服务者工作模式字段转换为后端最终格式
                 if (values.userType === 'STAFF') {
                     payload.staffTags = values.staffTags ? [values.staffTags] : [];
                     payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
@@ -160,7 +160,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         >
                             <Select placeholder="请选择用户身份" onChange={handleUserTypeChange} disabled={staffEditLocked}>
                                 <Option value="REGISTERED_USER">注册用户</Option>
-                                <Option value="STAFF">员工</Option>
+                                <Option value="STAFF">陪玩服务者</Option>
                                 <Option value="CUSTOMER_SERVICE">客服</Option>
                                 <Option value="OPERATION">运营</Option>
                                 <Option value="FINANCE">财务</Option>
@@ -220,9 +220,9 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
                     {isStaff ? (
                         <Form.Item
-                            label="员工评级"
+                            label="服务者评级"
                             name="rating"
-                            rules={[{ required: true, message: '员工必须设置评级' }]}
+                            rules={[{ required: true, message: '服务者必须设置评级' }]}
                         >
                             <Select placeholder="请选择评级" style={{ width: '100%' }} disabled={staffEditLocked}>
                                 {availableRatings.map((rating) => (
@@ -257,28 +257,26 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                     {isStaff && (
                         <>
                             <Form.Item
-                                label="员工在职状态"
+                                label="服务状态"
                                 name="staffEmploymentStatus"
-                                rules={[{ required: true, message: '请选择员工在职状态' }]}
+                                rules={[{ required: true, message: '请选择服务状态' }]}
                             >
-                                <Select placeholder="请选择员工在职状态">
+                                <Select placeholder="请选择服务状态">
                                     <Option value="ACTIVE">正常</Option>
                                     <Option value="FROZEN">冻结</Option>
-                                    {isSuperAdmin ? <Option value="EXITED">退店</Option> : null}
-                                    {isSuperAdmin ? <Option value="BLACKLISTED">黑名单</Option> : null}
                                 </Select>
                             </Form.Item>
                             <Form.Item label="当前已交押金">
                                 <Tag color="blue">¥{Number(user?.walletAccount?.depositBalance ?? 0)}</Tag>
                             </Form.Item>
                             <Form.Item
-                                label="员工规则分组"
+                                label="服务者规则分组"
                                 name="staffTags"
                             >
                                 <Select
                                     allowClear
                                     options={staffTagOptions}
-                                    placeholder="请选择员工规则分组"
+                                    placeholder="请选择服务者规则分组"
                                     disabled={staffEditLocked}
                                 />
                             </Form.Item>
@@ -329,9 +327,9 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 {isStaff && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                         <Form.Item
-                            label="员工工作模式"
+                            label="服务者工作模式"
                             name="workMode"
-                            rules={[{ required: true, message: '请选择员工工作模式' }]}
+                            rules={[{ required: true, message: '请选择服务者工作模式' }]}
                         >
                             <Select onChange={handleWorkModeChange} disabled={staffEditLocked}>
                                 <Option value="ONLINE">线上</Option>
@@ -347,7 +345,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                     validator: async (_, value) => {
                                         const mode = form.getFieldValue('workMode');
                                         if (mode === 'OFFLINE' && !value) {
-                                            throw new Error('线下员工必须填写入职时间');
+                                            throw new Error('线下服务者必须填写入驻时间');
                                         }
                                     },
                                 },
@@ -396,7 +394,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                     <div style={{ color: '#666', fontSize: 12, lineHeight: '20px' }}>
                         <div>当前规则押金：¥{Number(user?.matchedDepositAmount ?? user?.depositLimit ?? 0)}</div>
                         <div>首次提现限制：¥{Number(user?.matchedFirstWithdrawMinBalance ?? 1000)}</div>
-                        <div>退店冷却期：{Number(user?.matchedQuitCoolingDays ?? 180)} 天</div>
+                        <div>退出平台冷却期：{Number(user?.matchedQuitCoolingDays ?? 180)} 天</div>
                     </div>
                 )}
             </Form>

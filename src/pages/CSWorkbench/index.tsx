@@ -446,7 +446,7 @@ export default function CSWorkbenchPage() {
             paidAmount: 0,
             settlementAmount: 0,
             playerIds: [],
-            remark: '客服工作台创建',
+            remark: '服务者在线看板创建',
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -470,7 +470,7 @@ export default function CSWorkbenchPage() {
         setPlayerKeywordDispatch('');
         dispatchForm.resetFields();
         dispatchForm.setFieldsValue({
-            remark: '客服工作台派单',
+            remark: '服务者在线看板派单',
             playerIds: [],
         });
     };
@@ -493,7 +493,7 @@ export default function CSWorkbenchPage() {
             setDispatching(true);
             await assignDispatch(order.id, {
                 playerIds,
-                remark: values.remark?.trim() || '客服工作台派单',
+                remark: values.remark?.trim() || '服务者在线看板派单',
             });
 
             message.success('派单成功');
@@ -1125,7 +1125,7 @@ export default function CSWorkbenchPage() {
                                         paidAmount: 0,
                                         settlementAmount: 0,
                                         playerIds: [],
-                                        remark: '客服工作台创建',
+                                        remark: '服务者在线看板创建',
                                     });
                                     setProjectKeyword('');
                                     setPlayerKeywordCreate('');
@@ -1518,12 +1518,22 @@ export default function CSWorkbenchPage() {
     );
 
     const DesktopPanel = (
-        <PageContainer title="客服工作台">
+        <PageContainer title="服务者在线看板">
             <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 960, margin: '0 auto' }}>
                 <Card
-                    title="打手在线管理"
+                    title="服务者在线管理"
                     extra={
                         <Space>
+                            {canCreateWorkbenchOrder ? (
+                                <Button
+                                    type="primary"
+                                    icon={<PlusOutlined />}
+                                    style={{ borderRadius: 12 }}
+                                    onClick={() => setCreateOpen(true)}
+                                >
+                                    快捷发单
+                                </Button>
+                            ) : null}
                             <Button
                                 icon={<ReloadOutlined />}
                                 onClick={() => void fetchOnlinePlayers(onlinePlayerKeyword, onlinePlayerPage)}
@@ -1553,7 +1563,7 @@ export default function CSWorkbenchPage() {
                             <Col xs={24} md={12}>
                                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                                     <Text type="secondary">
-                                        在线 {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => p.workMode === 'ONLINE').length : 0} / 接单中{' '}
+                                        在线 {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => p.workMode === 'ONLINE').length : 0} / 服务中{' '}
                                         {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => String(p.workStatus || '').toUpperCase() === 'WORKING').length : 0} / 总数{' '}
                                         {Array.isArray(onlinePlayers) ? onlinePlayers.length : 0}
                                     </Text>
@@ -1624,7 +1634,7 @@ export default function CSWorkbenchPage() {
 
                         {!visibleOnlinePlayers.length ? (
                             <Card size="small" style={{ borderRadius: 14, border: '1px dashed rgba(0,0,0,0.12)' }}>
-                                <Text type="secondary">暂无打手在线数据。</Text>
+                                <Text type="secondary">暂无服务者在线数据。</Text>
                             </Card>
                         ) : null}
 
@@ -1647,15 +1657,6 @@ export default function CSWorkbenchPage() {
                     </Space>
                 </Card>
 
-                <Card style={{ borderRadius: 16, maxWidth: 720, margin: '0 auto' }}>
-                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                        {canCreateWorkbenchOrder ? (
-                            <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }} onClick={() => setCreateOpen(true)}>
-                                快捷发单
-                            </Button>
-                        ) : null}
-                    </Space>
-                </Card>
             </Space>
 
             <OrderUpsertModal
@@ -1700,7 +1701,7 @@ export default function CSWorkbenchPage() {
 
     return (
         isMobile ? (
-            <PageContainer title="客服工作台" subTitle="手机端创建订单 / 快速派单">
+            <PageContainer title="服务者在线看板" subTitle="手机端创建订单 / 快速派单">
                 <div style={{ maxWidth: 980, margin: '0 auto' }}>
                     <Tabs
                         activeKey={tab}

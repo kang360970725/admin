@@ -27,6 +27,7 @@
 
 - 后台页面展示金额或预计金额时，必须以后端资金服务为准，前端预览只能作为展示。
 - 员工状态、退店、提现 UI 改动必须同时检查后端 `users`、`wallet`、`wallet-withdrawals`、`offline-fee` 和 `src/access.ts`。
+- 已讨论但暂缓实现的中长期方案记录在后端 `../server/docs/DEVELOPMENT_PLAN.md`；当前自动到账提现方案仅作为后续开发计划，现阶段先继续其他功能和 BUG 修复。
 - 订单/工作台改动必须同时检查后端 `orders`、`wallet`、`performance`、`finance`、`notifications`，以及小程序订单页。
 - 小程序内容配置改动必须检查后端 `system-config`、`mini/home`、`game-project`，以及 `client-miniapp` 页面。
 - `src/services/api.ts` 已经包含很多业务域，也可能有现存未提交的 questionnaire 相关内容。改接口类型时要仔细看 diff。
@@ -40,7 +41,7 @@
 | `/login` | `pages/Login` | `auth/login` |
 | `/reset-password` | `pages/ResetPassword` | `users/me/password`、用户更新 |
 | `/welcome` | `pages/Welcome` | 当前用户信息 |
-| `/m/workbench`、`/workbench` | `pages/CSWorkbench` | 订单创建/列表/派单/存单/结单、打手选项、商品选项 |
+| `/m/workbench`、`/workbench` | `pages/CSWorkbench` | 服务者在线看板、订单创建/列表/派单/存单/结单、服务者选项、商品选项 |
 | `/m/orders`、`/orders` | `pages/Orders` | `orders/list`、创建/更新/删除/退款/标记支付、派单动作 |
 | `/orders/:id` | `pages/Orders/Detail` | 订单详情、派单参与者/进度、结算调整/修复、退款、客诉 |
 | `/orders/complaints` | `pages/Orders/Complaints` | 客诉工单审核/退款 |
@@ -48,7 +49,7 @@
 | `/staff/workbench` | `pages/Staff/Workbench` | 打手接单/存单/结单/拒单、工作状态 |
 | `/staff/questionnaires` | `pages/Staff/Questionnaires` | 我的问卷列表/详情/提交 |
 | `/users/members` | `pages/Users` 会员场景 | 用户 CRUD、会员充值、游戏名片、优惠券 |
-| `/users/staff` | `pages/Users` 打手场景 | 用户 CRUD、退店/清退、评级、规则、钱包统计 |
+| `/users/staff` | `pages/Users` 服务者场景 | 服务者 CRUD、退出平台/清退、评级、规则、钱包统计；移动端竖屏使用卡片列表 |
 | `/users/internal` | `pages/Users` 后台人员场景 | 用户 CRUD、角色 |
 | `/wallet/overview`、`/m/wallet` | `pages/Wallet/Overview` + `Withdrawals/Mine` | 钱包账户、我的提现/申请/提现信息、二维码上传、线下费用校验 |
 | `/wallet/transactions` | `pages/Wallet/Transactions` | 钱包流水、枚举 |
@@ -74,6 +75,7 @@
 | `/system/duty-cs` | `pages/System/DutyCsSchedules` | 当班客服、请假 |
 | `/system/notification-test-push` | `pages/System/NotificationTestPush` | 实时通知测试推送 |
 | `/miniapp-config/home` | `pages/System/MiniappHomeConfig` | 小程序首页配置、候选项、发布 |
+| `/miniapp-config/customer-service` | `pages/System/MiniappCustomerServiceConfig` | 客服二维码配置、公开菜单无图详情咨询弹窗 |
 | `/miniapp-config/protocols` | `pages/System/MiniappProtocols` | 小程序协议分类/协议、公开预览 |
 | `/ops/coupons` | `pages/System/Coupons` | 优惠券模板、发券、用户券 |
 | `/ops/chest-demo`、`/m/chest`、`/chest-event` | 宝盒相关页面 | 宝盒 admin/my/public API |
@@ -92,11 +94,12 @@
 - 当前页面级权限已经按新增岗位拆分为细分 key；历史粗权限如 `system:role:page`、`finance:records:list` 只作为兼容兜底，不应再作为新页面默认权限。
 - 权限管理和角色配置使用后端 `Permission.parentId` 形成权限树；`menu:*` 是目录节点，仅用于呈现菜单位置，角色保存时只保存真实权限节点。
 - 新增页面时必须让权限 key 同时出现在 `config/config.ts` 路由 access、`src/access.ts`、后端 `prisma/seed.ts` 的树形 `parentKey` 和对应 controller 的 `@Permissions` 中。
-- 用户管理入口严格按 `users:member:page`、`users:staff:page`、`users:internal:page` 展示；普通 `ADMIN` 不因身份自动看到会员/后台人员。“全部用户”入口隐藏。用户管理现有按钮已改为可配置权限，并挂在对应页面节点下：会员页使用 `users:member:*:button`，打手页使用 `users:staff:*:button`，后台人员页使用 `users:internal:*:button`。
-- 页面权限只控制入口；按钮权限控制动作。角色保存时后端会根据按钮权限自动补齐父级页面权限，避免“只给按钮导致页面入口丢失”。打手管理顶部员工资金统计属于敏感汇总，仅 `SUPER_ADMIN` 或拥有 `users:staff:wallet-stats:button` 的角色展示和加载。
-- 打手管理新增员工使用安全模式：新增弹窗默认并锁定员工身份，员工规则分组必选且仅支持单选，余额不可编辑；后端非超管创建员工时固定绑定默认角色 `id=3/name=陪玩/description=俱乐部陪玩`。打手编辑时余额不可编辑；非超管只允许修改员工在职状态，且仅限正常/冻结，退店和黑名单必须走独立退店/清退流程。为降低迁移风险，当前接口/数据库兼容字段仍为 `staffTags`，但业务语义是“员工规则分组”，不要用于后续真正的员工标签体系。
+- 小程序功能配置下“客服二维码配置”使用权限 `miniapp:customer-service:page`；公开菜单 `/menu` 无图片商品/协议详情会读取公开客服配置，弹窗展示咨询文案和二维码。公开客服配置接口必须保持匿名访问，避免 `/menu` 401。
+- 用户管理入口严格按 `users:member:page`、`users:staff:page`、`users:internal:page` 展示；普通 `ADMIN` 不因身份自动看到会员/后台人员。“全部用户”入口隐藏。用户管理现有按钮已改为可配置权限，并挂在对应页面节点下：会员页使用 `users:member:*:button`，服务者页使用 `users:staff:*:button`，后台人员页使用 `users:internal:*:button`。
+- 页面权限只控制入口；按钮权限控制动作。角色保存时后端会根据按钮权限自动补齐父级页面权限，避免“只给按钮导致页面入口丢失”。服务者管理顶部资金统计属于敏感汇总，仅 `SUPER_ADMIN` 或拥有 `users:staff:wallet-stats:button` 的角色展示和加载。
+- 服务者管理新增服务者使用安全模式：新增弹窗默认并锁定服务者身份，服务者规则分组必选且仅支持单选，余额不可编辑；后端非超管创建服务者时固定绑定默认角色 `id=3/name=陪玩/description=俱乐部陪玩`。服务者编辑时余额不可编辑；非超管只允许修改服务状态，且仅限正常/冻结，退出平台和限制服务必须走独立退出/清退流程。为降低迁移风险，当前接口/数据库兼容字段仍为 `staffTags`，但业务语义是“服务者规则分组”，不要用于后续真正的员工标签体系。
 - 员工评级下拉来自 `GET /users/ratings/available`，这是打手新增、编辑、升降级弹窗的基础数据依赖；允许用户管理页、打手新增/编辑/升降级按钮或 `staff-ratings:page` 读取，前端不应把“能选择评级”绑定成必须拥有评级管理页面权限。
-- 订单模块按钮级权限已落地到对应页面节点：客服工作台创建订单 `orders:workbench:create:button`，订单列表创建/删除 `orders:list:create:button`、`orders:list:delete:button`；订单详情业务按钮统一挂在 `orders:detail:page` 下。详情页刷新、返回、钱包/订单导航不做按钮权限。
+- 服务者在线看板使用独立页面权限 `service:online-board:page`；快捷发单按钮继续使用 `orders:workbench:create:button`，并挂在服务者在线看板页面节点下。订单列表创建/删除使用 `orders:list:create:button`、`orders:list:delete:button`；订单详情业务按钮统一挂在 `orders:detail:page` 下。详情页刷新、返回、钱包/订单导航不做按钮权限。
 - 超级管理员语义已统一：`User.userType = SUPER_ADMIN` 或 `Role.name/roleCode = SUPER_ADMIN` 都视为超管；`FINANCE_ADMIN` 已由后端 migration `20260803033000_fix_super_admin_finance_role` 拆分/重命名为 `FINANCE_MANAGER`（财务管理员）。`FINANCE_MANAGER` 不再全局放行，必须依赖显式权限。
 - 保证金对账入口在“钱包/保证金对账”，权限 key 为 `wallet:deposit-reconciliation:page`；前端入口和后端接口都只认该专用权限，不能用 `wallet:withdrawals:page` 或 `finance:records:list` 兜底。页面用于全局查询员工当前保证金、规则应交、线下手动录入、净变动、退店/黑名单状态。有效保证金口径为员工状态正常/冻结且当前保证金 > 0，无效/需处理包含退店、黑名单或无保证金员工；`MANUAL_DEPOSIT` 表示线下收款手动录入。后端对账统计会合并历史旧表 `WalletDepositTransaction` 与当前表 `wallet_deposit_transactions`。
 
@@ -119,7 +122,7 @@
 - 同一业务页存在多个主数据视图时，使用 `Tabs` 分开，例如“配置 / 账单 / 记录”；不要上下堆叠多个主表格。
 - 页面首屏保留当前任务的主表或主操作，辅助说明用轻量提示，不要用上下多块大 Card 拉长操作路径。
 
-### 订单 / 客服工作台
+### 订单 / 服务者在线看板
 
 文件：
 
@@ -157,6 +160,7 @@
 - 系统配置页采用“默认规则 + 分组规则”形式：默认规则用于未配置/未命中的员工；每条分组规则内直接维护分组名称、分组编码和规则字段，员工与规则分组一对一绑定，不再先建标签再多选关联规则。底层配置仍兼容 `tags/tagCodes` 字段名，前端展示统一称为“员工规则分组”。
 - `firstWithdrawMinAcceptedDays` 未配置时后端默认 15 天；`dormantFreezeDays` 未配置时后端默认 7 天；结算冻结周期未配置时体验/福袋默认 3 天、普通单默认 7 天。
 - 提现审批驳回允许员工可用余额仍为负，用于把提现冻结释放回可用余额并冲抵线下费用、罚单、设备租赁等欠款；审批通过仍应保持严格余额校验，负余额/异常余额不能通过。
+- 提现记录支持废除异常申请；`CANCELED` 展示为“已废除”。重新入驻清理提现冻结时后端会同步废除关联申请单，避免历史提现单卡住无法审批/驳回。
 
 ### 用户管理
 
@@ -220,7 +224,7 @@
 - 订单回退/客服强制存结单要检查当前派单是否有有效打手：`Orders/Detail.tsx` 会在当前轮无活跃且未拒单参与者时禁用“客服存单/客服结单”；后端 `orders.service.ts` 仍会做最终校验。
 - 后端结算允许跳过历史 `ARCHIVED` 空轮次，但当前 `COMPLETED` 结单轮为空必须失败；前端不要通过隐藏历史轮次来规避后端核算规则。
 - 订单结算收益冻结周期按结算对象逐人匹配员工规则分组，不使用统一全局配置；同一订单中不同结算员工可以拥有不同解冻周期。体验单/福袋读取 `settlementFreezeExperienceDays`，普通单读取 `settlementFreezeRegularDays`，字段缺失或异常时分别兜底 3 天和 7 天。
-- 续单分红在客服确认结单时随正常结算批次处理并到账；确认结单弹窗必须允许把待处理续单置为无效并填写原因。
+- 续单分红在客服确认结单时随正常结算批次处理并到账；确认结单弹窗必须允许把待处理续单置为无效并填写原因。订单管理下提供“续单榜单”，按已结算续单组合统计，支持按日/周/月选择时间窗口。
 - 订单重算/修复工具支持 `invalidateRenewal` 与 `renewalInvalidateReason`，用于将续单置无效并触发已产生分红的冲正；前端预览只能辅助核对，最终以后端返回为准。
 
 ### 小程序配置

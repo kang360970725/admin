@@ -99,7 +99,7 @@ export default defineConfig({
         // 移动端默认入口：工作台
         { path: '/m', redirect: '/m/workbench' },
 
-        // ✅ 移动端客服工作台（创建订单 + 存单/待派/待接）
+        // ✅ 移动端服务者在线看板（创建订单 + 存单/待派/待接）
         { path: '/m/workbench', component: '@/pages/CSWorkbench', access: 'canViewCSWorkbench' },
 
         // ✅ 移动端快速查单：先复用订单列表（你后续可以做轻量页再替换组件）
@@ -185,6 +185,7 @@ export default defineConfig({
       icon: 'AppstoreOutlined',
       routes: [
         { path: '/miniapp-config/home', name: '首页配置', component: '@/pages/System/MiniappHomeConfig', access: 'canViewMiniappHomeConfig' },
+        { path: '/miniapp-config/customer-service', name: '客服二维码配置', component: '@/pages/System/MiniappCustomerServiceConfig', access: 'canViewMiniappCustomerServiceConfig' },
         { path: '/miniapp-config/protocols', name: '协议维护', component: '@/pages/System/MiniappProtocols', access: 'canViewMiniappProtocols' },
       ],
     },
@@ -241,17 +242,17 @@ export default defineConfig({
 
     {
       path: '/staff',
-      name: '陪玩中心',
+      name: '服务者中心',
       icon: 'TeamOutlined',
       routes: [
-        { path: '/staff/my-orders', name: '我的接单记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
-        { path: '/staff/workbench', name: '打手工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
+        { path: '/staff/my-orders', name: '我的服务记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
+        { path: '/staff/workbench', name: '服务者工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
         { path: '/staff/questionnaires', name: '信息采集', component: './Staff/Questionnaires', access: 'canViewStaffQuestionnaires' },
       ],
     },
 
-    // ✅ PC端客服工作台入口保留（后台菜单中可见）
-    { path: '/workbench', name: '客服工作台', icon: 'ThunderboltOutlined', component: '@/pages/CSWorkbench', access: 'canViewCSWorkbench' },
+    // ✅ PC端服务者在线看板入口保留（后台菜单中可见）
+    { path: '/workbench', name: '服务者在线看板', icon: 'ThunderboltOutlined', component: '@/pages/CSWorkbench', access: 'canViewServiceOnlineBoard' },
 
     {
       path: '/orders',
@@ -260,6 +261,7 @@ export default defineConfig({
       access: 'canViewOrdersList',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
+        { path: '/orders/renewal-leaderboard', name: '续单榜单', component: './Orders/RenewalLeaderboard', access: 'canViewRenewalLeaderboard' },
         { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrderComplaints' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
@@ -290,7 +292,7 @@ export default defineConfig({
       routes: [
         { path: '/users', redirect: '/users/members' },
         { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
-        { path: '/users/staff', name: '打手管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
+        { path: '/users/staff', name: '服务者管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
         { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
         { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers', hideInMenu: true },
       ],

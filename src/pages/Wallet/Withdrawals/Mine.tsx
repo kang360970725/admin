@@ -250,7 +250,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 if (s === 'PAYING') return <Tag color="warning">打款中</Tag>;
                 if (s === 'PAID') return <Tag color="success">已打款</Tag>;
                 if (s === 'FAILED') return <Tag color="error">打款失败</Tag>;
-                if (s === 'CANCELED') return <Tag>已取消</Tag>;
+                if (s === 'CANCELED') return <Tag>已废除</Tag>;
                 return <Tag>{row?.statusText || s || '-'}</Tag>;
             },
         },

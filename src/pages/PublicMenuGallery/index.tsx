@@ -1,10 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Carousel, Empty, Image, Skeleton, Space, Tag, Typography, message } from 'antd';
+import { Carousel, Drawer, Empty, Image, Modal, Skeleton, Tag, Typography, message } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
-import { getPublicMenuDetail, listPublicMiniappProtocolsByCategory, postPublicMenuList, type MiniappProtocolItem, type PublicMenuDetail, type PublicMenuItem } from '@/services/api';
+import {
+  getPublicMenuDetail,
+  getPublicMiniappCustomerServiceConfig,
+  listPublicMiniappProtocolsByCategory,
+  postPublicMenuList,
+  type MiniappCustomerServiceConfig,
+  type MiniappProtocolItem,
+  type PublicMenuDetail,
+  type PublicMenuItem,
+} from '@/services/api';
 import './index.less';
 
-const { Text, Title, Paragraph } = Typography;
+const { Title, Paragraph } = Typography;
 const PAGE_SIZE = 8;
 const PLACEHOLDER_IMAGE = '/menu-placeholder.png';
 
@@ -49,6 +58,12 @@ function stripHtml(html: unknown) {
     .replace(/&nbsp;/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function normalizePublicDetailText(value: unknown) {
+  const text = stripHtml(value);
+  const placeholders = new Set(['请输入商品图文详情', '请输入商品图文详情；', '请输入商品图文详情。']);
+  return placeholders.has(text) ? '' : text;
 }
 
 function FilterTuneIcon() {
@@ -97,18 +112,26 @@ export default function PublicMenuGalleryPage() {
   });
   const [previewKind, setPreviewKind] = useState<'product' | 'protocol'>('product');
   const [previewItem, setPreviewItem] = useState<PublicMenuDetail | PublicMenuItem | null>(null);
+  const [productDetailDrawerOpen, setProductDetailDrawerOpen] = useState(false);
+  const [productDetailLoading, setProductDetailLoading] = useState(false);
   const [productPreviewVisible, setProductPreviewVisible] = useState(false);
   const [productPreviewCurrent, setProductPreviewCurrent] = useState(0);
   const [protocolPreviewVisible, setProtocolPreviewVisible] = useState(false);
   const [protocolPreviewCurrent, setProtocolPreviewCurrent] = useState(0);
   const [bannerPreviewVisible, setBannerPreviewVisible] = useState(false);
   const [bannerPreviewSrc, setBannerPreviewSrc] = useState('');
-  const [inlinePreview, setInlinePreview] = useState<{
-    title: string;
-    text: string;
-    kind: 'product' | 'protocol';
-  } | null>(null);
+  const [customerServiceConfig, setCustomerServiceConfig] = useState<MiniappCustomerServiceConfig>({
+    consultText: '详询客服',
+    qrCodeUrl: '',
+  });
+  const [consultModalVisible, setConsultModalVisible] = useState(false);
+  const [consultProductTitle, setConsultProductTitle] = useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const openConsultModal = useCallback((title?: string) => {
+    setConsultProductTitle(normalizeText(title) || '商品详情');
+    setConsultModalVisible(true);
+  }, []);
 
   const loadBannerProtocols = useCallback(async () => {
     setBannerLoading(true);
@@ -131,41 +154,20 @@ export default function PublicMenuGalleryPage() {
 
     setPreviewKind('product');
     setPreviewItem(item || null);
-    setInlinePreview(null);
+    setProductDetailDrawerOpen(true);
+    setProductDetailLoading(true);
 
     try {
       const detail = await getPublicMenuDetail(targetId);
       if (detail) {
         setPreviewItem(detail);
       }
-      const nextDetail = detail || item;
-      const imageList = extractAllImageSrcs((nextDetail as any)?.richContent);
-      if (imageList.length) {
-        setProductPreviewCurrent(0);
-        setProductPreviewVisible(true);
-      } else {
-        const text = stripHtml((nextDetail as any)?.richContent) || normalizeText((nextDetail as any)?.description);
-        setInlinePreview({
-          title: normalizeText((nextDetail as any)?.name) || '商品详情',
-          text: text || '商品详情暂无图片内容',
-          kind: 'product',
-        });
-      }
     } catch {
       if (item) {
         setPreviewItem(item);
-        const imageList = extractAllImageSrcs((item as any)?.richContent);
-        if (imageList.length) {
-          setProductPreviewCurrent(0);
-          setProductPreviewVisible(true);
-        } else {
-          setInlinePreview({
-            title: normalizeText(item.name) || '商品详情',
-            text: stripHtml((item as any)?.richContent) || normalizeText(item.description) || '商品详情暂无图片内容',
-            kind: 'product',
-          });
-        }
       }
+    } finally {
+      setProductDetailLoading(false);
     }
   }, []);
 
@@ -183,17 +185,12 @@ export default function PublicMenuGalleryPage() {
       setPreviewItem(item as any);
       setProtocolPreviewCurrent(0);
       setProtocolPreviewVisible(true);
-      setInlinePreview(null);
       return;
     }
     setPreviewKind('protocol');
     setPreviewItem(item as any);
-    setInlinePreview({
-      title: normalizeText((item as any)?.title) || '协议详情',
-      text: stripHtml((item as any)?.content) || '协议内容暂无图片',
-      kind: 'protocol',
-    });
-  }, []);
+    openConsultModal(normalizeText((item as any)?.title) || '协议详情');
+  }, [openConsultModal]);
 
   const productPreviewImages = useMemo(() => {
     if (previewKind !== 'product' || !previewItem) return [];
@@ -202,9 +199,9 @@ export default function PublicMenuGalleryPage() {
 
   const productPreviewText = useMemo(() => {
     if (previewKind !== 'product' || !previewItem) return '';
-    const richText = stripHtml((previewItem as any)?.richContent);
+    const richText = normalizePublicDetailText((previewItem as any)?.richContent);
     const descText = normalizeText(previewItem.description);
-    return richText || descText;
+    return richText || (descText === '请输入商品图文详情' ? '' : descText);
   }, [previewItem, previewKind]);
 
   const protocolPreviewImages = useMemo(() => {
@@ -251,6 +248,21 @@ export default function PublicMenuGalleryPage() {
 
   useEffect(() => {
     document.title = '蓝猫爽打-服务列表';
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const config = await getPublicMiniappCustomerServiceConfig();
+        setCustomerServiceConfig({
+          consultText: normalizeText(config?.consultText) || '详询客服',
+          qrCodeUrl: normalizeText(config?.qrCodeUrl),
+          remark: normalizeText(config?.remark),
+        });
+      } catch {
+        setCustomerServiceConfig({ consultText: '详询客服', qrCodeUrl: '' });
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -338,12 +350,6 @@ export default function PublicMenuGalleryPage() {
     return () => observer.disconnect();
   }, [hasMore, loadPage, loading, loadingMore, page]);
 
-  const closeInlinePreview = useCallback(() => {
-    setInlinePreview(null);
-    setPreviewItem(null);
-    setPreviewKind('product');
-  }, []);
-
   const getItemHeight = (id?: number) => {
     const heights = [220, 240, 205, 250, 225, 235, 215, 245, 260, 200, 230, 210];
     const idx = Math.abs(Number(id || 0)) % heights.length;
@@ -355,6 +361,21 @@ export default function PublicMenuGalleryPage() {
       <div className="gallery-shell">
         <div className="gallery-body">
           <main className="gallery-main">
+            <section className="gallery-hero">
+              <div>
+                <div className="gallery-hero-eyebrow">BlueCat Service Menu</div>
+                <Title level={3} className="gallery-hero-title">蓝猫服务菜单</Title>
+                <Paragraph className="gallery-hero-desc">
+                  浏览服务项目、价格与下单须知，按分类快速筛选，点击卡片可查看详情。
+                </Paragraph>
+              </div>
+              <div className="gallery-hero-tags">
+                <Tag color="blue">价格透明</Tag>
+                <Tag color="green">服务者撮合</Tag>
+                <Tag color="gold">下单前先看须知</Tag>
+              </div>
+            </section>
+
             <div className="gallery-filter-sticky">
               <div className="gallery-filter-topline">
                 <div className="gallery-filter-scroll hide-scrollbar">
@@ -382,7 +403,7 @@ export default function PublicMenuGalleryPage() {
             {bannerLoading && !bannerItem.length ? <div className="gallery-notice-banner-skeleton" /> : null}
             {!bannerLoading && bannerLoadFailed ? (
               <div className="gallery-notice-banner-empty">
-                <span>Banner 暂无可展示内容</span>
+                <span>暂无下单须知展示</span>
               </div>
             ) : null}
 
@@ -548,17 +569,6 @@ export default function PublicMenuGalleryPage() {
               </div>
             ) : null}
 
-            {inlinePreview ? (
-              <div className="gallery-inline-preview">
-                <div className="gallery-inline-preview-head">
-                  <div className="gallery-inline-preview-title">{inlinePreview.title}</div>
-                  <button type="button" className="gallery-inline-preview-close" onClick={closeInlinePreview}>
-                    <CloseOutlined />
-                  </button>
-                </div>
-                <div className="gallery-inline-preview-text">{inlinePreview.text}</div>
-              </div>
-            ) : null}
           </main>
         </div>
       </div>
@@ -657,7 +667,6 @@ export default function PublicMenuGalleryPage() {
               setProductPreviewVisible(visible);
               if (!visible) {
                 setProductPreviewCurrent(0);
-                setPreviewItem(null);
                 setPreviewKind('product');
               }
             },
@@ -716,6 +725,151 @@ export default function PublicMenuGalleryPage() {
           }}
         />
       ) : null}
+
+      <Drawer
+        placement="bottom"
+        open={productDetailDrawerOpen}
+        height="82vh"
+        className="gallery-product-drawer"
+        title={null}
+        closable={false}
+        destroyOnClose={false}
+        onClose={() => {
+          setProductDetailDrawerOpen(false);
+          setProductDetailLoading(false);
+        }}
+      >
+        <div className="gallery-product-detail">
+          <div className="gallery-product-detail-handle" />
+          <div className="gallery-product-detail-head">
+            <div className="gallery-product-detail-main">
+              <div className="gallery-product-detail-title">
+                {normalizeText(previewItem?.name) || '商品详情'}
+              </div>
+              <div className="gallery-product-detail-tags">
+                <Tag color="blue">
+                  {labelOrDefault(
+                    (previewItem as any)?.categoryName ||
+                      (previewItem as any)?.category ||
+                      (previewItem as any)?.gameTypeName ||
+                      (previewItem as any)?.gameType,
+                    '未分类',
+                  )}
+                </Tag>
+                {normalizeText((previewItem as any)?.billingMode) ? (
+                  <Tag>{normalizeText((previewItem as any)?.billingMode)}</Tag>
+                ) : null}
+              </div>
+            </div>
+            <div className="gallery-product-detail-price">
+              ¥{Number((previewItem as any)?.price || 0).toFixed(0)}
+            </div>
+          </div>
+
+          {productDetailLoading ? (
+            <div className="gallery-product-detail-loading">
+              <Skeleton active paragraph={{ rows: 4 }} />
+            </div>
+          ) : (
+            <>
+              {productPreviewText ? (
+                <div className="gallery-product-detail-desc">{productPreviewText}</div>
+              ) : null}
+
+              {productPreviewImages.length ? (
+                <div className="gallery-product-detail-images">
+                  {productPreviewImages.map((src, index) => (
+                    <button
+                      type="button"
+                      key={`${src}-${index}`}
+                      className="gallery-product-detail-image-btn"
+                      onClick={() => {
+                        setProductPreviewCurrent(index);
+                        setProductPreviewVisible(true);
+                      }}
+                    >
+                      <img
+                        className="gallery-product-detail-image"
+                        src={src || PLACEHOLDER_IMAGE}
+                        alt={`商品详情-${index + 1}`}
+                        loading="lazy"
+                        onError={(event) => {
+                          const target = event.currentTarget;
+                          if (target.src !== PLACEHOLDER_IMAGE) target.src = PLACEHOLDER_IMAGE;
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="gallery-product-detail-empty">
+                  <div className="gallery-product-detail-empty-title">暂无图文详情</div>
+                  <div className="gallery-product-detail-empty-text">更多服务细节可直接咨询客服。</div>
+                </div>
+              )}
+
+              <div className="gallery-product-consult-card">
+                <div className="gallery-product-consult-card-text">
+                  {normalizeText(customerServiceConfig.consultText) || '详询客服'}
+                </div>
+                {normalizeText(customerServiceConfig.qrCodeUrl) ? (
+                  <img
+                    className="gallery-product-consult-card-qrcode"
+                    src={normalizeText(customerServiceConfig.qrCodeUrl)}
+                    alt="客服二维码"
+                    onClick={() => openConsultModal(normalizeText(previewItem?.name) || '商品详情')}
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                <div className="gallery-product-consult-card-tip">
+                  扫码联系平台客服，确认服务档期、细节与下单方式。
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="gallery-product-detail-safe-space" />
+        </div>
+
+        <div className="gallery-product-consult-bar">
+          <button
+            type="button"
+            className="gallery-product-consult-button"
+            onClick={() => openConsultModal(normalizeText(previewItem?.name) || '商品详情')}
+          >
+            查看客服二维码
+          </button>
+        </div>
+      </Drawer>
+
+      <Modal
+        open={consultModalVisible}
+        footer={null}
+        centered
+        width={320}
+        className="gallery-consult-modal"
+        onCancel={() => setConsultModalVisible(false)}
+      >
+        <div className="gallery-consult-card">
+          <div className="gallery-consult-title">{consultProductTitle}</div>
+          <div className="gallery-consult-text">
+            {normalizeText(customerServiceConfig.consultText) || '详询客服'}
+          </div>
+          {normalizeText(customerServiceConfig.qrCodeUrl) ? (
+            <img
+              className="gallery-consult-qrcode"
+              src={normalizeText(customerServiceConfig.qrCodeUrl)}
+              alt="客服二维码"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : null}
+          <div className="gallery-consult-tip">可截图保存二维码，联系平台客服咨询下单细节。</div>
+        </div>
+      </Modal>
     </div>
   );
 }

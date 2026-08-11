@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 import { Card, Button, Spin, Tree, Modal, Form, Input, Select, Space, message, Tag, Typography } from 'antd';
-import { getPermissionTree, createPermission, deletePermission } from '@/services/api';
+import { getPermissionTree, createPermission, updatePermission, deletePermission } from '@/services/api';
 
 const { Option } = Select;
 
@@ -10,6 +10,7 @@ const PermissionManagement: React.FC = () => {
     const [permissionTree, setPermissionTree] = useState<any[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedNode, setSelectedNode] = useState<any>(null);
+    const [editingNode, setEditingNode] = useState<any>(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -30,6 +31,20 @@ const PermissionManagement: React.FC = () => {
 
     const handleAdd = (node: any = null) => {
         setSelectedNode(node);
+        setEditingNode(null);
+        form.resetFields();
+        setModalVisible(true);
+    };
+
+    const handleEdit = (node: any) => {
+        setSelectedNode(null);
+        setEditingNode(node);
+        form.setFieldsValue({
+            key: node.key,
+            name: node.name,
+            module: node.module,
+            type: node.type,
+        });
         setModalVisible(true);
     };
 
@@ -42,12 +57,23 @@ const PermissionManagement: React.FC = () => {
                 module: String(values?.module || '').trim(),
                 parentId: selectedNode?.id || null,
             };
-            await createPermission(data);
-            message.success('创建成功');
+            if (editingNode) {
+                await updatePermission(editingNode.id, {
+                    ...data,
+                    parentId: editingNode.parentId ?? null,
+                });
+                message.success('更新成功');
+            } else {
+                await createPermission(data);
+                message.success('创建成功');
+            }
             setModalVisible(false);
+            setEditingNode(null);
+            setSelectedNode(null);
+            form.resetFields();
             loadPermissions();
         } catch (error) {
-            message.error('创建失败');
+            message.error(editingNode ? '更新失败' : '创建失败');
         }
     };
 
@@ -76,10 +102,22 @@ const PermissionManagement: React.FC = () => {
           <Typography.Text type="secondary">模块：{node.module}</Typography.Text>
       </Space>
             <Space>
-                <Button type="link" size="small" onClick={() => handleAdd(node)}>
+                <Button type="link" size="small" onClick={(e) => {
+                    e.stopPropagation();
+                    handleAdd(node);
+                }}>
                     添加子权限
                 </Button>
-                <Button type="link" size="small" danger onClick={() => handleDelete(node)}>
+                <Button type="link" size="small" onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(node);
+                }}>
+                    编辑
+                </Button>
+                <Button type="link" size="small" danger onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(node);
+                }}>
                     删除
                 </Button>
             </Space>
@@ -112,10 +150,12 @@ const PermissionManagement: React.FC = () => {
             </Card>
 
             <Modal
-                title={selectedNode ? `在"${selectedNode.name}"下添加权限` : '添加根权限'}
+                title={editingNode ? `编辑权限：${editingNode.name}` : selectedNode ? `在"${selectedNode.name}"下添加权限` : '添加根权限'}
                 open={modalVisible}
                 onCancel={() => {
                     form.resetFields();
+                    setEditingNode(null);
+                    setSelectedNode(null);
                     setModalVisible(false);
                 }}
                 footer={null}
@@ -179,9 +219,11 @@ const PermissionManagement: React.FC = () => {
                         <Space>
                             <Button onClick={() => {
                                 form.resetFields();
+                                setEditingNode(null);
+                                setSelectedNode(null);
                                 setModalVisible(false);
                             }}>取消</Button>
-                            <Button type="primary" htmlType="submit">创建</Button>
+                            <Button type="primary" htmlType="submit">{editingNode ? '更新' : '创建'}</Button>
                         </Space>
                     </Form.Item>
                 </Form>

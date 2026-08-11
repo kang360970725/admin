@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber} from 'antd';
+import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
@@ -10,6 +10,7 @@ import ChangeLevelModal from './components/ChangeLevelModal';
 import ResetPasswordModal from './components/ResetPasswordModal';
 import AssignRoleModal from '@/components/AssignRoleModal';
 import UserWalletDrawer from './components/UserWalletDrawer';
+import {useIsMobile} from '@/utils/useIsMobile';
 
 const formatDaysAgo = (date?: string) => {
     if (!date) return '从未';
@@ -24,7 +25,7 @@ const formatDaysAgo = (date?: string) => {
 const userTypeMap = {
     SUPER_ADMIN: { text: '超级管理员', color: 'red' },
     ADMIN: { text: '管理员', color: 'orange' },
-    STAFF: { text: '员工', color: 'blue' },
+    STAFF: { text: '陪玩服务者', color: 'blue' },
     CUSTOMER_SERVICE: { text: '客服', color: 'green' },
     OPERATION: { text: '运营', color: 'purple' },
     FINANCE: { text: '财务', color: 'cyan' },
@@ -87,12 +88,12 @@ const getStaffEmploymentTag = (record: any) => {
     const status = String(record?.staffEmploymentStatus || 'ACTIVE');
     if (record?.userType !== 'STAFF' || status === 'ACTIVE') return null;
     if (status === 'BLACKLISTED') {
-        return <Tag color="red">黑名单陪玩</Tag>;
+        return <Tag color="red">限制服务</Tag>;
     }
     if (status === 'FROZEN') {
         return <Tag color="orange">冻结中</Tag>;
     }
-    return <Tag color="default">已退店</Tag>;
+    return <Tag color="default">已退出平台</Tag>;
 };
 
 const canExitOrClearStaff = (record: any) => {
@@ -104,6 +105,7 @@ const canExitOrClearStaff = (record: any) => {
 export default function UsersPage() {
     const access = useAccess();
     const location = useLocation();
+    const isMobile = useIsMobile(768);
     const [createModalVisible, setCreateModalVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [changeLevelModalVisible, setChangeLevelModalVisible] = useState(false);
@@ -141,15 +143,22 @@ export default function UsersPage() {
     const [staffClearUser, setStaffClearUser] = useState<any>(null);
     const [staffClearForm] = Form.useForm();
     const [staffTagOptions, setStaffTagOptions] = useState<Array<{ label: string; value: string }>>([]);
+    const [staffStatusTab, setStaffStatusTab] = useState<'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED'>('ACTIVE');
 
     const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean }> = {
         '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
-        '/users/staff': { key: 'STAFF', title: '打手管理', defaultUserType: 'STAFF', showStaffRating: true, showWorkMetrics: true },
+        '/users/staff': { key: 'STAFF', title: '服务者管理', defaultUserType: 'STAFF', showStaffRating: true, showWorkMetrics: true },
         '/users/internal': { key: 'INTERNAL', title: '后台人员管理', showStaffRating: false, showWorkMetrics: false },
         '/users/all': { key: 'ALL', title: '全部用户', showStaffRating: true, showWorkMetrics: true },
     };
 
     const sceneConfig = sceneMap[location.pathname] || sceneMap['/users/members'];
+
+    useEffect(() => {
+        if (sceneConfig.key === 'STAFF') {
+            setStaffStatusTab('ACTIVE');
+        }
+    }, [sceneConfig.key]);
 
     // 加载可用的员工评级
     useEffect(() => {
@@ -519,6 +528,187 @@ export default function UsersPage() {
         }
     };
 
+    const renderActionButtons = (record: any, compact = false) => {
+        const isStaffScene = sceneConfig.key === 'STAFF';
+        const canEditCurrentUser =
+            sceneConfig.key === 'MEMBER'
+                ? access.canEditMemberUser
+                : sceneConfig.key === 'STAFF'
+                    ? access.canEditStaffUser
+                    : sceneConfig.key === 'INTERNAL'
+                        ? access.canEditInternalUser
+                        : access.canEditUser;
+        const canAssignCurrentRole =
+            sceneConfig.key === 'STAFF'
+                ? access.canAssignStaffRole
+                : sceneConfig.key === 'INTERNAL'
+                    ? access.canAssignInternalRole
+                    : false;
+        const canChangeCurrentLevel = isStaffScene && access.canChangeLevel;
+        const canResetCurrentPassword =
+            sceneConfig.key === 'STAFF'
+                ? access.canResetStaffPassword
+                : sceneConfig.key === 'INTERNAL'
+                    ? access.canResetInternalPassword
+                    : false;
+        const canDeleteCurrentUser =
+            sceneConfig.key === 'MEMBER'
+                ? access.canDeleteMemberUser
+                : sceneConfig.key === 'STAFF'
+                    ? access.canDeleteStaffUser
+                    : sceneConfig.key === 'INTERNAL'
+                        ? access.canDeleteInternalUser
+                        : access.canDeleteUser;
+
+        return (
+            <Space size={compact ? 6 : undefined} wrap={compact}>
+                {sceneConfig.key === 'MEMBER' ? (
+                    <Button type="link" size="small" onClick={() => openMemberDetail(record)}>
+                        详情
+                    </Button>
+                ) : null}
+                {sceneConfig.key === 'MEMBER' ? (
+                    <Button type="link" size="small" onClick={() => openWallet(record)}>
+                        钱包
+                    </Button>
+                ) : null}
+                {canEditCurrentUser ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" onClick={() => handleEdit(record)}>
+                        编辑
+                    </Button>
+                ) : null}
+                {canAssignCurrentRole ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" onClick={() => handleAssignRole(record)}>
+                        分配角色
+                    </Button>
+                ) : null}
+                {canChangeCurrentLevel && sceneConfig.key !== 'MEMBER' ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" onClick={() => handleChangeLevel(record)}>
+                        升降级
+                    </Button>
+                ) : null}
+                {canResetCurrentPassword ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" onClick={() => handleResetPassword(record)}>
+                        重置密码
+                    </Button>
+                ) : null}
+                {isStaffScene && access.canStaffExit && canExitOrClearStaff(record) ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" danger onClick={() => openStaffExit(record)}>
+                        退出平台
+                    </Button>
+                ) : null}
+                {isStaffScene && access.canStaffClear && canExitOrClearStaff(record) ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" danger onClick={() => openStaffClear(record)}>
+                        清退
+                    </Button>
+                ) : null}
+                {canDeleteCurrentUser && isAnonymousUserRecord(record) ? (
+                    <Popconfirm
+                        title="确定删除这个匿名用户吗？"
+                        description="删除后无法恢复。"
+                        onConfirm={() => handleDelete(record.id)}
+                        okText="确定"
+                        cancelText="取消"
+                    >
+                        <Button type={compact ? 'default' : 'link'} size="small" danger>
+                            删除
+                        </Button>
+                    </Popconfirm>
+                ) : null}
+            </Space>
+        );
+    };
+
+    const renderMobileStaffCard = (_: any, record: any) => {
+        const available = Number(record?.wallet?.availableBalance ?? 0);
+        const frozen = Number(record?.wallet?.frozenBalance ?? 0);
+        const tags = Array.isArray(record?.staffTags) ? record.staffTags : [];
+        const ratingName = record?.staffRating?.name || '未设置评级';
+        const reviewCount = Number(record?.reviewStats?.reviewCount ?? 0);
+        const reviewAvg = Number(record?.reviewStats?.averageScore ?? 0);
+
+        return (
+            <Card
+                size="small"
+                style={{ marginBottom: 12, borderRadius: 14 }}
+                bodyStyle={{ padding: 12 }}
+            >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <strong style={{ fontSize: 15 }}>{record?.name || '-'}</strong>
+                            {getStaffEmploymentTag(record)}
+                        </div>
+                        <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                            #{record?.id} · {record?.phone || '-'}
+                        </div>
+                    </div>
+                    <Badge
+                        status={
+                            String(record?.staffEmploymentStatus || 'ACTIVE') === 'ACTIVE'
+                                ? 'success'
+                                : String(record?.staffEmploymentStatus || 'ACTIVE') === 'FROZEN'
+                                    ? 'warning'
+                                    : 'default'
+                        }
+                        text={
+                            String(record?.staffEmploymentStatus || 'ACTIVE') === 'ACTIVE'
+                                ? '正常'
+                                : String(record?.staffEmploymentStatus || 'ACTIVE') === 'FROZEN'
+                                    ? '冻结中'
+                                    : String(record?.staffEmploymentStatus || 'ACTIVE') === 'BLACKLISTED'
+                                        ? '限制服务'
+                                        : '已退出'
+                        }
+                    />
+                </div>
+
+                <Divider style={{ margin: '10px 0' }} />
+
+                <Row gutter={[8, 8]}>
+                    <Col span={12}>
+                        <div style={{ color: '#999', fontSize: 12 }}>可用余额</div>
+                        <div style={{ color: '#1677ff', fontWeight: 700 }}>¥{available.toFixed(1)}</div>
+                    </Col>
+                    <Col span={12}>
+                        <div style={{ color: '#999', fontSize: 12 }}>冻结余额</div>
+                        <div style={{ color: '#fa8c16', fontWeight: 700 }}>¥{frozen.toFixed(1)}</div>
+                    </Col>
+                    <Col span={12}>
+                        <div style={{ color: '#999', fontSize: 12 }}>服务者评级</div>
+                        <Tag color={record?.staffRating ? 'blue' : undefined}>{ratingName}</Tag>
+                    </Col>
+                    <Col span={12}>
+                        <div style={{ color: '#999', fontSize: 12 }}>综合评分</div>
+                        <div>{reviewCount ? `${reviewAvg.toFixed(1)} 分 / ${reviewCount} 条` : '暂无评价'}</div>
+                    </Col>
+                    <Col span={12}>
+                        <div style={{ color: '#999', fontSize: 12 }}>最后登录</div>
+                        <div>{formatDaysAgo(record?.lastLoginAt)}</div>
+                    </Col>
+                    <Col span={12}>
+                        <div style={{ color: '#999', fontSize: 12 }}>最后接单</div>
+                        <div>{formatDaysAgo(record?.lastAcceptOrderAt)}</div>
+                    </Col>
+                </Row>
+
+                <div style={{ marginTop: 10 }}>
+                    <div style={{ color: '#999', fontSize: 12, marginBottom: 4 }}>服务者规则分组</div>
+                    {tags.length ? (
+                        <Space size={4} wrap>
+                            {tags.map((item: string) => <Tag key={item}>{item}</Tag>)}
+                        </Space>
+                    ) : (
+                        <Tag>未设置</Tag>
+                    )}
+                </div>
+
+                <Divider style={{ margin: '10px 0' }} />
+                {renderActionButtons(record, true)}
+            </Card>
+        );
+    };
+
     const columns: any[] = [
         {
             title: '搜索',
@@ -886,24 +1076,24 @@ export default function UsersPage() {
             ),
         },
         {
-            title: sceneConfig.key === 'STAFF' ? '员工状态' : '账号状态',
+            title: sceneConfig.key === 'STAFF' ? '服务状态' : '账号状态',
             dataIndex: sceneConfig.key === 'STAFF' ? 'staffEmploymentStatus' : 'status',
             key: sceneConfig.key === 'STAFF' ? 'staffEmploymentStatus' : 'status',
             width: 80,
+            search: sceneConfig.key !== 'STAFF',
             valueType: 'select',
             valueEnum: sceneConfig.key === 'STAFF'
                 ? {
                     ACTIVE: { text: '正常' },
                     FROZEN: { text: '冻结' },
-                    EXITED: { text: '已退店' },
-                    BLACKLISTED: { text: '黑名单' },
+                    EXITED: { text: '已退出平台' },
+                    BLACKLISTED: { text: '限制服务' },
                 }
                 : {
                     ACTIVE: { text: '正常' },
                     DISABLED: { text: '禁用' },
                 },
-
-            initialValue: 'ACTIVE',
+            initialValue: sceneConfig.key === 'STAFF' ? undefined : 'ACTIVE',
             render: (_: any, record: any) => (
                 <Badge
                     status={
@@ -925,8 +1115,8 @@ export default function UsersPage() {
                                     : String(record?.staffEmploymentStatus || 'ACTIVE') === 'FROZEN'
                                         ? '冻结中'
                                         : String(record?.staffEmploymentStatus || 'ACTIVE') === 'BLACKLISTED'
-                                            ? '黑名单'
-                                            : '已退店'
+                                            ? '限制服务'
+                                            : '已退出平台'
                             )
                             : userStatusMap[record.status as keyof typeof userStatusMap]?.text
                     }
@@ -999,98 +1189,23 @@ export default function UsersPage() {
             search: false,
             width: 200,
             fixed: 'right',
-            render: (_: any, record: any) => {
-                const isStaffScene = sceneConfig.key === 'STAFF';
-                const canEditCurrentUser =
-                    sceneConfig.key === 'MEMBER'
-                        ? access.canEditMemberUser
-                        : sceneConfig.key === 'STAFF'
-                            ? access.canEditStaffUser
-                            : sceneConfig.key === 'INTERNAL'
-                                ? access.canEditInternalUser
-                                : access.canEditUser;
-                const canAssignCurrentRole =
-                    sceneConfig.key === 'STAFF'
-                        ? access.canAssignStaffRole
-                        : sceneConfig.key === 'INTERNAL'
-                            ? access.canAssignInternalRole
-                            : false;
-                const canChangeCurrentLevel = isStaffScene && access.canChangeLevel;
-                const canResetCurrentPassword =
-                    sceneConfig.key === 'STAFF'
-                        ? access.canResetStaffPassword
-                        : sceneConfig.key === 'INTERNAL'
-                            ? access.canResetInternalPassword
-                            : false;
-                const canDeleteCurrentUser =
-                    sceneConfig.key === 'MEMBER'
-                        ? access.canDeleteMemberUser
-                        : sceneConfig.key === 'STAFF'
-                            ? access.canDeleteStaffUser
-                            : sceneConfig.key === 'INTERNAL'
-                                ? access.canDeleteInternalUser
-                                : access.canDeleteUser;
-
-                return (
-                    <Space>
-                        {sceneConfig.key === 'MEMBER' ? (
-                            <Button type="link" size="small" onClick={() => openMemberDetail(record)}>
-                                详情
-                            </Button>
-                        ) : null}
-                        {sceneConfig.key === 'MEMBER' ? (
-                            <Button type="link" size="small" onClick={() => openWallet(record)}>
-                                钱包
-                            </Button>
-                        ) : null}
-                        {canEditCurrentUser ? (
-                            <Button type="link" size="small" onClick={() => handleEdit(record)}>
-                                编辑
-                            </Button>
-                        ) : null}
-                        {canAssignCurrentRole ? (
-                            <Button type="link" size="small" onClick={() => handleAssignRole(record)}>
-                                分配角色
-                            </Button>
-                        ) : null}
-                        {canChangeCurrentLevel && sceneConfig.key !== 'MEMBER' ? (
-                            <Button type="link" size="small" onClick={() => handleChangeLevel(record)}>
-                                升降级
-                            </Button>
-                        ) : null}
-                        {canResetCurrentPassword ? (
-                            <Button type="link" size="small" onClick={() => handleResetPassword(record)}>
-                                重置密码
-                            </Button>
-                        ) : null}
-                        {isStaffScene && access.canStaffExit && canExitOrClearStaff(record) ? (
-                            <Button type="link" size="small" danger onClick={() => openStaffExit(record)}>
-                                退店
-                            </Button>
-                        ) : null}
-                        {isStaffScene && access.canStaffClear && canExitOrClearStaff(record) ? (
-                            <Button type="link" size="small" danger onClick={() => openStaffClear(record)}>
-                                清退
-                            </Button>
-                        ) : null}
-                        {canDeleteCurrentUser && isAnonymousUserRecord(record) ? (
-                            <Popconfirm
-                                title="确定删除这个匿名用户吗？"
-                                description="删除后无法恢复。"
-                                onConfirm={() => handleDelete(record.id)}
-                                okText="确定"
-                                cancelText="取消"
-                            >
-                                <Button type="link" size="small" danger>
-                                    删除
-                                </Button>
-                            </Popconfirm>
-                        ) : null}
-                    </Space>
-                );
-            },
+            render: (_: any, record: any) => renderActionButtons(record),
         },
     ].filter(Boolean) as any[];
+
+    const tableColumns = isMobile && sceneConfig.key === 'STAFF'
+        ? [
+            ...columns
+                .filter((column) => column?.hideInTable)
+                .map((column) => ({ ...column, fixed: undefined })),
+            {
+                title: '服务者',
+                dataIndex: 'mobileCard',
+                search: false,
+                render: renderMobileStaffCard,
+            },
+        ]
+        : columns.map((column) => (isMobile ? { ...column, fixed: undefined } : column));
 
     const handleToggleWithdraw = async (record: any, checked: boolean) => {
         try {
@@ -1117,12 +1232,12 @@ export default function UsersPage() {
     return (
         <PageContainer title={sceneConfig.title}>
             {sceneConfig.key === 'STAFF' && access.canViewStaffWalletStats ? (
-            <Row gutter={16} style={{ marginBottom: 20 }}>
+            <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginBottom: isMobile ? 12 : 20 }}>
 
-                <Col span={6}>
+                <Col xs={12} md={6}>
                     <Card>
                         <Statistic
-                            title="员工可用余额"
+                            title="服务者可用余额"
                             value={walletStats?.totalAvailableBalance ?? 0}
                             precision={1}
                             prefix="¥"
@@ -1130,10 +1245,10 @@ export default function UsersPage() {
                     </Card>
                 </Col>
 
-                <Col span={6}>
+                <Col xs={12} md={6}>
                     <Card>
                         <Statistic
-                            title="员工冻结余额"
+                            title="服务者冻结余额"
                             value={walletStats?.totalFrozenBalance ?? 0}
                             precision={1}
                             prefix="¥"
@@ -1141,10 +1256,10 @@ export default function UsersPage() {
                     </Card>
                 </Col>
 
-                <Col span={6}>
+                <Col xs={12} md={6}>
                     <Card>
                         <Statistic
-                            title="员工保证金"
+                            title="服务者保证金"
                             value={walletStats?.totalDepositBalance ?? 0}
                             precision={1}
                             prefix="¥"
@@ -1152,10 +1267,10 @@ export default function UsersPage() {
                     </Card>
                 </Col>
 
-                <Col span={6}>
+                <Col xs={12} md={6}>
                     <Card>
                         <Statistic
-                            title="员工钱包总额"
+                            title="服务者钱包总额"
                             value={walletStats?.totalBalance ?? 0}
                             precision={1}
                             prefix="¥"
@@ -1165,20 +1280,39 @@ export default function UsersPage() {
 
             </Row>
             ) : null}
+            {sceneConfig.key === 'STAFF' ? (
+                <Card size="small" bodyStyle={{ padding: isMobile ? '4px 8px 0' : '4px 12px 0' }} style={{ marginBottom: isMobile ? 10 : 12 }}>
+                    <Tabs
+                        activeKey={staffStatusTab}
+                        onChange={(key) => {
+                            setStaffStatusTab(key as typeof staffStatusTab);
+                            setTimeout(() => actionRef.current?.reload?.(), 0);
+                        }}
+                        size={isMobile ? 'small' : 'middle'}
+                        items={[
+                            { key: 'ACTIVE', label: '正常' },
+                            { key: 'FROZEN', label: '冻结中' },
+                            { key: 'EXITED', label: '已退出' },
+                            { key: 'BLACKLISTED', label: '限制服务' },
+                        ]}
+                    />
+                </Card>
+            ) : null}
             <ProTable
-                columns={columns}
-                scroll={{
-                    x: 'max-content',
-                }}
+                columns={tableColumns}
+                scroll={isMobile && sceneConfig.key === 'STAFF' ? undefined : { x: 'max-content' }}
                 request={async (params) => {
                     try {
                         const { current, pageSize, ...rest } = params;
+                        const { staffEmploymentStatus: _ignoredStaffEmploymentStatus, status: _ignoredStatus, ...queryRest } = rest as any;
                         const query = {
                             page: current ?? 1,
                             limit: pageSize ?? 10,
                             scene: sceneConfig.key,
                             includeStaffMembers: sceneConfig.key === 'MEMBER' ? 'true' : undefined,
-                            ...rest, // search 表单字段会在这里（例如 search/userType/status）
+                            ...(sceneConfig.key === 'STAFF' ? { staffEmploymentStatus: staffStatusTab } : {}),
+                            ...(sceneConfig.key !== 'STAFF' && _ignoredStatus ? { status: _ignoredStatus } : {}),
+                            ...queryRest, // search 表单字段会在这里（例如 search/userType/status）
                         };
 
                         const response = await getUsers(query);
@@ -1199,6 +1333,10 @@ export default function UsersPage() {
                 rowKey="id"
                 search={{
                     labelWidth: 'auto',
+                    span: isMobile ? 24 : undefined,
+                    collapsed: isMobile && sceneConfig.key === 'STAFF' ? false : undefined,
+                    defaultCollapsed: isMobile && sceneConfig.key === 'STAFF' ? false : isMobile,
+                    collapseRender: isMobile && sceneConfig.key === 'STAFF' ? false : undefined,
                 }}
                 toolBarRender={() => [
                     canCreateCurrentSceneUser && (
@@ -1207,13 +1345,14 @@ export default function UsersPage() {
                             type="primary"
                             onClick={() => setCreateModalVisible(true)}
                         >
-                            添加用户
+                            {sceneConfig.key === 'STAFF' ? '新增服务者' : '添加用户'}
                         </Button>
                     ),
                 ]}
                 pagination={{
-                    pageSize: 20,
+                    pageSize: isMobile && sceneConfig.key === 'STAFF' ? 10 : 20,
                 }}
+                options={isMobile && sceneConfig.key === 'STAFF' ? { density: false, fullScreen: false, reload: true, setting: false } : undefined}
                 actionRef={actionRef}
             />
 
@@ -1298,7 +1437,7 @@ export default function UsersPage() {
             />
 
             <Modal
-                title={`员工退店 - ${staffExitUser?.name || staffExitUser?.phone || ''}`}
+                title={`服务者退出平台 - ${staffExitUser?.name || staffExitUser?.phone || ''}`}
                 open={staffExitVisible}
                 onOk={handleStaffExitSubmit}
                 onCancel={() => {
@@ -1314,10 +1453,10 @@ export default function UsersPage() {
                     <div style={{ background: '#fafafa', padding: 12, borderRadius: 8, marginBottom: 16, lineHeight: '22px' }}>
                         <div>规则分组：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
                         <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
-                        <div>入店天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
+                        <div>入驻天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
                         <div>有效接单量：{Number(staffExitPreview?.effectiveAcceptedOrderCount ?? 0)} / {Number(staffExitPreview?.minAcceptedOrdersForDepositRefund ?? 50)} 单</div>
                         <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedDays ?? 15)} 天</div>
-                        <div>退店冷却期：{Number(staffExitPreview?.quitCoolingDays ?? 180)} 天</div>
+                        <div>退出平台冷却期：{Number(staffExitPreview?.quitCoolingDays ?? 180)} 天</div>
                         <div>押金不退限制：{Number(staffExitPreview?.depositForfeitDays ?? 0)} 天</div>
                         <div>保证金阈值：¥{Number(staffExitPreview?.depositAmountRule ?? 0)}</div>
                         <div>当前可用/冻结/保证金：¥{Number(staffExitPreview?.availableBalance ?? 0)} / ¥{Number(staffExitPreview?.frozenBalance ?? 0)} / ¥{Number(staffExitPreview?.depositBalance ?? 0)}</div>
@@ -1325,13 +1464,13 @@ export default function UsersPage() {
                         <div>本次不退保证金：¥{Number(staffExitPreview?.forfeitDepositAmount ?? 0)}</div>
                         <div>保证金未缴满补扣：¥{Number(staffExitPreview?.depositTopUpForfeitAmount ?? 0)}</div>
                         <div>余额不足未补齐保证金：¥{Number(staffExitPreview?.depositTopUpUnpaidAmount ?? 0)}</div>
-                        <div>退店后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
-                        <div>退店后预计可用余额：¥{Number(staffExitPreview?.finalAvailableBalance ?? 0)}</div>
+                        <div>退出后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
+                        <div>退出后预计可用余额：¥{Number(staffExitPreview?.finalAvailableBalance ?? 0)}</div>
                     </div>
-                    <Form.Item label="退店方式" name="mode" rules={[{ required: true, message: '请选择退店方式' }]}>
+                    <Form.Item label="退出方式" name="mode" rules={[{ required: true, message: '请选择退出方式' }]}>
                         <Select
                             options={[
-                                { label: '正常退店：仅释放冻结金额与规则允许退回的保证金', value: 'RELEASE_TO_AVAILABLE' },
+                                { label: '正常退出：仅释放冻结金额与规则允许退回的保证金', value: 'RELEASE_TO_AVAILABLE' },
                             ]}
                         />
                     </Form.Item>
@@ -1339,16 +1478,16 @@ export default function UsersPage() {
                         <Checkbox>同时加入黑名单</Checkbox>
                     </Form.Item>
                     <div style={{ color: '#999', fontSize: 12, lineHeight: '20px' }}>
-                        普通退店默认进入规则配置的冷却期。加入黑名单后不可再次入店。
+                        普通退出默认进入规则配置的冷却期。限制服务后不可再次入驻。
                     </div>
                     <div style={{ color: '#999', fontSize: 12, lineHeight: '20px', marginTop: 8 }}>
-                        若勾选黑名单，系统会校验退店后可用余额必须为 0；有余额时请改用“清退”。
+                        若勾选限制服务，系统会校验退出后可用余额必须为 0；有余额时请改用“清退”。
                     </div>
                 </Form>
             </Modal>
 
             <Modal
-                title={`员工清退 - ${staffClearUser?.name || staffClearUser?.phone || ''}`}
+                title={`服务者清退 - ${staffClearUser?.name || staffClearUser?.phone || ''}`}
                 open={staffClearVisible}
                 onOk={handleStaffClearSubmit}
                 onCancel={() => {
