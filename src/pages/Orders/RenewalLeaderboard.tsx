@@ -14,8 +14,8 @@ type Dimension = 'DAY' | 'WEEK' | 'MONTH';
 type RenewalLeaderboardRow = {
     rank: number;
     groupKey: string;
-    memberUserIds: number[];
-    memberNames: string[];
+    memberUserIds: Array<number | string | Record<string, any>>;
+    memberNames: Array<string | Record<string, any>>;
     memberNameText: string;
     renewalOrderCount: number;
     renewalAmount: number;
@@ -33,6 +33,40 @@ const dimensionText: Record<Dimension, string> = {
 };
 
 const money = (value: any) => `¥${Number(value || 0).toFixed(2)}`;
+
+const formatMemberValue = (value: any, fields: string[]) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+    if (typeof value === 'object') {
+        for (const field of fields) {
+            const fieldValue = value?.[field];
+            if (fieldValue !== null && fieldValue !== undefined && String(fieldValue).trim()) {
+                return String(fieldValue).trim();
+            }
+        }
+    }
+    return '';
+};
+
+const getMemberNameText = (row: RenewalLeaderboardRow) => {
+    const directText = String(row.memberNameText || '').trim();
+    if (directText && !directText.includes('[object Object]')) return directText;
+    const names = Array.isArray(row.memberNames)
+        ? row.memberNames
+            .map((item) => formatMemberValue(item, ['nickname', 'name', 'realName', 'displayName', 'username', 'userId', 'id']))
+            .filter(Boolean)
+        : [];
+    return names.join('、') || String(row.groupKey || '-');
+};
+
+const getMemberIdText = (row: RenewalLeaderboardRow) => {
+    const ids = Array.isArray(row.memberUserIds)
+        ? row.memberUserIds
+            .map((item) => formatMemberValue(item, ['userId', 'id', 'value']))
+            .filter(Boolean)
+        : [];
+    return ids.join('、') || String(row.groupKey || '-');
+};
 
 const buildRange = (dimension: Dimension, value: Dayjs) => {
     if (dimension === 'WEEK') {
@@ -84,9 +118,9 @@ const RenewalLeaderboardPage: React.FC = () => {
             dataIndex: 'keyword',
             render: (_, row) => (
                 <Space direction="vertical" size={2}>
-                    <Typography.Text strong>{row.memberNameText || row.groupKey}</Typography.Text>
+                    <Typography.Text strong>{getMemberNameText(row)}</Typography.Text>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        ID：{Array.isArray(row.memberUserIds) && row.memberUserIds.length ? row.memberUserIds.join('、') : row.groupKey}
+                        ID：{getMemberIdText(row)}
                     </Typography.Text>
                 </Space>
             ),
