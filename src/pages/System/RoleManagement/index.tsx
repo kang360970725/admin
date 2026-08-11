@@ -227,8 +227,9 @@ const RoleManagement: React.FC = () => {
                     <Form.Item label="权限配置">
                         <Tree
                             checkable
+                            checkStrictly
                             treeData={permissionTree}
-                            checkedKeys={selectedPermissions}
+                            checkedKeys={{ checked: selectedPermissions, halfChecked: [] }}
                             onCheck={(checked: any) => setSelectedPermissions(normalizeCheckedKeys(checked))}
                             titleRender={renderPermissionTitle}
                             showLine
