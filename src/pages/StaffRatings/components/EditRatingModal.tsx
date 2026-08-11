@@ -56,7 +56,7 @@ const EditRatingModal: React.FC<EditRatingModalProps> = ({
 
     return (
         <Modal
-            title="编辑评级"
+            title="编辑服务者评级"
             open={visible}
             onOk={() => form.submit()}
             onCancel={handleCancel}
@@ -100,8 +100,8 @@ const EditRatingModal: React.FC<EditRatingModalProps> = ({
                     rules={[{ required: true, message: '请选择适用范围' }]}
                 >
                     <Select placeholder="请选择适用范围">
-                        <Option value="ONLINE">线上陪玩</Option>
-                        <Option value="OFFLINE">线下陪玩</Option>
+                        <Option value="ONLINE">线上服务</Option>
+                        <Option value="OFFLINE">线下服务</Option>
                         <Option value="BOTH">线上线下</Option>
                     </Select>
                 </Form.Item>

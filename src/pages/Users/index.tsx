@@ -25,7 +25,7 @@ const formatDaysAgo = (date?: string) => {
 const userTypeMap = {
     SUPER_ADMIN: { text: '超级管理员', color: 'red' },
     ADMIN: { text: '管理员', color: 'orange' },
-    STAFF: { text: '陪玩服务者', color: 'blue' },
+    STAFF: { text: '服务者', color: 'blue' },
     CUSTOMER_SERVICE: { text: '客服', color: 'green' },
     OPERATION: { text: '运营', color: 'purple' },
     FINANCE: { text: '财务', color: 'cyan' },
@@ -160,14 +160,14 @@ export default function UsersPage() {
         }
     }, [sceneConfig.key]);
 
-    // 加载可用的员工评级
+    // 加载可用的服务者评级
     useEffect(() => {
         const loadRatings = async () => {
             try {
                 const ratings = await getAvailableRatings();
                 setAvailableRatings(ratings);
             } catch (error) {
-                console.error('加载员工评级失败:', error);
+                console.error('加载服务者评级失败:', error);
             }
         };
         loadRatings();
@@ -188,7 +188,7 @@ export default function UsersPage() {
                         .map((item: any) => ({ label: item?.name || item?.code, value: item?.code })),
                 );
             } catch (error) {
-                console.error('加载员工规则分组失败:', error);
+                console.error('加载服务者规则分组失败:', error);
             }
         };
         loadStaffRuleEngine();
@@ -774,7 +774,7 @@ export default function UsersPage() {
             width: 100,
             valueType: 'select',
             valueEnum: {
-                STAFF: { text: '员工' },
+                STAFF: { text: '服务者' },
                 SUPER_ADMIN: { text: '超级管理员' },
                 OPERATION: { text: '运营' },
                 FINANCE: { text: '财务' },
@@ -783,7 +783,7 @@ export default function UsersPage() {
                 ADMIN: { text: '管理员' },
             },
 
-            // ✅ 默认筛选“员工”
+            // ✅ 默认筛选“服务者”
             initialValue: 'STAFF',
             render: (_: any, record: any) => (
                 <Tag color={userTypeMap[record.userType as keyof typeof userTypeMap]?.color}>
@@ -879,7 +879,7 @@ export default function UsersPage() {
             ),
         },
         sceneConfig.showStaffRating ? {
-            title: '员工评级',
+            title: '服务者评级',
             dataIndex: 'staffRating',
             key: 'rating',
             search: false,
@@ -1003,7 +1003,7 @@ export default function UsersPage() {
         //     }
         // },
         {
-            title: '员工规则分组',
+            title: '服务者规则分组',
             dataIndex: 'staffTags',
             width: 180,
             search: false,
@@ -1398,7 +1398,7 @@ export default function UsersPage() {
                 onSuccess={() => {
                     setChangeLevelModalVisible(false);
                     setEditingUser(null);
-                    message.success('员工评级调整成功');
+                    message.success('服务者评级调整成功');
                     actionRef.current?.reload();
                 }}
             />

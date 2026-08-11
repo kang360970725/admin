@@ -404,7 +404,7 @@ function formatConfigValue(row: SystemConfigItem) {
       const parsed = parseStaffRuleEngineConfig(row);
       return `标签 ${parsed.tags.length} 个，规则 ${parsed.rules.length} 条`;
     } catch {
-      return '员工规则分组与提现/退店规则配置';
+      return '服务者规则分组与提现/退店规则配置';
     }
   }
   const raw = String(row.value ?? '');
@@ -729,8 +729,8 @@ const SystemConfigsPage: React.FC = () => {
                       type="info"
                       showIcon
                       style={{ marginBottom: 16 }}
-                      message="这里维护员工规则分组"
-                      description="默认规则用于未配置或未命中规则分组的员工；下方每条分组规则为一对一绑定，员工资料中只能选择一个规则分组。"
+                      message="这里维护服务者规则分组"
+                      description="默认规则用于未配置或未命中规则分组的服务者；下方每条分组规则为一对一绑定，服务者资料中只能选择一个规则分组。"
                     />
 
                     <Card size="small" title="默认规则" style={{ marginBottom: 16 }}>

@@ -48,7 +48,7 @@ const CreateRatingModal: React.FC<CreateRatingModalProps> = ({
 
     return (
         <Modal
-            title="添加评级"
+            title="添加服务者评级"
             open={visible}
             onOk={() => form.submit()}
             onCancel={handleCancel}
@@ -92,8 +92,8 @@ const CreateRatingModal: React.FC<CreateRatingModalProps> = ({
                     rules={[{ required: true, message: '请选择适用范围' }]}
                 >
                     <Select placeholder="请选择适用范围">
-                        <Option value="ONLINE">线上陪玩</Option>
-                        <Option value="OFFLINE">线下陪玩</Option>
+                        <Option value="ONLINE">线上服务</Option>
+                        <Option value="OFFLINE">线下服务</Option>
                         <Option value="BOTH">线上线下通用</Option>
                     </Select>
                 </Form.Item>

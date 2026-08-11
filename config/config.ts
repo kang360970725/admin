@@ -297,7 +297,7 @@ export default defineConfig({
         { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers', hideInMenu: true },
       ],
     },
-    { name: '评级管理', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },
+    { name: '服务者评级', path: '/staff-ratings', component: '@/pages/StaffRatings', icon: 'star', access: 'canViewStaffRatings' },
 
     // ✅ 全局兜底 404
     { path: '*', component: '@/pages/404', layout: false },

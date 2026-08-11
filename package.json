@@ -23,7 +23,8 @@
     "@umijs/max": "^4.5.3",
     "@wangeditor/editor": "^5.1.23",
     "@wangeditor/editor-for-react": "^1.0.6",
-    "antd": "^5.4.0"
+    "antd": "^5.4.0",
+    "photoswipe": "^5.4.4"
   },
   "devDependencies": {
     "@types/react": "^18.0.33",

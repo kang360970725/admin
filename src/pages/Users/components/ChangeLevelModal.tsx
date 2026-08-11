@@ -57,7 +57,7 @@ const ChangeLevelModal: React.FC<ChangeLevelModalProps> = ({
 
     return (
         <Modal
-            title={`调整员工评级 - ${user?.name || user?.phone}`}
+            title={`调整服务者评级 - ${user?.name || user?.phone}`}
             open={visible}
             onOk={handleOk}
             onCancel={handleCancel}

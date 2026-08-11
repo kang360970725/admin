@@ -914,6 +914,23 @@
   height: 86px;
 }
 
+:global(.pswp) {
+  --pswp-bg: rgba(0, 0, 0, 0.96);
+}
+
+:global(.pswp__img) {
+  object-fit: contain;
+}
+
+:global(.pswp__top-bar) {
+  padding-top: env(safe-area-inset-top, 0px);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.48), transparent);
+}
+
+:global(.pswp__button--arrow) {
+  display: none;
+}
+
 .gallery-product-consult-bar {
   position: absolute;
   right: 0;
@@ -1024,5 +1041,9 @@
 
   .gallery-filter-panel {
     max-width: 100%;
+  }
+
+  :global(.pswp__button--zoom) {
+    display: none;
   }
 }

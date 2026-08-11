@@ -18,8 +18,8 @@ const ratingStatusMap = {
 };
 
 const scopeMap = {
-    ONLINE: { text: '线上陪玩', color: 'blue' },
-    OFFLINE: { text: '线下陪玩', color: 'green' },
+    ONLINE: { text: '线上服务', color: 'blue' },
+    OFFLINE: { text: '线下服务', color: 'green' },
     BOTH: { text: '线上线下', color: 'purple' },
 };
 
@@ -171,6 +171,7 @@ export default function StaffRatingsPage() {
     return (
         <PageContainer>
             <ProTable
+                headerTitle="服务者评级"
                 columns={columns}
                 request={async (params) => {
                     try {
@@ -200,7 +201,7 @@ export default function StaffRatingsPage() {
                             type="primary"
                             onClick={() => setCreateModalVisible(true)}
                         >
-                            添加评级
+                            添加服务者评级
                         </Button>
                     ),
                 ]}

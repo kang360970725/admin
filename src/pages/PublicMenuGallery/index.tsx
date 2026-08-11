@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Carousel, Drawer, Empty, Image, Modal, Skeleton, Tag, Typography, message } from 'antd';
+import { Carousel, Drawer, Empty, Modal, Skeleton, Tag, Typography, message } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
+import PhotoSwipe from 'photoswipe';
+import 'photoswipe/style.css';
 import {
   getPublicMenuDetail,
   getPublicMiniappCustomerServiceConfig,
@@ -16,6 +18,12 @@ import './index.less';
 const { Title, Paragraph } = Typography;
 const PAGE_SIZE = 8;
 const PLACEHOLDER_IMAGE = '/menu-placeholder.png';
+
+type PhotoSwipeImageItem = {
+  src: string;
+  width: number;
+  height: number;
+};
 
 function normalizeText(value: unknown) {
   return String(value ?? '').trim();
@@ -66,6 +74,28 @@ function normalizePublicDetailText(value: unknown) {
   return placeholders.has(text) ? '' : text;
 }
 
+function loadPhotoSwipeImageSize(src: string): Promise<PhotoSwipeImageItem> {
+  return new Promise((resolve) => {
+    if (!src) {
+      resolve({ src: PLACEHOLDER_IMAGE, width: 1080, height: 1080 });
+      return;
+    }
+
+    const image = new window.Image();
+    image.onload = () => {
+      resolve({
+        src,
+        width: image.naturalWidth || 1080,
+        height: image.naturalHeight || 1080,
+      });
+    };
+    image.onerror = () => {
+      resolve({ src: PLACEHOLDER_IMAGE, width: 1080, height: 1080 });
+    };
+    image.src = src;
+  });
+}
+
 function FilterTuneIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
@@ -114,12 +144,6 @@ export default function PublicMenuGalleryPage() {
   const [previewItem, setPreviewItem] = useState<PublicMenuDetail | PublicMenuItem | null>(null);
   const [productDetailDrawerOpen, setProductDetailDrawerOpen] = useState(false);
   const [productDetailLoading, setProductDetailLoading] = useState(false);
-  const [productPreviewVisible, setProductPreviewVisible] = useState(false);
-  const [productPreviewCurrent, setProductPreviewCurrent] = useState(0);
-  const [protocolPreviewVisible, setProtocolPreviewVisible] = useState(false);
-  const [protocolPreviewCurrent, setProtocolPreviewCurrent] = useState(0);
-  const [bannerPreviewVisible, setBannerPreviewVisible] = useState(false);
-  const [bannerPreviewSrc, setBannerPreviewSrc] = useState('');
   const [customerServiceConfig, setCustomerServiceConfig] = useState<MiniappCustomerServiceConfig>({
     consultText: '详询客服',
     qrCodeUrl: '',
@@ -127,6 +151,7 @@ export default function PublicMenuGalleryPage() {
   const [consultModalVisible, setConsultModalVisible] = useState(false);
   const [consultProductTitle, setConsultProductTitle] = useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const photoSwipeRef = useRef<PhotoSwipe | null>(null);
 
   const openConsultModal = useCallback((title?: string) => {
     setConsultProductTitle(normalizeText(title) || '商品详情');
@@ -171,26 +196,56 @@ export default function PublicMenuGalleryPage() {
     }
   }, []);
 
+  const openPhotoSwipe = useCallback(async (images: string[], startIndex = 0) => {
+    const imageList = Array.from(new Set((images || []).map(normalizeText).filter(Boolean)));
+    if (!imageList.length) return;
+
+    const safeIndex = Math.min(Math.max(0, Number(startIndex || 0)), imageList.length - 1);
+    const dataSource = await Promise.all(imageList.map(loadPhotoSwipeImageSize));
+    photoSwipeRef.current?.destroy();
+
+    const pswp = new PhotoSwipe({
+      dataSource,
+      index: safeIndex,
+      bgOpacity: 0.96,
+      showHideAnimationType: 'fade',
+      wheelToZoom: true,
+      pinchToClose: true,
+      closeOnVerticalDrag: true,
+      paddingFn: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+    });
+    photoSwipeRef.current = pswp;
+    pswp.on('destroy', () => {
+      if (photoSwipeRef.current === pswp) photoSwipeRef.current = null;
+    });
+    pswp.init();
+  }, []);
+
   const openProtocolPreview = useCallback((item: MiniappProtocolItem | null | undefined) => {
     if (!item || !Number.isFinite(Number(item.id)) || Number(item.id) <= 0) return;
     const imageSrc = extractFirstImageSrc((item as any)?.content);
     if (imageSrc) {
-      setBannerPreviewSrc(imageSrc);
-      setBannerPreviewVisible(true);
+      void openPhotoSwipe([imageSrc], 0);
       return;
     }
     const imageList = extractAllImageSrcs((item as any)?.content);
     if (imageList.length) {
       setPreviewKind('protocol');
       setPreviewItem(item as any);
-      setProtocolPreviewCurrent(0);
-      setProtocolPreviewVisible(true);
+      void openPhotoSwipe(imageList, 0);
       return;
     }
     setPreviewKind('protocol');
     setPreviewItem(item as any);
     openConsultModal(normalizeText((item as any)?.title) || '协议详情');
-  }, [openConsultModal]);
+  }, [openConsultModal, openPhotoSwipe]);
+
+  useEffect(() => {
+    return () => {
+      photoSwipeRef.current?.destroy();
+      photoSwipeRef.current = null;
+    };
+  }, []);
 
   const productPreviewImages = useMemo(() => {
     if (previewKind !== 'product' || !previewItem) return [];
@@ -202,16 +257,6 @@ export default function PublicMenuGalleryPage() {
     const richText = normalizePublicDetailText((previewItem as any)?.richContent);
     const descText = normalizeText(previewItem.description);
     return richText || (descText === '请输入商品图文详情' ? '' : descText);
-  }, [previewItem, previewKind]);
-
-  const protocolPreviewImages = useMemo(() => {
-    if (previewKind !== 'protocol' || !previewItem) return [];
-    return extractAllImageSrcs((previewItem as any)?.content);
-  }, [previewItem, previewKind]);
-
-  const protocolPreviewText = useMemo(() => {
-    if (previewKind !== 'protocol' || !previewItem) return '';
-    return stripHtml((previewItem as any)?.content);
   }, [previewItem, previewKind]);
 
   const loadPage = useCallback(async (targetPage: number, reset = false) => {
@@ -658,74 +703,6 @@ export default function PublicMenuGalleryPage() {
         </div>
       </div>
 
-      <div style={{ display: 'none' }}>
-        <Image.PreviewGroup
-          preview={{
-            visible: productPreviewVisible,
-            current: productPreviewCurrent,
-            onVisibleChange: (visible) => {
-              setProductPreviewVisible(visible);
-              if (!visible) {
-                setProductPreviewCurrent(0);
-                setPreviewKind('product');
-              }
-            },
-          }}
-        >
-          {productPreviewImages.map((src, index) => (
-            <Image
-              key={`product-${index}-${src}`}
-              src={src || PLACEHOLDER_IMAGE}
-              alt={`商品详情-${index + 1}`}
-              onError={(event) => {
-                const target = event.currentTarget as HTMLImageElement;
-                if (target.src !== PLACEHOLDER_IMAGE) target.src = PLACEHOLDER_IMAGE;
-              }}
-            />
-          ))}
-        </Image.PreviewGroup>
-        <Image.PreviewGroup
-          preview={{
-            visible: protocolPreviewVisible,
-            current: protocolPreviewCurrent,
-            onVisibleChange: (visible) => {
-              setProtocolPreviewVisible(visible);
-              if (!visible) {
-                setProtocolPreviewCurrent(0);
-                setPreviewItem(null);
-                setPreviewKind('product');
-              }
-            },
-          }}
-        >
-          {protocolPreviewImages.map((src, index) => (
-            <Image
-              key={`protocol-${index}-${src}`}
-              src={src || PLACEHOLDER_IMAGE}
-              alt={`协议内容-${index + 1}`}
-              onError={(event) => {
-                const target = event.currentTarget as HTMLImageElement;
-                if (target.src !== PLACEHOLDER_IMAGE) target.src = PLACEHOLDER_IMAGE;
-              }}
-            />
-          ))}
-        </Image.PreviewGroup>
-      </div>
-      {bannerPreviewSrc ? (
-        <Image
-          style={{ display: 'none' }}
-          src={bannerPreviewSrc}
-          preview={{
-            visible: bannerPreviewVisible,
-            src: bannerPreviewSrc,
-            onVisibleChange: (visible) => {
-              setBannerPreviewVisible(visible);
-              if (!visible) setBannerPreviewSrc('');
-            },
-          }}
-        />
-      ) : null}
-
       <Drawer
         placement="bottom"
         open={productDetailDrawerOpen}
@@ -783,10 +760,7 @@ export default function PublicMenuGalleryPage() {
                       type="button"
                       key={`${src}-${index}`}
                       className="gallery-product-detail-image-btn"
-                      onClick={() => {
-                        setProductPreviewCurrent(index);
-                        setProductPreviewVisible(true);
-                      }}
+                      onClick={() => void openPhotoSwipe(productPreviewImages, index)}
                     >
                       <img
                         className="gallery-product-detail-image"

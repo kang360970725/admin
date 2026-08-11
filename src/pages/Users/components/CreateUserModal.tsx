@@ -196,7 +196,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         >
                             <Select placeholder="请选择用户身份" onChange={handleUserTypeChange} disabled={lockUserType}>
                                 <Option value="REGISTERED_USER">注册用户</Option>
-                                <Option value="STAFF">陪玩服务者</Option>
+                                <Option value="STAFF">服务者</Option>
                                 <Option value="CUSTOMER_SERVICE">客服</Option>
                                 <Option value="OPERATION">运营</Option>
                                 <Option value="FINANCE">财务</Option>
