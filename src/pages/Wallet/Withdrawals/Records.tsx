@@ -198,8 +198,8 @@ const WithdrawalRecords: React.FC = () => {
                 if (!canCancelWithdrawal(row.status)) return null;
                 return (
                     <Popconfirm
-                        title="废除该提现申请？"
-                        description="将申请单置为已废除；如仍存在提现冻结，会同步释放回可用余额。"
+                        title="直接废除该提现申请？"
+                        description="用于处理账户已清零、冻结流水已冲正但提现申请仍残留的历史异常；如仍存在提现冻结，会同步释放回可用余额。"
                         okText="确认废除"
                         cancelText="取消"
                         onConfirm={async () => {
@@ -215,7 +215,7 @@ const WithdrawalRecords: React.FC = () => {
                             }
                         }}
                     >
-                        <Button danger size="small">废除</Button>
+                        <Button danger size="small">直接废除</Button>
                     </Popconfirm>
                 );
             },

@@ -1,9 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic, DatePicker} from 'antd';
+import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { history, useModel } from '@umijs/max';
-import { getPendingWithdrawals, reviewWithdrawal, type WalletWithdrawalRequest } from '@/services/api';
+import { cancelWithdrawal, getPendingWithdrawals, reviewWithdrawal, type WalletWithdrawalRequest } from '@/services/api';
 import dayjs from "dayjs";
 
 /**
@@ -112,11 +112,11 @@ const WithdrawalsPage: React.FC = () => {
         {
             title: '操作',
             valueType: 'option',
-            width: 180,
+            width: 240,
             render: (_: any, row: any) => {
                 const disabled = row.status !== 'PENDING_REVIEW';
 
-                return [
+                const actions = [
                     <Button
                         key="review"
                         type="primary"
@@ -134,6 +134,34 @@ const WithdrawalsPage: React.FC = () => {
                         审批
                     </Button>,
                 ];
+
+                if (!['PAID', 'REJECTED', 'CANCELED'].includes(String(row.status || ''))) {
+                    actions.push(
+                        <Popconfirm
+                            key="cancel"
+                            title="直接废除该提现申请？"
+                            description="用于处理账户已清零、冻结流水已冲正但提现申请仍残留的历史异常；如仍存在提现冻结，会同步释放回可用余额。"
+                            okText="确认废除"
+                            cancelText="取消"
+                            onConfirm={async () => {
+                                try {
+                                    await cancelWithdrawal({
+                                        requestId: Number(row.id),
+                                        remark: '管理员在提现审批页直接废除历史异常提现申请',
+                                    });
+                                    message.success('提现申请已废除');
+                                    actionRef.current?.reload();
+                                } catch (e: any) {
+                                    message.error(e?.data?.message || e?.response?.data?.message || e?.message || '废除失败');
+                                }
+                            }}
+                        >
+                            <Button danger>直接废除</Button>
+                        </Popconfirm>,
+                    );
+                }
+
+                return <Space>{actions}</Space>;
             },
         },
     ];
