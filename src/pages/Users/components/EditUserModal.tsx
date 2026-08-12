@@ -81,12 +81,15 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     const handleOk = async () => {
         try {
             const values = staffEditLocked
-                ? await form.validateFields(['staffEmploymentStatus'])
+                ? await form.validateFields(['staffEmploymentStatus', 'staffTags'])
                 : await form.validateFields();
 
             const buildPayload = () => {
                 if (staffEditLocked) {
-                    return { staffEmploymentStatus: values.staffEmploymentStatus };
+                    return {
+                        staffEmploymentStatus: values.staffEmploymentStatus,
+                        staffTags: values.staffTags ? [values.staffTags] : [],
+                    };
                 }
                 const payload: any = { ...values };
 
@@ -277,7 +280,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                     allowClear
                                     options={staffTagOptions}
                                     placeholder="请选择服务者规则分组"
-                                    disabled={staffEditLocked}
                                 />
                             </Form.Item>
                         </>
