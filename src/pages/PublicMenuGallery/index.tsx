@@ -818,6 +818,16 @@ export default function PublicMenuGalleryPage() {
         </div>
       </Drawer>
 
+      <button
+        type="button"
+        className="gallery-floating-consult"
+        onClick={() => openConsultModal('蓝猫服务菜单')}
+        aria-label="召唤客服"
+      >
+        <span className="gallery-floating-consult-dot" />
+        <span className="gallery-floating-consult-text">召唤客服</span>
+      </button>
+
       <Modal
         open={consultModalVisible}
         footer={null}

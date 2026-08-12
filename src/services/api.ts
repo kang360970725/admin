@@ -509,6 +509,7 @@ export async function getGameProjectList(data: {
     gameType?: string;
     category?: string;
     status?: string;
+    showInMenuList?: boolean;
 }) {
     return request<{
         data: any[];

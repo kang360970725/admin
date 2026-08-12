@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Card, Form, Input, InputNumber, message, Modal, Select, Space, Switch, Table, Tag, Upload } from 'antd';
+import { Button, Card, Form, Input, InputNumber, message, Modal, Select, Space, Switch, Table, Tabs, Tag, Upload } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { Editor, Toolbar } from '@wangeditor/editor-for-react';
 import type { IDomEditor, IEditorConfig, IToolbarConfig } from '@wangeditor/editor';
@@ -19,6 +19,7 @@ import { uploadFileToCosBySts } from '@/utils/cosUpload';
 
 const { Option } = Select;
 const { TextArea } = Input;
+const EMPTY_CATEGORY_FILTER = '__EMPTY__';
 
 type CategoryNode = { id: string; name: string; level: 1 | 2 | 3; parentId?: string | null; children?: CategoryNode[] };
 type GoodsTag = { id: string; name: string; gameCategoryId: string; enabled?: boolean };
@@ -64,6 +65,7 @@ const GameProjectManagement: React.FC = () => {
   const [reviewLimit, setReviewLimit] = useState(10);
   const [reviewTotal, setReviewTotal] = useState(0);
   const [includeHidden, setIncludeHidden] = useState(true);
+  const [menuListFilter, setMenuListFilter] = useState<'ALL' | 'MENU'>('ALL');
 
   useEffect(() => {
     loadProjects(1, 20);
@@ -75,16 +77,18 @@ const GameProjectManagement: React.FC = () => {
     };
   }, [editor]);
 
-  const loadProjects = async (nextPage = page, nextLimit = limit) => {
+  const loadProjects = async (nextPage = page, nextLimit = limit, nextMenuListFilter = menuListFilter) => {
     setQuerying(true);
     try {
       const q = queryForm.getFieldsValue();
+      const gameType = q?.gameType === EMPTY_CATEGORY_FILTER ? EMPTY_CATEGORY_FILTER : q?.gameType || undefined;
       const res: any = await getGameProjectList({
         page: nextPage,
         limit: nextLimit,
         keyword: String(q?.keyword || '').trim() || undefined,
-        gameType: q?.gameType || undefined,
-        category: q?.category || undefined,
+        gameType,
+        category: gameType === EMPTY_CATEGORY_FILTER ? undefined : q?.category || undefined,
+        showInMenuList: nextMenuListFilter === 'MENU' ? true : undefined,
       });
       setProjects(Array.isArray(res?.data) ? res.data : []);
       setTotal(Number(res?.total || 0));
@@ -432,9 +436,13 @@ const GameProjectManagement: React.FC = () => {
     [allCategories, currentGameType],
   );
   const queryGameType = Form.useWatch('gameType', queryForm);
+  const queryGameTypeIsEmpty = queryGameType === EMPTY_CATEGORY_FILTER;
   const queryLevel2Options = useMemo(
-    () => allCategories.filter((x) => Number(x.level) === 2 && String(x.parentId || '') === String(queryGameType || '')).map((x) => ({ label: x.name, value: x.id })),
-    [allCategories, queryGameType],
+    () => {
+      if (queryGameTypeIsEmpty) return [];
+      return allCategories.filter((x) => Number(x.level) === 2 && String(x.parentId || '') === String(queryGameType || '')).map((x) => ({ label: x.name, value: x.id }));
+    },
+    [allCategories, queryGameType, queryGameTypeIsEmpty],
   );
   const level3Options = useMemo(
     () => allCategories.filter((x) => Number(x.level) === 3 && level2Options.some((l2) => l2.value === x.parentId)).map((x) => ({ label: x.name, value: x.id })),
@@ -463,6 +471,18 @@ const GameProjectManagement: React.FC = () => {
           </Button>
         }
       >
+        <Tabs
+          activeKey={menuListFilter}
+          items={[
+            { key: 'ALL', label: '全部商品' },
+            { key: 'MENU', label: '商品列表商品' },
+          ]}
+          onChange={(key) => {
+            const nextFilter = key === 'MENU' ? 'MENU' : 'ALL';
+            setMenuListFilter(nextFilter);
+            void loadProjects(1, limit, nextFilter);
+          }}
+        />
         <Form form={queryForm} layout="inline" style={{ marginBottom: 12 }}>
           <Form.Item name="keyword">
             <Input allowClear placeholder="搜索商品名称/描述" style={{ width: 240 }} />
@@ -471,7 +491,7 @@ const GameProjectManagement: React.FC = () => {
             <Select
               allowClear
               placeholder="游戏分类"
-              options={gameLevel1Options}
+              options={[{ label: '未设置游戏分类', value: EMPTY_CATEGORY_FILTER }, ...gameLevel1Options]}
               style={{ width: 180 }}
               onChange={() => queryForm.setFieldValue('category', undefined)}
             />
@@ -481,7 +501,7 @@ const GameProjectManagement: React.FC = () => {
               allowClear
               placeholder="二级分类"
               options={queryLevel2Options}
-              disabled={!queryGameType}
+              disabled={!queryGameType || queryGameTypeIsEmpty}
               style={{ width: 180 }}
             />
           </Form.Item>
