@@ -77,16 +77,27 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
     const isStaff = userType === 'STAFF';
     const staffEditLocked = isStaff && !isSuperAdmin;
+    const accountStatusOptions = staffEditLocked
+        ? [
+            { label: '正常', value: 'ACTIVE' },
+            { label: '冻结', value: 'FROZEN' },
+        ]
+        : [
+            { label: '正常', value: 'ACTIVE' },
+            { label: '冻结', value: 'FROZEN' },
+            { label: '停用', value: 'DISABLED' },
+        ];
 
     const handleOk = async () => {
         try {
             const values = staffEditLocked
-                ? await form.validateFields(['staffEmploymentStatus', 'staffTags'])
+                ? await form.validateFields(['status', 'staffEmploymentStatus', 'staffTags'])
                 : await form.validateFields();
 
             const buildPayload = () => {
                 if (staffEditLocked) {
                     return {
+                        status: values.status,
                         staffEmploymentStatus: values.staffEmploymentStatus,
                         staffTags: values.staffTags ? [values.staffTags] : [],
                     };
@@ -177,10 +188,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             name="status"
                             rules={[{ required: true, message: '请选择账号状态' }]}
                         >
-                            <Select placeholder="请选择账号状态" disabled={staffEditLocked}>
-                                <Option value="ACTIVE">正常</Option>
-                                <Option value="DISABLED">停用</Option>
-                            </Select>
+                            <Select placeholder="请选择账号状态" options={accountStatusOptions} />
                         </Form.Item>
 
                         <Form.Item label="需重置密码" name="needResetPwd">

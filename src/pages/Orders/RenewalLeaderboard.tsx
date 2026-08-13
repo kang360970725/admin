@@ -21,6 +21,8 @@ type RenewalLeaderboardRow = {
     renewalAmount: number;
     bonusTotalAmount: number;
     avgBonusRate: number;
+    currentExcellentUserIds?: number[];
+    hasCurrentExcellentStaff?: boolean;
     lastSettledAt?: string;
     lastOrderId?: number;
     lastOrderAutoSerial?: string;
@@ -67,6 +69,14 @@ const getMemberIdText = (row: RenewalLeaderboardRow) => {
         : [];
     return ids.join('、') || String(row.groupKey || '-');
 };
+
+const normalizeMemberIds = (row: RenewalLeaderboardRow) => (
+    Array.isArray(row.memberUserIds)
+        ? row.memberUserIds
+            .map((item) => Number(formatMemberValue(item, ['userId', 'id', 'value'])))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        : []
+);
 
 const buildRange = (dimension: Dimension, value: Dayjs) => {
     if (dimension === 'WEEK') {
@@ -118,10 +128,30 @@ const RenewalLeaderboardPage: React.FC = () => {
             dataIndex: 'keyword',
             render: (_, row) => (
                 <Space direction="vertical" size={2}>
-                    <Typography.Text strong>{getMemberNameText(row)}</Typography.Text>
+                    <Space wrap size={[4, 4]}>
+                        {(() => {
+                            const names = getMemberNameText(row).split('、').filter(Boolean);
+                            const ids = normalizeMemberIds(row);
+                            const excellentSet = new Set((row.currentExcellentUserIds || []).map((id) => Number(id)));
+                            if (!names.length) return <Typography.Text strong>{getMemberNameText(row)}</Typography.Text>;
+                            return names.map((name, index) => {
+                                const isExcellent = excellentSet.has(Number(ids[index]));
+                                return (
+                                    <Tag key={`${name}_${index}`} color={isExcellent ? 'gold' : 'blue'}>
+                                        {name}{isExcellent ? ' · 当前优秀' : ''}
+                                    </Tag>
+                                );
+                            });
+                        })()}
+                    </Space>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         ID：{getMemberIdText(row)}
                     </Typography.Text>
+                    {row.hasCurrentExcellentStaff ? (
+                        <Typography.Text type="warning" style={{ fontSize: 12 }}>
+                            当前有成员入围优秀服务者，仅作当前名单高亮，不影响历史分红快照
+                        </Typography.Text>
+                    ) : null}
                 </Space>
             ),
             fieldProps: {

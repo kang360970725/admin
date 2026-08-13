@@ -293,6 +293,7 @@ export default defineConfig({
         { path: '/users', redirect: '/users/members' },
         { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
         { path: '/users/staff', name: '服务者管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
+        { path: '/users/excellent-staff', name: '优秀服务者管理', component: '@/pages/Users/ExcellentStaff', access: 'canViewExcellentStaff' },
         { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
         { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers', hideInMenu: true },
       ],

@@ -676,6 +676,39 @@ export async function getRenewalLeaderboard(data: {
     });
 }
 
+export async function getExcellentStaffList(data: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    status?: string;
+}) {
+    return request(`${API_BASE}/excellent-staff/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getExcellentStaffCandidates(data: { keyword?: string; limit?: number }) {
+    return request(`${API_BASE}/excellent-staff/candidates`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function addExcellentStaff(data: { userIds: number[]; remark?: string }) {
+    return request(`${API_BASE}/excellent-staff/add`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function removeExcellentStaff(data: { userIds: number[]; remark?: string }) {
+    return request(`${API_BASE}/excellent-staff/remove`, {
+        method: 'POST',
+        data,
+    });
+}
+
 /** 订单详情：POST /orders/detail */
 export async function getOrderDetail(id: number) {
     return request(`${API_BASE}/orders/detail`, {
