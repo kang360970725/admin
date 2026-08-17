@@ -170,6 +170,22 @@ const OrderDetailPage: React.FC = () => {
         const userIds = Array.isArray(renewalGroup?.memberUserIds) ? renewalGroup.memberUserIds : [];
         return userIds.map((id: any) => `#${id}`).filter(Boolean);
     }, [renewalGroup]);
+    const RenewalInfo = (
+        <Space size={[4, 4]} wrap>
+            {renewalGroup ? (
+                <>
+                    <Tag color="green">是</Tag>
+                    {renewalGroupMembers.length
+                        ? renewalGroupMembers.map((name: string, idx: number) => (
+                            <Tag key={`${name}-${idx}`}>{name}</Tag>
+                        ))
+                        : <Typography.Text type="secondary">未记录续单服务者</Typography.Text>}
+                </>
+            ) : (
+                <Tag>否</Tag>
+            )}
+        </Space>
+    );
 
     // 重算工具 - 玩法单分轮输入
     const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<any>(null);
@@ -2594,6 +2610,7 @@ const OrderDetailPage: React.FC = () => {
         <Card style={cardStyleMobile} bodyStyle={cardBodyMobile}>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label="计费类型">{t('BillingMode', billingMode, billingMode)}</Descriptions.Item>
+                <Descriptions.Item label="是否续单">{RenewalInfo}</Descriptions.Item>
                 <Descriptions.Item label="订单保底（万）">{baseAmountWan ?? '-'}</Descriptions.Item>
                 <Descriptions.Item label="付款时间">
                     {order?.paymentTime ? new Date(order?.paymentTime).toLocaleString() : '-'}
@@ -2892,6 +2909,7 @@ const OrderDetailPage: React.FC = () => {
                     <Descriptions.Item
                         label="项目">{order?.project?.name || order?.projectSnapshot?.name || '-'}</Descriptions.Item>
                     <Descriptions.Item label="计费类型">{t('BillingMode', billingMode, billingMode)}</Descriptions.Item>
+                    <Descriptions.Item label="是否续单">{RenewalInfo}</Descriptions.Item>
 
                     <Descriptions.Item label="应收金额">¥{order?.receivableAmount ?? '-'}</Descriptions.Item>
                     <Descriptions.Item label="实付金额">

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Card, Col, DatePicker, Radio, Row, Space, Statistic, Tag, Typography } from 'antd';
+import { Button, Card, Col, DatePicker, Drawer, Radio, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import { history } from '@umijs/max';
@@ -23,6 +23,13 @@ type RenewalLeaderboardRow = {
     avgBonusRate: number;
     currentExcellentUserIds?: number[];
     hasCurrentExcellentStaff?: boolean;
+    orders?: Array<{
+        orderId: number;
+        autoSerial: string;
+        settledAt?: string;
+        renewalAmount?: number;
+        bonusTotalAmount?: number;
+    }>;
     lastSettledAt?: string;
     lastOrderId?: number;
     lastOrderAutoSerial?: string;
@@ -105,6 +112,7 @@ const RenewalLeaderboardPage: React.FC = () => {
     const [dimension, setDimension] = useState<Dimension>('DAY');
     const [dateValue, setDateValue] = useState<Dayjs>(dayjs());
     const [summary, setSummary] = useState<any>({});
+    const [ordersDrawerRow, setOrdersDrawerRow] = useState<RenewalLeaderboardRow | null>(null);
     const currentRange = useMemo(() => buildRange(dimension, dateValue || dayjs()), [dimension, dateValue]);
 
     useEffect(() => {
@@ -188,17 +196,46 @@ const RenewalLeaderboardPage: React.FC = () => {
             render: (_, row) => `${Number(row.avgBonusRate || 0).toFixed(2)}%`,
         },
         {
-            title: '最近结算',
+            title: '关联订单',
+            dataIndex: 'orders',
+            width: 260,
+            search: false,
+            render: (_, row) => {
+                const orders = Array.isArray(row.orders) ? row.orders : [];
+                const previewOrders = orders.slice(0, 3);
+                return (
+                    <Space direction="vertical" size={2}>
+                        <Space wrap size={[4, 4]}>
+                            {previewOrders.length ? previewOrders.map((order) => (
+                                <Typography.Link
+                                    key={order.orderId}
+                                    onClick={() => order.orderId && history.push(`/orders/${order.orderId}`)}
+                                >
+                                    {order.autoSerial || `#${order.orderId}`}
+                                </Typography.Link>
+                            )) : '-'}
+                        </Space>
+                        {orders.length > 3 ? (
+                            <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setOrdersDrawerRow(row)}>
+                                查看全部 {orders.length} 单
+                            </Button>
+                        ) : null}
+                        {orders.length > 0 && orders.length <= 3 ? (
+                            <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setOrdersDrawerRow(row)}>
+                                查看订单明细
+                            </Button>
+                        ) : null}
+                    </Space>
+                );
+            },
+        },
+        {
+            title: '最近结算时间',
             dataIndex: 'lastSettledAt',
-            width: 210,
+            width: 160,
             search: false,
             render: (_, row) => (
                 <Space direction="vertical" size={2}>
-                    <Typography.Link
-                        onClick={() => row.lastOrderId && history.push(`/orders/${row.lastOrderId}`)}
-                    >
-                        {row.lastOrderAutoSerial || '-'}
-                    </Typography.Link>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {row.lastSettledAt ? dayjs(row.lastSettledAt).format('YYYY-MM-DD HH:mm') : '-'}
                     </Typography.Text>
@@ -281,6 +318,48 @@ const RenewalLeaderboardPage: React.FC = () => {
                 }}
                 pagination={{ defaultPageSize: 20, showSizeChanger: true }}
             />
+
+            <Drawer
+                title={`关联订单：${ordersDrawerRow ? getMemberNameText(ordersDrawerRow) : ''}`}
+                width={760}
+                open={!!ordersDrawerRow}
+                onClose={() => setOrdersDrawerRow(null)}
+                destroyOnClose
+            >
+                <Table
+                    rowKey="orderId"
+                    dataSource={Array.isArray(ordersDrawerRow?.orders) ? ordersDrawerRow.orders : []}
+                    pagination={false}
+                    columns={[
+                        {
+                            title: '订单号',
+                            dataIndex: 'autoSerial',
+                            render: (_: any, record: any) => (
+                                <Typography.Link onClick={() => record.orderId && history.push(`/orders/${record.orderId}`)}>
+                                    {record.autoSerial || `#${record.orderId}`}
+                                </Typography.Link>
+                            ),
+                        },
+                        {
+                            title: '结算时间',
+                            dataIndex: 'settledAt',
+                            render: (value: any) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-',
+                        },
+                        {
+                            title: '续单金额',
+                            dataIndex: 'renewalAmount',
+                            align: 'right' as const,
+                            render: (value: any) => money(value),
+                        },
+                        {
+                            title: '续单分红',
+                            dataIndex: 'bonusTotalAmount',
+                            align: 'right' as const,
+                            render: (value: any) => <Typography.Text type="success">{money(value)}</Typography.Text>,
+                        },
+                    ]}
+                />
+            </Drawer>
         </PageContainer>
     );
 };

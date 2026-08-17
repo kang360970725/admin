@@ -428,7 +428,7 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
 
         C.fillStyle = COLORS.textMuted;
         C.font = '12px sans-serif';
-        C.fillText('官方社交账号：微信公众号 | 抖音 | 小红书 @蓝猫爽打', centerX, footerCenterY + 25);
+        C.fillText('官方社交账号：微信公众号 | 抖音 | 小红书 @蓝猫爽打 @蓝猫爽打AIGC', centerX, footerCenterY + 25);
 
         C.fillStyle = COLORS.secondary;
         C.font = 'italic 14px sans-serif';
