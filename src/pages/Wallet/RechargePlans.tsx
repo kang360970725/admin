@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PageContainer, ProFormDigit, ProFormSwitch, ProFormText, ProTable, ModalForm } from '@ant-design/pro-components';
-import { Button, Form, message, Select, Tag } from 'antd';
+import { Button, DatePicker, Form, message, Select, Space, Tag } from 'antd';
+import dayjs from 'dayjs';
 import { createMemberRechargePlan, getCouponTemplates, getMemberRechargePlans, updateMemberRechargePlan } from '@/services/api';
 
 export default function RechargePlansPage() {
@@ -9,6 +10,10 @@ export default function RechargePlansPage() {
     const [editing, setEditing] = useState<any>(null);
     const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number }>>([]);
     const [form] = Form.useForm();
+    const watchedAmount = Number(Form.useWatch('amount', form) || 0);
+    const watchedBonusAmount = Number(Form.useWatch('bonusAmount', form) || 0);
+    const watchedGiftPoints = Math.max(0, Math.floor(Number(Form.useWatch('giftPoints', form) || 0)));
+    const watchedGiftGrowthValue = Math.max(0, Math.floor(Number(Form.useWatch('giftGrowthValue', form) || 0)));
 
     useEffect(() => {
         const loadCoupons = async () => {
@@ -17,7 +22,7 @@ export default function RechargePlansPage() {
                 const rows = Array.isArray(res?.data) ? res.data : [];
                 setCouponOptions(rows.map((item: any) => ({
                     value: Number(item.id),
-                    label: `${item.name} #${item.id}`,
+                    label: `${item.name}（模板ID ${item.id}）`,
                 })));
             } catch (_e) {
                 setCouponOptions([]);
@@ -25,6 +30,15 @@ export default function RechargePlansPage() {
         };
         loadCoupons();
     }, []);
+
+    const formatTime = (value: any) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '不限';
+    const getEffectiveMeta = (record: any) => {
+        if (record?.enabled === false) return { text: '停用', color: 'default' };
+        const now = dayjs();
+        if (record?.effectiveFrom && dayjs(record.effectiveFrom).isAfter(now)) return { text: '未生效', color: 'gold' };
+        if (record?.effectiveTo && dayjs(record.effectiveTo).isBefore(now)) return { text: '已截止', color: 'red' };
+        return { text: '生效中', color: 'green' };
+    };
 
     const columns: any[] = [
         { title: 'ID', dataIndex: 'id', width: 70, search: false },
@@ -40,13 +54,34 @@ export default function RechargePlansPage() {
             render: (_: any, record: any) => {
                 const rows = Array.isArray(record?.couponBenefits) ? record.couponBenefits : [];
                 if (!rows.length) return '-';
-                return rows.map((item: any) => `#${item?.templateId}`).join('，');
+                return rows.map((item: any) => `模板ID ${item?.templateId} ×${Math.max(1, Math.floor(Number(item?.count || 1)))}`).join('，');
             },
         },
         { title: '角标', dataIndex: 'badgeText', width: 100, search: false, render: (v: string) => v ? <Tag color="orange">{v}</Tag> : '-' },
         { title: '券文案', dataIndex: 'couponText', search: false, ellipsis: true },
+        {
+            title: '有效期',
+            dataIndex: 'effectivePeriod',
+            width: 250,
+            search: false,
+            render: (_: any, record: any) => (
+                <Space direction="vertical" size={0}>
+                    <span>{formatTime(record?.effectiveFrom)} 至</span>
+                    <span>{formatTime(record?.effectiveTo)}</span>
+                </Space>
+            ),
+        },
         { title: '排序', dataIndex: 'sortOrder', width: 90, search: false },
-        { title: '状态', dataIndex: 'enabled', width: 100, search: false, render: (v: boolean) => v ? <Tag color="green">启用</Tag> : <Tag>停用</Tag> },
+        {
+            title: '状态',
+            dataIndex: 'enabled',
+            width: 120,
+            search: false,
+            render: (_: any, record: any) => {
+                const meta = getEffectiveMeta(record);
+                return <Tag color={meta.color}>{meta.text}</Tag>;
+            },
+        },
         {
             title: '操作',
             valueType: 'option',
@@ -59,6 +94,8 @@ export default function RechargePlansPage() {
                         setEditing(record);
                         form.setFieldsValue({
                             ...record,
+                            effectiveFrom: record?.effectiveFrom ? dayjs(record.effectiveFrom) : null,
+                            effectiveTo: record?.effectiveTo ? dayjs(record.effectiveTo) : null,
                             couponBenefitTemplateIds: (Array.isArray(record?.couponBenefits) ? record.couponBenefits : []).map((item: any) => Number(item?.templateId)).filter((id: number) => Number.isFinite(id) && id > 0),
                         });
                         setOpen(true);
@@ -88,7 +125,7 @@ export default function RechargePlansPage() {
                         onClick={() => {
                             setEditing(null);
                             form.resetFields();
-                            form.setFieldsValue({ enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0, couponBenefitTemplateIds: [] });
+                            form.setFieldsValue({ enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0, effectiveFrom: null, effectiveTo: null, couponBenefitTemplateIds: [] });
                             setOpen(true);
                         }}
                     >
@@ -101,12 +138,16 @@ export default function RechargePlansPage() {
                 title={editing ? '编辑充值方案' : '新增充值方案'}
                 open={open}
                 form={form}
-                modalProps={{ destroyOnClose: true, onCancel: () => setOpen(false) }}
+                layout="vertical"
+                width={920}
+                modalProps={{ destroyOnClose: true, onCancel: () => setOpen(false), className: 'bc-admin-form-modal' }}
                 initialValues={editing || { enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0 }}
                 onFinish={async (values) => {
                     try {
                         const payload = {
                             ...values,
+                            effectiveFrom: values?.effectiveFrom ? values.effectiveFrom.toISOString() : null,
+                            effectiveTo: values?.effectiveTo ? values.effectiveTo.toISOString() : null,
                             couponBenefits: Array.isArray(values?.couponBenefitTemplateIds)
                                 ? values.couponBenefitTemplateIds.map((templateId: number) => ({ templateId: Number(templateId), count: 1 }))
                                 : [],
@@ -126,23 +167,89 @@ export default function RechargePlansPage() {
                     }
                 }}
             >
-                <ProFormText name="title" label="标题" rules={[{ required: true, message: '请输入标题' }]} />
-                <ProFormDigit name="amount" label="充值金额" min={0.01} fieldProps={{ precision: 2 }} rules={[{ required: true, message: '请输入充值金额' }]} />
-                <ProFormDigit name="bonusAmount" label="赠送金额" min={0} fieldProps={{ precision: 2 }} />
-                <ProFormDigit name="giftPoints" label="赠送积分" min={0} fieldProps={{ precision: 0 }} />
-                <ProFormDigit name="giftGrowthValue" label="赠送成长值" min={0} fieldProps={{ precision: 0 }} />
-                <Form.Item name="couponBenefitTemplateIds" label="赠送优惠券">
-                    <Select
-                        mode="multiple"
-                        allowClear
-                        placeholder="选择充值赠送的优惠券模板"
-                        options={couponOptions}
-                    />
-                </Form.Item>
-                <ProFormText name="badgeText" label="角标文案" />
-                <ProFormText name="couponText" label="券/权益文案" />
-                <ProFormDigit name="sortOrder" label="排序" min={0} fieldProps={{ precision: 0 }} />
-                <ProFormSwitch name="enabled" label="启用" />
+                <div className="bc-admin-form">
+                    <div className="bc-admin-form-summary">
+                        <div className="bc-admin-form-summary-card info">
+                            <div className="bc-admin-form-summary-label">本次充值</div>
+                            <div className="bc-admin-form-summary-value">¥{watchedAmount.toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card success">
+                            <div className="bc-admin-form-summary-label">到账合计</div>
+                            <div className="bc-admin-form-summary-value">¥{(watchedAmount + watchedBonusAmount).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card warning">
+                            <div className="bc-admin-form-summary-label">赠送积分</div>
+                            <div className="bc-admin-form-summary-value">{watchedGiftPoints}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card warning">
+                            <div className="bc-admin-form-summary-label">赠送成长值</div>
+                            <div className="bc-admin-form-summary-value">{watchedGiftGrowthValue}</div>
+                        </div>
+                    </div>
+
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">基础信息</div>
+                        <div className="bc-admin-form-grid">
+                            <div className="bc-admin-form-grid-full">
+                                <ProFormText name="title" label="标题" rules={[{ required: true, message: '请输入标题' }]} />
+                            </div>
+                            <ProFormDigit name="amount" label="充值金额" min={0.01} fieldProps={{ precision: 2 }} rules={[{ required: true, message: '请输入充值金额' }]} />
+                            <ProFormDigit name="bonusAmount" label="赠送金额" min={0} fieldProps={{ precision: 2 }} />
+                        </div>
+                    </div>
+
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">赠送权益</div>
+                        <div className="bc-admin-form-grid">
+                            <ProFormDigit name="giftPoints" label="赠送积分" min={0} fieldProps={{ precision: 0 }} />
+                            <ProFormDigit name="giftGrowthValue" label="赠送成长值" min={0} fieldProps={{ precision: 0 }} />
+                            <div className="bc-admin-form-grid-full">
+                                <Form.Item name="couponBenefitTemplateIds" label="赠送优惠券">
+                                    <Select
+                                        mode="multiple"
+                                        allowClear
+                                        placeholder="选择充值赠送的优惠券模板"
+                                        options={couponOptions}
+                                    />
+                                </Form.Item>
+                            </div>
+                            <ProFormText name="badgeText" label="角标文案" />
+                            <ProFormText name="couponText" label="券/权益文案" />
+                        </div>
+                    </div>
+
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">上架与排序</div>
+                        <div className="bc-admin-form-grid">
+                            <Form.Item label="生效时间" name="effectiveFrom">
+                                <DatePicker showTime style={{ width: '100%' }} placeholder="不填表示立即生效" />
+                            </Form.Item>
+                            <Form.Item
+                                label="截止时间"
+                                name="effectiveTo"
+                                dependencies={['effectiveFrom']}
+                                rules={[
+                                    ({ getFieldValue }) => ({
+                                        validator(_, value) {
+                                            const start = getFieldValue('effectiveFrom');
+                                            if (start && value && value.isBefore(start)) {
+                                                return Promise.reject(new Error('截止时间不能早于生效时间'));
+                                            }
+                                            return Promise.resolve();
+                                        },
+                                    }),
+                                ]}
+                            >
+                                <DatePicker showTime style={{ width: '100%' }} placeholder="不填表示长期有效" />
+                            </Form.Item>
+                            <ProFormDigit name="sortOrder" label="排序" min={0} fieldProps={{ precision: 0 }} />
+                            <ProFormSwitch name="enabled" label="启用" />
+                            <div className="bc-admin-form-grid-full bc-admin-form-muted">
+                                生效期只影响前台/小程序展示和后台手动充值选择；已产生的充值记录不会受后续方案有效期调整影响。
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </ModalForm>
         </PageContainer>
     );

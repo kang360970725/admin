@@ -157,11 +157,14 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
             onOk={handleOk}
             onCancel={handleCancel}
             confirmLoading={loading}
-            width={600}
+            width={860}
+            className="bc-admin-form-modal"
             destroyOnClose
         >
-            <Form form={form} layout="vertical" name="editUserForm">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Form form={form} layout="vertical" name="editUserForm" className="bc-admin-form">
+                <div className="bc-admin-form-section">
+                    <div className="bc-admin-form-section-title">账号信息</div>
+                <div className="bc-admin-form-grid">
                     <div>
                         <Form.Item label="手机号">
                             <Input value={user?.phone} disabled />
@@ -223,8 +226,11 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         </>
                     </div>
                 </div>
+                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div className="bc-admin-form-section">
+                    <div className="bc-admin-form-section-title">业务配置</div>
+                <div className="bc-admin-form-grid">
                     <Form.Item label="等级" name="level">
                         <InputNumber min={1} max={10} placeholder="等级" style={{ width: '100%' }} disabled={staffEditLocked} />
                     </Form.Item>
@@ -293,8 +299,10 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                         </>
                     )}
                 </div>
+                </div>
 
-                <div style={{ marginBottom: 16, padding: 12, border: '1px solid #f0f0f0', borderRadius: 8 }}>
+                <div className="bc-admin-form-section">
+                    <div className="bc-admin-form-section-title">收款码</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                         <div>
                             <div style={{ fontWeight: 500 }}>收款码</div>
@@ -335,7 +343,9 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 </div>
 
                 {isStaff && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">服务者信息</div>
+                    <div className="bc-admin-form-grid">
                         <Form.Item
                             label="服务者工作模式"
                             name="workMode"
@@ -368,6 +378,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 allowClear
                             />
                         </Form.Item>
+                    </div>
                     </div>
                 )}
 

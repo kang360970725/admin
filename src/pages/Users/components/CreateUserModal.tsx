@@ -150,12 +150,14 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
             onOk={handleOk}
             onCancel={handleCancel}
             confirmLoading={loading}
-            width={600}
+            width={820}
+            className="bc-admin-form-modal"
             destroyOnClose
         >
             <Form
                 form={form}
                 layout="vertical"
+                className="bc-admin-form"
                 name="createUserForm"
                 initialValues={{
                     userType: initialUserType,
@@ -165,7 +167,9 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                     workMode: 'ONLINE',
                 }}
             >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="bc-admin-form-section">
+                    <div className="bc-admin-form-section-title">账号信息</div>
+                <div className="bc-admin-form-grid">
                     <div>
                         <Form.Item
                             label="手机号"
@@ -250,8 +254,11 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         </>
                     </div>
                 </div>
+                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+                <div className="bc-admin-form-section">
+                    <div className="bc-admin-form-section-title">业务配置</div>
+                <div className="bc-admin-form-grid">
                     <Form.Item label="等级" name="level">
                         <InputNumber min={1} max={10} placeholder="等级" style={{ width: '100%' }} />
                     </Form.Item>
@@ -306,9 +313,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                         />
                     </Form.Item>
                 </div>
+                </div>
 
                 {isStaff && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">服务者信息</div>
+                    <div className="bc-admin-form-grid">
                         <Form.Item
                             label="服务者工作模式"
                             name="workMode"
@@ -342,11 +352,15 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             />
                         </Form.Item>
                     </div>
+                    </div>
                 )}
 
+                <div className="bc-admin-form-section">
+                    <div className="bc-admin-form-section-title">头像</div>
                 <Form.Item label="头像URL" name="avatar">
                     <Input placeholder="请输入头像URL地址" />
                 </Form.Item>
+                </div>
             </Form>
         </Modal>
     );

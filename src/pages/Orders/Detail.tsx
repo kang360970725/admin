@@ -1504,6 +1504,7 @@ const OrderDetailPage: React.FC = () => {
         const baseWan = o?.baseAmountWan ?? null;
         const originalAmount = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.finalPayableAmount ?? o?.paidAmount ?? 0);
         const discountAmount = Number(o?.discountAmount ?? 0);
+        const couponDiscountAmount = Number(o?.couponDiscountAmount ?? 0);
         const manualAdjustAmount = Number(o?.manualAdjustAmount ?? 0);
         const finalPayableAmount = Number(
             o?.finalPayableAmount ??
@@ -1512,15 +1513,38 @@ const OrderDetailPage: React.FC = () => {
         );
         const paidAmount = Number(o?.paidAmount ?? finalPayableAmount ?? 0);
         const orderSourceLabel = String(o?.orderSourceLabel || o?.orderSource || '-');
-        const receiptMeta = (o?.latestPayment?.notifyRaw as any)?.receiptMeta || {};
+        const notifyRaw = (() => {
+            const raw = o?.latestPayment?.notifyRaw;
+            if (typeof raw === 'string') {
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return {};
+                }
+            }
+            return raw || {};
+        })();
+        const receiptMeta = (notifyRaw as any)?.receiptMeta || {};
+        const isMemberBalancePayment =
+            String(o?.paymentChannel || '').trim().toUpperCase() === 'BALANCE' ||
+            String(o?.latestPayment?.channel || '').trim().toUpperCase() === 'BALANCE' ||
+            receiptMeta?.memberBalanceDeducted !== undefined ||
+            receiptMeta?.memberBalanceAfter !== undefined;
+        const paymentChannelText = isMemberBalancePayment
+            ? '会员储值'
+            : (o?.paymentChannelLabel || (o?.latestPayment?.channel ? String(o.latestPayment.channel) : '未记录支付方式'));
         const financeLines = [
             `商品小计：¥${Number.isFinite(originalAmount) ? originalAmount.toFixed(2) : '0.00'}`,
         ];
         if (Number.isFinite(manualAdjustAmount) && manualAdjustAmount !== 0) {
-            financeLines.push(`人工调整：${manualAdjustAmount > 0 ? '+ ' : '- '}¥${Math.abs(manualAdjustAmount).toFixed(2)}`);
+            financeLines.push(`人工优惠：${manualAdjustAmount > 0 ? '- ' : '+ '}¥${Math.abs(manualAdjustAmount).toFixed(2)}`);
+        }
+        if (Number.isFinite(couponDiscountAmount) && couponDiscountAmount > 0) {
+            financeLines.push(`优惠券抵扣：- ¥${couponDiscountAmount.toFixed(2)}`);
         }
         financeLines.push(`实付金额：¥${Number.isFinite(paidAmount) ? paidAmount.toFixed(2) : finalPayableAmount.toFixed(2)}`);
-        if (String(o?.latestPayment?.channel || '').trim().toUpperCase() === 'BALANCE') {
+        financeLines.push(`支付方式：${paymentChannelText}`);
+        if (isMemberBalancePayment) {
             const deducted = Number(receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
             const balanceAfter = Number(receiptMeta?.memberBalanceAfter ?? 0);
             const rewardPointsPreview = Number(receiptMeta?.rewardPointsPreview ?? 0);
@@ -1556,6 +1580,7 @@ const OrderDetailPage: React.FC = () => {
             `客户ID：${customerId}`,
             `接单陪玩：`,
             ...playerLines.map((line) => `  ${line}`),
+            ...financeLines,
             `开单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
             `派单客服：${csName}`,
             `实时单，请在 3 分钟内完成对接。`,
@@ -2942,6 +2967,9 @@ const OrderDetailPage: React.FC = () => {
 
                     <Descriptions.Item label="渠道来源">
                         {order?.orderSourceLabel || order?.orderSource || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="收款方式">
+                        {order?.paymentChannelLabel || (order?.paymentChannel ? String(order.paymentChannel) : '-')}
                     </Descriptions.Item>
                     <Descriptions.Item label="客户游戏ID">{order?.customerGameId ?? '-'}</Descriptions.Item>
                     <Descriptions.Item label="客户联系方式">

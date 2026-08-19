@@ -1,9 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs} from 'antd';
+import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
-import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
+import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
 import ChangeLevelModal from './components/ChangeLevelModal';
@@ -11,6 +11,7 @@ import ResetPasswordModal from './components/ResetPasswordModal';
 import AssignRoleModal from '@/components/AssignRoleModal';
 import UserWalletDrawer from './components/UserWalletDrawer';
 import {useIsMobile} from '@/utils/useIsMobile';
+import {generateMemberRechargeReceiptImage} from '@/utils/receiptImage';
 
 const formatDaysAgo = (date?: string) => {
     if (!date) return '从未';
@@ -36,6 +37,40 @@ const userStatusMap = {
     ACTIVE: { text: '正常', status: 'success' },
     FROZEN: { text: '冻结', status: 'warning' },
     DISABLED: { text: '禁用', status: 'default' },
+};
+
+const orderStatusMap: Record<string, { text: string; color?: string }> = {
+    WAIT_ASSIGN: { text: '待派单', color: 'default' },
+    WAIT_ACCEPT: { text: '待接单', color: 'orange' },
+    ACCEPTED: { text: '已接单', color: 'blue' },
+    ARCHIVED: { text: '已存单', color: 'purple' },
+    COMPLETED_PENDING_CONFIRM: { text: '已结单待确认', color: 'gold' },
+    COMPLETED: { text: '已结单', color: 'green' },
+    WAIT_REVIEW: { text: '待评价', color: 'gold' },
+    REVIEWED: { text: '已评价', color: 'cyan' },
+    WAIT_AFTERSALE: { text: '待售后', color: 'volcano' },
+    AFTERSALE_DONE: { text: '已售后', color: 'magenta' },
+    REFUNDED: { text: '已退款', color: 'red' },
+};
+
+const memberRechargeStatusMap: Record<string, { text: string; color?: string }> = {
+    PENDING: { text: '待支付', color: 'orange' },
+    SUCCESS: { text: '充值成功', color: 'green' },
+    FAILED: { text: '充值失败', color: 'red' },
+    CLOSED: { text: '已关闭', color: 'default' },
+};
+
+const memberRechargeChannelMap: Record<string, { text: string; color?: string }> = {
+    MANUAL: { text: '后台手动', color: 'blue' },
+    WECHAT: { text: '微信支付', color: 'green' },
+    MINIAPP_WECHAT: { text: '小程序微信', color: 'green' },
+};
+
+const userCouponStatusMap: Record<string, { text: string; color?: string }> = {
+    UNUSED: { text: '未使用', color: 'green' },
+    USED: { text: '已使用', color: 'default' },
+    EXPIRED: { text: '已过期', color: 'red' },
+    LOCKED: { text: '已锁定', color: 'orange' },
 };
 
 const renderReviewSummary = (record: any) => {
@@ -130,6 +165,18 @@ export default function UsersPage() {
     const [memberRechargePlans, setMemberRechargePlans] = useState<any[]>([]);
     const [memberCouponTemplateOptions, setMemberCouponTemplateOptions] = useState<Array<{ label: string; value: number }>>([]);
     const [memberRechargeForm] = Form.useForm();
+    const [memberCouponGrantVisible, setMemberCouponGrantVisible] = useState(false);
+    const [memberCouponGrantSubmitting, setMemberCouponGrantSubmitting] = useState(false);
+    const [memberCouponGrantForm] = Form.useForm();
+    const [memberRechargeReceiptOpen, setMemberRechargeReceiptOpen] = useState(false);
+    const [memberRechargeReceiptImage, setMemberRechargeReceiptImage] = useState<string | null>(null);
+    const [memberRechargeReceiptText, setMemberRechargeReceiptText] = useState('');
+    const watchedMemberRechargeAmount = Number(Form.useWatch('amount', memberRechargeForm) || 0);
+    const watchedMemberBonusAmount = Number(Form.useWatch('bonusAmount', memberRechargeForm) || 0);
+    const watchedMemberGiftPoints = Math.max(0, Math.floor(Number(Form.useWatch('giftPoints', memberRechargeForm) || 0)));
+    const watchedMemberGiftGrowthValue = Math.max(0, Math.floor(Number(Form.useWatch('giftGrowthValue', memberRechargeForm) || 0)));
+    const memberRechargeBaseGrowthValue = Math.max(0, Math.floor(watchedMemberRechargeAmount));
+    const memberRechargeTotalGrowthValue = memberRechargeBaseGrowthValue + watchedMemberGiftGrowthValue;
     const [memberGrowthVisible, setMemberGrowthVisible] = useState(false);
     const [memberGrowthSubmitting, setMemberGrowthSubmitting] = useState(false);
     const [memberGrowthForm] = Form.useForm();
@@ -144,6 +191,7 @@ export default function UsersPage() {
     const [staffClearForm] = Form.useForm();
     const [staffTagOptions, setStaffTagOptions] = useState<Array<{ label: string; value: string }>>([]);
     const [staffStatusTab, setStaffStatusTab] = useState<'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED'>('ACTIVE');
+    const [memberStateTab, setMemberStateTab] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
     const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean }> = {
         '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
@@ -157,6 +205,9 @@ export default function UsersPage() {
     useEffect(() => {
         if (sceneConfig.key === 'STAFF') {
             setStaffStatusTab('ACTIVE');
+        }
+        if (sceneConfig.key === 'MEMBER') {
+            setMemberStateTab('ALL');
         }
     }, [sceneConfig.key]);
 
@@ -336,11 +387,17 @@ export default function UsersPage() {
         ]);
         const plans = Array.isArray(plansRes) ? plansRes : [];
         const coupons = Array.isArray(couponRes?.data) ? couponRes.data : [];
-        setMemberRechargePlans(plans.filter((item: any) => item?.enabled !== false));
+        const now = dayjs();
+        setMemberRechargePlans(plans.filter((item: any) => {
+            if (item?.enabled === false) return false;
+            if (item?.effectiveFrom && dayjs(item.effectiveFrom).isAfter(now)) return false;
+            if (item?.effectiveTo && dayjs(item.effectiveTo).isBefore(now)) return false;
+            return true;
+        }));
         setMemberCouponTemplateOptions(
             coupons.map((item: any) => ({
                 value: Number(item.id),
-                label: `${item.name} #${item.id}`,
+                label: `${item.name}（模板ID ${item.id}）`,
             })),
         );
     };
@@ -365,6 +422,43 @@ export default function UsersPage() {
         }
     };
 
+    const openMemberCouponGrant = async () => {
+        if (!memberDetail?.id) return;
+        try {
+            await loadMemberBenefitOptions();
+            memberCouponGrantForm.resetFields();
+            memberCouponGrantForm.setFieldsValue({
+                userId: Number(memberDetail.id),
+                count: 1,
+            });
+            setMemberCouponGrantVisible(true);
+        } catch (e: any) {
+            message.error(e?.data?.message || e?.message || '加载优惠券模板失败');
+        }
+    };
+
+    const submitMemberCouponGrant = async () => {
+        if (!memberDetail?.id) return;
+        try {
+            const values = await memberCouponGrantForm.validateFields();
+            setMemberCouponGrantSubmitting(true);
+            await grantUserCoupon({
+                userId: Number(memberDetail.id),
+                templateId: Number(values.templateId),
+                count: Number(values.count || 1),
+                expiresAt: values.expiresAt ? dayjs(values.expiresAt).toISOString() : undefined,
+            });
+            message.success('会员发券成功');
+            setMemberCouponGrantVisible(false);
+            memberCouponGrantForm.resetFields();
+            await loadMemberDetailData(Number(memberDetail.id));
+        } catch (e: any) {
+            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '会员发券失败');
+        } finally {
+            setMemberCouponGrantSubmitting(false);
+        }
+    };
+
     const handleMemberRechargePlanChange = (planId: number) => {
         const plan = memberRechargePlans.find((item: any) => Number(item?.id) === Number(planId));
         if (!plan) return;
@@ -379,12 +473,101 @@ export default function UsersPage() {
         });
     };
 
+    const openMemberRechargeReceipt = async (rechargeRecord: any, formValues?: any) => {
+        const localOptions = memberCouponTemplateOptions.length
+            ? memberCouponTemplateOptions
+            : (() => [])();
+        let couponOptions = localOptions;
+        if (!couponOptions.length) {
+            try {
+                const couponRes: any = await getCouponTemplates({ page: 1, limit: 200, status: 'ACTIVE' });
+                couponOptions = (Array.isArray(couponRes?.data) ? couponRes.data : []).map((item: any) => ({
+                    value: Number(item.id),
+                    label: `${item.name}（模板ID ${item.id}）`,
+                }));
+                if (couponOptions.length) setMemberCouponTemplateOptions(couponOptions);
+            } catch (_e) {
+                couponOptions = [];
+            }
+        }
+
+        const couponCountMap = new Map<number, number>();
+        const receiptCouponBenefits = Array.isArray(rechargeRecord?.couponBenefits)
+            ? rechargeRecord.couponBenefits
+            : (Array.isArray(formValues?.couponBenefitTemplateIds)
+                ? formValues.couponBenefitTemplateIds.map((templateId: number) => ({templateId, count: 1}))
+                : []);
+        receiptCouponBenefits.forEach((item: any) => {
+            const id = Number(item?.templateId ?? item);
+            const count = Math.max(1, Math.floor(Number(item?.count ?? 1)));
+            if (Number.isFinite(id) && id > 0) {
+                couponCountMap.set(id, (couponCountMap.get(id) || 0) + count);
+            }
+        });
+        const couponNames = Array.from(couponCountMap.entries()).map(([templateId, count]) => {
+            const optionLabel = couponOptions.find((item) => Number(item.value) === Number(templateId))?.label || `优惠券模板ID ${templateId}`;
+            const cleanLabel = optionLabel.replace(/（模板ID\s*\d+）$/, '');
+            return `${cleanLabel} ×${count}`;
+        });
+        const rechargeAmount = Number(rechargeRecord?.amount ?? formValues?.amount ?? rechargeRecord?.payAmount ?? 0);
+        const bonusAmount = Number(rechargeRecord?.bonusAmount ?? formValues?.bonusAmount ?? 0);
+        const grantedAmount = Number(rechargeRecord?.grantedAmount ?? rechargeAmount + bonusAmount);
+        const giftPoints = Math.max(0, Math.floor(Number(rechargeRecord?.giftPoints ?? formValues?.giftPoints ?? 0)));
+        const giftGrowthValue = Math.max(0, Math.floor(Number(rechargeRecord?.giftGrowthValue ?? formValues?.giftGrowthValue ?? 0)));
+        const baseGrowthValue = Math.max(0, Math.floor(rechargeAmount));
+        const totalGrowthValue = baseGrowthValue + giftGrowthValue;
+        const receiptNo = rechargeRecord?.rechargeNo || `ID ${rechargeRecord?.id || '-'}`;
+        const receiptTime = rechargeRecord?.createdAt
+            ? dayjs(rechargeRecord.createdAt).format('YYYY-MM-DD HH:mm:ss')
+            : dayjs().format('YYYY-MM-DD HH:mm:ss');
+        const receiptTextLines = [
+            '会员储值小票',
+            `会员：${memberDetail?.name || memberDetail?.phone || '-'}`,
+            `手机号：${memberDetail?.phone || '-'}`,
+            `会员编码：${memberDetail?.memberProfile?.memberCode || '-'}`,
+            `充值单号：${receiptNo}`,
+            `本次储值：¥${rechargeAmount.toFixed(2)}`,
+            `赠送金额：¥${bonusAmount.toFixed(2)}`,
+            `到账合计：¥${grantedAmount.toFixed(2)}`,
+            `新增成长值：${baseGrowthValue} + ${giftGrowthValue} = ${totalGrowthValue}`,
+            `新增积分：${giftPoints}`,
+            `赠送优惠券：${couponNames.length ? couponNames.join('、') : '无'}`,
+            `备注：${rechargeRecord?.remark || formValues?.remark || '-'}`,
+            `操作时间：${receiptTime}`,
+        ];
+        const receiptText = receiptTextLines.join('\n');
+        const receiptImage = await generateMemberRechargeReceiptImage(
+            '蓝猫爽打 · 会员储值小票',
+            [
+                {label: '会员', value: memberDetail?.name || memberDetail?.phone || '-'},
+                {label: '手机号', value: memberDetail?.phone || '-'},
+                {label: '会员编码', value: memberDetail?.memberProfile?.memberCode || '-'},
+                {label: '充值单号', value: receiptNo},
+                {label: '本次储值', value: `¥${rechargeAmount.toFixed(2)}`, highlight: true},
+                {label: '赠送金额', value: `¥${bonusAmount.toFixed(2)}`},
+                {label: '到账合计', value: `¥${grantedAmount.toFixed(2)}`, highlight: true},
+                {label: '新增成长值', value: `${baseGrowthValue} + ${giftGrowthValue} = ${totalGrowthValue}`},
+                {label: '新增积分', value: `${giftPoints}`},
+                {label: '赠送优惠券', value: couponNames.length ? couponNames.join('、') : '无'},
+                {label: '备注', value: rechargeRecord?.remark || formValues?.remark || '-'},
+                {label: '操作时间', value: receiptTime},
+            ],
+            {
+                subtitle: '后台手动储值到账凭证',
+                footerTips: ['该小票用于老板核对会员储值到账。', '最终数据以后台充值记录、会员钱包流水和优惠券发放记录为准。'],
+            },
+        );
+        setMemberRechargeReceiptText(receiptText);
+        setMemberRechargeReceiptImage(receiptImage);
+        setMemberRechargeReceiptOpen(true);
+    };
+
     const submitMemberRecharge = async () => {
         try {
             const values = await memberRechargeForm.validateFields();
             if (!memberDetail?.id) return;
             setMemberRechargeSubmitting(true);
-            await manualMemberRecharge({
+            const rechargeResult: any = await manualMemberRecharge({
                 userId: Number(memberDetail.id),
                 planId: values?.planId ? Number(values.planId) : undefined,
                 amount: values?.amount != null ? Number(values.amount) : undefined,
@@ -401,6 +584,7 @@ export default function UsersPage() {
             memberRechargeForm.resetFields();
             await loadMemberDetailData(Number(memberDetail.id));
             actionRef.current?.reload?.();
+            await openMemberRechargeReceipt(rechargeResult, values);
         } catch (error: any) {
             if (!error?.errorFields) {
                 message.error(error?.response?.data?.message || '会员手动充值失败');
@@ -1298,6 +1482,23 @@ export default function UsersPage() {
                     />
                 </Card>
             ) : null}
+            {sceneConfig.key === 'MEMBER' ? (
+                <Card size="small" bodyStyle={{ padding: isMobile ? '4px 8px 0' : '4px 12px 0' }} style={{ marginBottom: isMobile ? 10 : 12 }}>
+                    <Tabs
+                        activeKey={memberStateTab}
+                        onChange={(key) => {
+                            setMemberStateTab(key as typeof memberStateTab);
+                            setTimeout(() => actionRef.current?.reload?.(), 0);
+                        }}
+                        size={isMobile ? 'small' : 'middle'}
+                        items={[
+                            { key: 'ALL', label: '全部会员' },
+                            { key: 'ACTIVE', label: '有效会员' },
+                            { key: 'INACTIVE', label: '无效会员' },
+                        ]}
+                    />
+                </Card>
+            ) : null}
             <ProTable
                 columns={tableColumns}
                 scroll={isMobile && sceneConfig.key === 'STAFF' ? undefined : { x: 'max-content' }}
@@ -1310,6 +1511,7 @@ export default function UsersPage() {
                             limit: pageSize ?? 10,
                             scene: sceneConfig.key,
                             includeStaffMembers: sceneConfig.key === 'MEMBER' ? 'true' : undefined,
+                            ...(sceneConfig.key === 'MEMBER' ? { memberState: memberStateTab } : {}),
                             ...(sceneConfig.key === 'STAFF' ? { staffEmploymentStatus: staffStatusTab } : {}),
                             ...(sceneConfig.key !== 'STAFF' && _ignoredStatus ? { status: _ignoredStatus } : {}),
                             ...queryRest, // search 表单字段会在这里（例如 search/userType/status）
@@ -1448,25 +1650,47 @@ export default function UsersPage() {
                 }}
                 confirmLoading={staffExitLoading}
                 destroyOnClose
+                width={820}
+                className="bc-admin-form-modal"
             >
-                <Form form={staffExitForm} layout="vertical">
-                    <div style={{ background: '#fafafa', padding: 12, borderRadius: 8, marginBottom: 16, lineHeight: '22px' }}>
-                        <div>规则分组：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
-                        <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
-                        <div>入驻天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
-                        <div>有效接单量：{Number(staffExitPreview?.effectiveAcceptedOrderCount ?? 0)} / {Number(staffExitPreview?.minAcceptedOrdersForDepositRefund ?? 50)} 单</div>
-                        <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedDays ?? 15)} 天</div>
-                        <div>退出平台冷却期：{Number(staffExitPreview?.quitCoolingDays ?? 180)} 天</div>
-                        <div>押金不退限制：{Number(staffExitPreview?.depositForfeitDays ?? 0)} 天</div>
-                        <div>保证金阈值：¥{Number(staffExitPreview?.depositAmountRule ?? 0)}</div>
-                        <div>当前可用/冻结/保证金：¥{Number(staffExitPreview?.availableBalance ?? 0)} / ¥{Number(staffExitPreview?.frozenBalance ?? 0)} / ¥{Number(staffExitPreview?.depositBalance ?? 0)}</div>
-                        <div>本次应退保证金：¥{Number(staffExitPreview?.refundDepositAmount ?? 0)}</div>
-                        <div>本次不退保证金：¥{Number(staffExitPreview?.forfeitDepositAmount ?? 0)}</div>
-                        <div>保证金未缴满补扣：¥{Number(staffExitPreview?.depositTopUpForfeitAmount ?? 0)}</div>
-                        <div>余额不足未补齐保证金：¥{Number(staffExitPreview?.depositTopUpUnpaidAmount ?? 0)}</div>
-                        <div>退出后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
-                        <div>退出后预计可用余额：¥{Number(staffExitPreview?.finalAvailableBalance ?? 0)}</div>
+                <Form form={staffExitForm} layout="vertical" className="bc-admin-form">
+                    <div className="bc-admin-form-summary">
+                        <div className="bc-admin-form-summary-card info">
+                            <div className="bc-admin-form-summary-label">当前可用</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffExitPreview?.availableBalance ?? 0).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card warning">
+                            <div className="bc-admin-form-summary-label">冻结金额</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffExitPreview?.frozenBalance ?? 0).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card success">
+                            <div className="bc-admin-form-summary-label">应退保证金</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffExitPreview?.refundDepositAmount ?? 0).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card info">
+                            <div className="bc-admin-form-summary-label">预计可用</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffExitPreview?.finalAvailableBalance ?? 0).toFixed(2)}</div>
+                        </div>
                     </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">规则核算</div>
+                        <div className="bc-admin-form-grid">
+                            <div>规则分组：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
+                            <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
+                            <div>入驻天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
+                            <div>有效接单量：{Number(staffExitPreview?.effectiveAcceptedOrderCount ?? 0)} / {Number(staffExitPreview?.minAcceptedOrdersForDepositRefund ?? 50)} 单</div>
+                            <div>退出平台冷却期：{Number(staffExitPreview?.quitCoolingDays ?? 180)} 天</div>
+                            <div>押金不退限制：{Number(staffExitPreview?.depositForfeitDays ?? 0)} 天</div>
+                            <div>保证金阈值：¥{Number(staffExitPreview?.depositAmountRule ?? 0)}</div>
+                            <div>本次不退保证金：¥{Number(staffExitPreview?.forfeitDepositAmount ?? 0)}</div>
+                            <div>保证金未缴满补扣：¥{Number(staffExitPreview?.depositTopUpForfeitAmount ?? 0)}</div>
+                            <div>余额不足未补齐保证金：¥{Number(staffExitPreview?.depositTopUpUnpaidAmount ?? 0)}</div>
+                            <div>退出后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
+                            <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedDays ?? 15)} 天</div>
+                        </div>
+                    </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">退出确认</div>
                     <Form.Item label="退出方式" name="mode" rules={[{ required: true, message: '请选择退出方式' }]}>
                         <Select
                             options={[
@@ -1483,6 +1707,7 @@ export default function UsersPage() {
                     <div style={{ color: '#999', fontSize: 12, lineHeight: '20px', marginTop: 8 }}>
                         若勾选限制服务，系统会校验退出后可用余额必须为 0；有余额时请改用“清退”。
                     </div>
+                    </div>
                 </Form>
             </Modal>
 
@@ -1497,20 +1722,36 @@ export default function UsersPage() {
                 }}
                 confirmLoading={staffClearLoading}
                 destroyOnClose
+                width={720}
+                className="bc-admin-form-modal"
             >
-                <Form form={staffClearForm} layout="vertical">
-                    <div style={{ background: '#fff7e6', padding: 12, borderRadius: 8, marginBottom: 16, lineHeight: '22px' }}>
-                        <div>可用余额：¥{Number(staffClearUser?.wallet?.availableBalance ?? 0)}</div>
-                        <div>冻结金额：¥{Number(staffClearUser?.wallet?.frozenBalance ?? 0)}</div>
-                        <div>保证金：¥{Number(staffClearUser?.wallet?.depositBalance ?? 0)}</div>
-                        <div>本操作会将以上金额全部清零，并记录正常流水。</div>
+                <Form form={staffClearForm} layout="vertical" className="bc-admin-form">
+                    <div className="bc-admin-form-summary">
+                        <div className="bc-admin-form-summary-card danger">
+                            <div className="bc-admin-form-summary-label">可用余额</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffClearUser?.wallet?.availableBalance ?? 0).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card danger">
+                            <div className="bc-admin-form-summary-label">冻结金额</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffClearUser?.wallet?.frozenBalance ?? 0).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card danger">
+                            <div className="bc-admin-form-summary-label">保证金</div>
+                            <div className="bc-admin-form-summary-value">¥{Number(staffClearUser?.wallet?.depositBalance ?? 0).toFixed(2)}</div>
+                        </div>
                     </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">清退确认</div>
+                        <div className="bc-admin-form-muted" style={{ marginBottom: 12 }}>
+                            本操作会将以上金额全部清零，并记录正常流水。
+                        </div>
                     <Form.Item name="addToBlacklist" valuePropName="checked">
                         <Checkbox>同时加入黑名单</Checkbox>
                     </Form.Item>
                     <Form.Item label="备注" name="remark" rules={[{ required: true, message: '请输入清退备注' }]}>
                         <Input.TextArea rows={3} placeholder="请输入清退原因或说明" maxLength={255} />
                     </Form.Item>
+                    </div>
                 </Form>
             </Modal>
 
@@ -1529,14 +1770,17 @@ export default function UsersPage() {
             >
                 {memberDetail ? (
                     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        {access.canManualMemberRecharge || access.canAdjustMemberGrowth ? (
-                            <Space wrap>
-                                {access.canManualMemberRecharge ? (
-                                    <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
-                                ) : null}
-                                {access.canAdjustMemberGrowth ? (
-                                    <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
-                                ) : null}
+                        {access.canManualMemberRecharge || access.canGrantMemberCoupon || access.canAdjustMemberGrowth ? (
+	                            <Space wrap>
+	                                {access.canManualMemberRecharge ? (
+	                                    <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
+	                                ) : null}
+	                                {access.canGrantMemberCoupon ? (
+	                                    <Button onClick={openMemberCouponGrant}>发放优惠券</Button>
+	                                ) : null}
+	                                {access.canAdjustMemberGrowth ? (
+	                                    <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
+	                                ) : null}
                             </Space>
                         ) : null}
                         <Descriptions bordered size="small" column={2}>
@@ -1565,7 +1809,10 @@ export default function UsersPage() {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                                                 <span>{item?.autoSerial || `#${item?.id}`}</span>
                                                 <span>{item?.project?.name || '-'}</span>
-                                                <Tag>{item?.status || '-'}</Tag>
+                                                {(() => {
+                                                    const meta = orderStatusMap[String(item?.status || '')] || { text: item?.status || '-', color: 'default' };
+                                                    return <Tag color={meta.color}>{meta.text}</Tag>;
+                                                })()}
                                             </div>
                                             <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
                                                 实付 ¥{Number(item?.paidAmount ?? item?.finalPayableAmount ?? 0).toFixed(2)} · {item?.createdAt ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm') : '-'}
@@ -1581,14 +1828,26 @@ export default function UsersPage() {
                                 size="small"
                                 dataSource={Array.isArray(memberDetail?.memberRechargeOrders) ? memberDetail.memberRechargeOrders : []}
                                 locale={{ emptyText: '暂无充值记录' }}
-                                renderItem={(item: any) => (
+                                renderItem={(item: any, index: number) => (
                                     <List.Item>
                                         <div style={{ width: '100%' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                                                 <span>{item?.rechargeNo || `#${item?.id}`}</span>
                                                 <Space size={8}>
-                                                    <Tag>{item?.channel || '-'}</Tag>
-                                                    <Tag color={String(item?.status || '') === 'SUCCESS' ? 'green' : 'default'}>{item?.status || '-'}</Tag>
+                                                    {(() => {
+                                                        const meta = memberRechargeChannelMap[String(item?.channel || '').toUpperCase()] || {
+                                                            text: item?.channel || '-',
+                                                            color: 'default',
+                                                        };
+                                                        return <Tag color={meta.color}>{meta.text}</Tag>;
+                                                    })()}
+                                                    {(() => {
+                                                        const meta = memberRechargeStatusMap[String(item?.status || '').toUpperCase()] || {
+                                                            text: item?.status || '-',
+                                                            color: 'default',
+                                                        };
+                                                        return <Tag color={meta.color}>{meta.text}</Tag>;
+                                                    })()}
                                                 </Space>
                                             </div>
                                             <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
@@ -1600,6 +1859,13 @@ export default function UsersPage() {
                                             {item?.remark ? (
                                                 <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
                                                     备注：{item.remark}
+                                                </div>
+                                            ) : null}
+                                            {index === 0 ? (
+                                                <div style={{ marginTop: 8 }}>
+                                                    <Button size="small" onClick={() => openMemberRechargeReceipt(item)}>
+                                                        充值小票
+                                                    </Button>
                                                 </div>
                                             ) : null}
                                         </div>
@@ -1618,7 +1884,13 @@ export default function UsersPage() {
                                         <div style={{ width: '100%' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                                                 <span>{item?.template?.name || `优惠券 #${item?.id}`}</span>
-                                                <Tag>{item?.status || '-'}</Tag>
+                                                {(() => {
+                                                    const meta = userCouponStatusMap[String(item?.status || '').toUpperCase()] || {
+                                                        text: item?.status || '-',
+                                                        color: 'default',
+                                                    };
+                                                    return <Tag color={meta.color}>{meta.text}</Tag>;
+                                                })()}
                                             </div>
                                             <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
                                                 {item?.expiresAt ? `有效期至 ${dayjs(item.expiresAt).format('YYYY-MM-DD HH:mm')}` : '长期有效'}
@@ -1703,50 +1975,179 @@ export default function UsersPage() {
                 }}
                 confirmLoading={memberRechargeSubmitting}
                 destroyOnClose
+                width={860}
+                className="bc-admin-form-modal"
             >
-                <Form form={memberRechargeForm} layout="vertical">
-                    <Form.Item label="充值方案" name="planId">
-                        <Select
-                            allowClear
-                            showSearch
-                            optionFilterProp="label"
-                            options={memberRechargePlans.map((item: any) => ({
-                                value: Number(item.id),
-                                label: `${item.title} · 充${Number(item.amount ?? 0).toFixed(2)} 送${Number(item.bonusAmount ?? 0).toFixed(2)}`,
-                            }))}
-                            placeholder="可选，选择后自动带出福利"
-                            onChange={handleMemberRechargePlanChange}
-                        />
-                    </Form.Item>
-                    <Form.Item label="充值金额" name="amount" rules={[{ required: true, message: '请输入充值金额' }]}>
-                        <InputNumber style={{ width: '100%' }} min={0.01} precision={2} placeholder="请输入实际充值金额" />
-                    </Form.Item>
-                    <Form.Item label="赠送本金" name="bonusAmount">
-                        <InputNumber style={{ width: '100%' }} min={0} precision={2} placeholder="选填，默认取方案值" />
-                    </Form.Item>
-                    <Form.Item label="赠送积分" name="giftPoints">
-                        <InputNumber style={{ width: '100%' }} min={0} precision={0} placeholder="选填，默认取方案值" />
-                    </Form.Item>
-                    <Form.Item label="赠送成长值" name="giftGrowthValue">
-                        <InputNumber style={{ width: '100%' }} min={0} precision={0} placeholder="选填，默认取方案值" />
-                    </Form.Item>
-                    <Form.Item label="赠送优惠券" name="couponBenefitTemplateIds">
-                        <Select
-                            mode="multiple"
-                            allowClear
-                            showSearch
-                            optionFilterProp="label"
-                            options={memberCouponTemplateOptions}
-                            placeholder="可选，支持绑定赠送优惠券"
-                        />
-                    </Form.Item>
-                    <Form.Item label="充值备注" name="remark" rules={[{ required: true, message: '请填写充值备注' }]}>
-                        <Input.TextArea rows={3} placeholder="例如：线下转账补录 / 活动赠送 / 客诉补偿" />
-                    </Form.Item>
-                    <div style={{ color: '#999', fontSize: 12, lineHeight: '20px' }}>
-                        手动充值会生成成功充值单，并同步到账储值余额、赠送本金、积分、成长值和赠送优惠券。
+                <Form form={memberRechargeForm} layout="vertical" className="bc-admin-form">
+                    <div className="bc-admin-form-summary">
+                        <div className="bc-admin-form-summary-card info">
+                            <div className="bc-admin-form-summary-label">充值本金</div>
+                            <div className="bc-admin-form-summary-value">¥{watchedMemberRechargeAmount.toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card success">
+                            <div className="bc-admin-form-summary-label">到账合计</div>
+                            <div className="bc-admin-form-summary-value">¥{(watchedMemberRechargeAmount + watchedMemberBonusAmount).toFixed(2)}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card warning">
+                            <div className="bc-admin-form-summary-label">新增积分</div>
+                            <div className="bc-admin-form-summary-value">{watchedMemberGiftPoints}</div>
+                        </div>
+                        <div className="bc-admin-form-summary-card warning">
+                            <div className="bc-admin-form-summary-label">新增成长值</div>
+                            <div className="bc-admin-form-summary-value">{memberRechargeTotalGrowthValue}</div>
+                        </div>
+                    </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">充值信息</div>
+                        <div className="bc-admin-form-grid">
+                            <div className="bc-admin-form-grid-full">
+                                <Form.Item label="充值方案" name="planId">
+                                    <Select
+                                        allowClear
+                                        showSearch
+                                        optionFilterProp="label"
+                                        options={memberRechargePlans.map((item: any) => ({
+                                            value: Number(item.id),
+                                            label: `${item.title} · 充${Number(item.amount ?? 0).toFixed(2)} 送${Number(item.bonusAmount ?? 0).toFixed(2)}`,
+                                        }))}
+                                        placeholder="可选，选择后自动带出福利"
+                                        onChange={handleMemberRechargePlanChange}
+                                    />
+                                </Form.Item>
+                            </div>
+                            <Form.Item label="充值金额" name="amount" rules={[{ required: true, message: '请输入充值金额' }]}>
+                                <InputNumber style={{ width: '100%' }} min={0.01} precision={2} placeholder="请输入实际充值金额" />
+                            </Form.Item>
+                            <Form.Item label="赠送本金" name="bonusAmount">
+                                <InputNumber style={{ width: '100%' }} min={0} precision={2} placeholder="选填，默认取方案值" />
+                            </Form.Item>
+                        </div>
+                    </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">赠送权益</div>
+                        <div className="bc-admin-form-grid">
+                            <Form.Item label="赠送积分" name="giftPoints">
+                                <InputNumber style={{ width: '100%' }} min={0} precision={0} placeholder="选填，默认取方案值" />
+                                <div className="bc-admin-form-muted">消费积分规则：订单消费每 10 元获得 1 积分；这里填写的是额外赠送积分。</div>
+                            </Form.Item>
+                            <Form.Item label="赠送成长值" name="giftGrowthValue">
+                                <InputNumber style={{ width: '100%' }} min={0} precision={0} placeholder="选填，默认取方案值" />
+                                <div className="bc-admin-form-muted">成长值规则：充值本金每 1 元获得 1 成长值；这里填写的是额外赠送成长值。</div>
+                            </Form.Item>
+                            <div className="bc-admin-form-grid-full">
+                                <Form.Item label="赠送优惠券" name="couponBenefitTemplateIds">
+                                    <Select
+                                        mode="multiple"
+                                        allowClear
+                                        showSearch
+                                        optionFilterProp="label"
+                                        options={memberCouponTemplateOptions}
+                                        placeholder="可选，支持绑定赠送优惠券"
+                                    />
+                                </Form.Item>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">备注与确认</div>
+                        <Form.Item label="充值备注" name="remark" rules={[{ required: true, message: '请填写充值备注' }]}>
+                            <Input.TextArea rows={3} placeholder="例如：线下转账补录 / 活动赠送 / 客诉补偿" />
+                        </Form.Item>
+                        <div className="bc-admin-form-muted">
+                            成长值：{memberRechargeBaseGrowthValue}（充值本金） + {watchedMemberGiftGrowthValue}（额外赠送） = {memberRechargeTotalGrowthValue}；积分：{watchedMemberGiftPoints}（额外赠送）。手动充值会生成成功充值单，并同步到账储值余额、权益和小票。
+                        </div>
                     </div>
                 </Form>
+            </Modal>
+
+            <Modal
+                title={`会员发放优惠券 - ${memberDetail?.name || memberDetail?.phone || ''}`}
+                open={memberCouponGrantVisible}
+                onOk={submitMemberCouponGrant}
+                onCancel={() => {
+                    setMemberCouponGrantVisible(false);
+                    memberCouponGrantForm.resetFields();
+                }}
+                confirmLoading={memberCouponGrantSubmitting}
+                destroyOnClose
+                width={560}
+                className="bc-admin-form-modal"
+            >
+                <Form form={memberCouponGrantForm} layout="vertical" className="bc-admin-form" initialValues={{ count: 1 }}>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">发券信息</div>
+                        <Form.Item label="发放会员">
+                            <Input
+                                disabled
+                                value={`${memberDetail?.name || '未命名会员'}（${memberDetail?.phone || '-'}） #${memberDetail?.id || '-'}`}
+                            />
+                        </Form.Item>
+                        <Form.Item name="templateId" label="优惠券模板" rules={[{ required: true, message: '请选择优惠券模板' }]}>
+                            <Select
+                                showSearch
+                                optionFilterProp="label"
+                                options={memberCouponTemplateOptions}
+                                placeholder="选择已生效的优惠券模板"
+                            />
+                        </Form.Item>
+                        <Form.Item name="count" label="发放数量">
+                            <InputNumber min={1} max={200} precision={0} style={{ width: '100%' }} />
+                        </Form.Item>
+                        <Form.Item name="expiresAt" label="过期时间（可选）">
+                            <DatePicker showTime style={{ width: '100%' }} />
+                        </Form.Item>
+                        <div className="bc-admin-form-muted">
+                            手动发券仅支持会员；提交后会写入会员优惠券列表，订单创建时可选择使用。
+                        </div>
+                    </div>
+                </Form>
+            </Modal>
+
+            <Modal
+                title="会员储值小票"
+                open={memberRechargeReceiptOpen}
+                onCancel={() => setMemberRechargeReceiptOpen(false)}
+                width={560}
+                footer={[
+                    <Button
+                        key="copy"
+                        onClick={async () => {
+                            try {
+                                await navigator.clipboard.writeText(memberRechargeReceiptText);
+                                message.success('小票文字已复制');
+                            } catch (_e) {
+                                message.warning('当前浏览器不支持直接复制，请手动复制小票内容');
+                            }
+                        }}
+                    >
+                        复制文字
+                    </Button>,
+                    <Button key="close" type="primary" onClick={() => setMemberRechargeReceiptOpen(false)}>
+                        关闭
+                    </Button>,
+                ]}
+            >
+                {memberRechargeReceiptImage ? (
+                    <img
+                        src={memberRechargeReceiptImage}
+                        alt="会员储值小票"
+                        style={{ width: '100%', borderRadius: 12, border: '1px solid #f0f0f0' }}
+                    />
+                ) : (
+                    <Descriptions column={1} size="small" bordered>
+                        {memberRechargeReceiptText.split('\n').map((line) => {
+                            const [label, ...valueParts] = line.split('：');
+                            return (
+                                <Descriptions.Item key={line} label={valueParts.length ? label : '内容'}>
+                                    {valueParts.length ? valueParts.join('：') : line}
+                                </Descriptions.Item>
+                            );
+                        })}
+                    </Descriptions>
+                )}
+                <div style={{ color: '#999', fontSize: 12, marginTop: 10, textAlign: 'center' }}>
+                    右键或长按图片保存后，可直接发送给老板核对。
+                </div>
             </Modal>
 
             <Modal

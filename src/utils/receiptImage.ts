@@ -633,3 +633,162 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
 
     return final.canvas.toDataURL('image/png');
 };
+
+export type MemberRechargeReceiptItem = {
+    label: string;
+    value: string;
+    highlight?: boolean;
+};
+
+export type GenerateMemberRechargeReceiptImageOptions = GenerateReceiptImageOptions & {
+    subtitle?: string;
+    items?: MemberRechargeReceiptItem[];
+    footerTips?: string[];
+};
+
+export const generateMemberRechargeReceiptImage = async (
+    title: string,
+    items: MemberRechargeReceiptItem[] = [],
+    opts: GenerateMemberRechargeReceiptImageOptions = {},
+) => {
+    if (typeof document === 'undefined') return null;
+
+    const QUALITY = Math.min(opts.maxDpr ?? 3, Math.max(2, window.devicePixelRatio || 1));
+    const contentW = opts.width ?? 450;
+    const padding = opts.padding ?? 28;
+    const cardW = contentW - padding * 2;
+    const rowGap = 16;
+    const COLORS = {
+        bg: '#ffffff',
+        primary: opts.theme?.accent || '#2563eb',
+        secondary: opts.theme?.accent2 || '#7c3aed',
+        cardBg: opts.theme?.cardBg || '#f8fafc',
+        cardBorder: opts.theme?.cardBorder || '#dbeafe',
+        textMain: opts.theme?.textMain || '#111827',
+        textMuted: opts.theme?.textMuted || '#64748b',
+        softBlue: '#eff6ff',
+        softPurple: '#f5f3ff',
+        softYellow: '#fff7ed',
+    };
+
+    const createCanvas = (w: number, h: number) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(w * QUALITY);
+        canvas.height = Math.round(h * QUALITY);
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.setTransform(QUALITY, 0, 0, QUALITY, 0, 0);
+        return {canvas, ctx};
+    };
+
+    const measure = createCanvas(contentW, 120);
+    if (!measure) return null;
+    const M = measure.ctx;
+    M.font = '16px sans-serif';
+    const rows = items.map((item) => ({
+        ...item,
+        valueLines: wrapText(M, item.value || '-', cardW - 150),
+    }));
+    const detailH = 28 + rows.reduce((sum, item) => sum + Math.max(28, item.valueLines.length * 23) + rowGap, 0);
+    const footerTips = opts.footerTips?.length
+        ? opts.footerTips
+        : ['该小票仅用于老板核对会员储值到账，请以后台充值记录与会员钱包流水为准。'];
+    M.font = '13px sans-serif';
+    const footerTipLines = footerTips.flatMap((line) => wrapText(M, line, cardW - 40));
+    const footerBoxH = 58 + Math.max(1, footerTipLines.length) * 22;
+    const footerGap = 22;
+    const bottomSafeH = 56;
+    const contentH = Math.max(700, 195 + detailH + footerGap + footerBoxH + bottomSafeH);
+    const content = createCanvas(contentW, contentH);
+    if (!content) return null;
+    const C = content.ctx;
+    const centerX = contentW / 2;
+
+    C.clearRect(0, 0, contentW, contentH);
+    roundRect(C, 0, 0, contentW, contentH, 34, COLORS.bg);
+
+    const headerGrad = C.createLinearGradient(0, 0, contentW, 180);
+    headerGrad.addColorStop(0, '#dbeafe');
+    headerGrad.addColorStop(0.55, '#f5f3ff');
+    headerGrad.addColorStop(1, '#fdf2f8');
+    roundRect(C, padding, 26, cardW, 145, 26, headerGrad);
+
+    C.fillStyle = COLORS.primary;
+    C.font = 'bold 28px sans-serif';
+    C.textAlign = 'center';
+    C.fillText(title || '蓝猫爽打 · 会员储值小票', centerX, 78);
+    C.fillStyle = COLORS.textMuted;
+    C.font = '15px sans-serif';
+    C.fillText(opts.subtitle || '会员储值到账凭证', centerX, 106);
+    C.fillStyle = COLORS.secondary;
+    C.font = 'bold 18px sans-serif';
+    C.fillText('储值成功 · 已入账', centerX, 142);
+
+    const detailTop = 195;
+    roundRect(C, padding, detailTop, cardW, detailH, 22, COLORS.cardBg, COLORS.cardBorder);
+    let y = detailTop + 34;
+    rows.forEach((item) => {
+        const rowH = Math.max(28, item.valueLines.length * 23);
+        C.textAlign = 'left';
+        C.fillStyle = COLORS.textMuted;
+        C.font = '15px sans-serif';
+        C.fillText(item.label, padding + 22, y);
+
+        C.textAlign = 'right';
+        C.fillStyle = item.highlight ? COLORS.primary : COLORS.textMain;
+        C.font = item.highlight ? 'bold 18px sans-serif' : '16px sans-serif';
+        item.valueLines.forEach((line, index) => {
+            C.fillText(line, padding + cardW - 22, y + index * 23);
+        });
+
+        y += rowH + rowGap;
+    });
+
+    const tipsTop = detailTop + detailH + 22;
+    roundRect(C, padding, tipsTop, cardW, footerBoxH, 20, COLORS.softYellow);
+    C.textAlign = 'left';
+    C.fillStyle = COLORS.textMain;
+    C.font = 'bold 16px sans-serif';
+    C.fillText('核对提示', padding + 20, tipsTop + 30);
+    C.fillStyle = COLORS.textMuted;
+    C.font = '13px sans-serif';
+    footerTipLines.forEach((line, index) => {
+        C.fillText(line, padding + 20, tipsTop + 58 + index * 22);
+    });
+
+    C.textAlign = 'center';
+    C.fillStyle = COLORS.textMuted;
+    C.font = '12px monospace';
+    C.fillText(`BlueCat · 会员储值小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, centerX, tipsTop + footerBoxH + 36);
+
+    const frameOuterPad = 24;
+    const frameW = contentW + frameOuterPad * 2;
+    const frameH = contentH + frameOuterPad * 2;
+    const finalW = frameW + 28;
+    const finalH = frameH + 40;
+    const final = createCanvas(finalW, finalH);
+    if (!final) return null;
+    const F = final.ctx;
+    F.clearRect(0, 0, finalW, finalH);
+    F.fillStyle = '#ffffff';
+    F.fillRect(0, 0, finalW, finalH);
+
+    const frameX = 14;
+    const frameY = 20;
+    const frameGrad = F.createLinearGradient(frameX, frameY, frameX + frameW, frameY + frameH);
+    frameGrad.addColorStop(0, '#93c5fd');
+    frameGrad.addColorStop(0.5, '#c4b5fd');
+    frameGrad.addColorStop(1, '#f9a8d4');
+    F.save();
+    F.shadowColor = 'rgba(37, 99, 235, 0.22)';
+    F.shadowBlur = 18;
+    F.shadowOffsetY = 8;
+    roundRect(F, frameX, frameY, frameW, frameH, 44, frameGrad);
+    F.restore();
+    roundRect(F, frameX + frameOuterPad, frameY + frameOuterPad, contentW, contentH, 36, '#ffffff');
+    F.drawImage(content.canvas, frameX + frameOuterPad, frameY + frameOuterPad, contentW, contentH);
+
+    return final.canvas.toDataURL('image/png');
+};

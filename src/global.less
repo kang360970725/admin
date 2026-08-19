@@ -82,6 +82,168 @@ body.bc-mobile-fullscreen .bc-icp-footer {
   background: #fff;
 }
 
+.bc-admin-form-modal {
+  max-width: calc(100vw - 32px);
+  padding-bottom: 0;
+}
+
+.bc-admin-form-modal .ant-modal-content {
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 20px 24px 0;
+}
+
+.bc-admin-form-modal .ant-modal-body {
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.bc-admin-form-modal .ant-modal-footer {
+  margin-top: 12px;
+  padding: 12px 0 20px;
+  background: #fff;
+}
+
+.bc-admin-form {
+  --bc-form-gap: 16px;
+}
+
+.bc-admin-form-summary {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 0 0 12px;
+  background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, 0.96) 78%, rgba(255, 255, 255, 0) 100%);
+  backdrop-filter: blur(8px);
+}
+
+.bc-admin-form-summary-card {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #e6f0ff;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fbff 0%, #f5f3ff 100%);
+}
+
+.bc-admin-form-summary-card.success {
+  border-color: #b7eb8f;
+  background: linear-gradient(135deg, #f6ffed 0%, #f0fff4 100%);
+}
+
+.bc-admin-form-summary-card.danger {
+  border-color: #ffccc7;
+  background: linear-gradient(135deg, #fff1f0 0%, #fff7f6 100%);
+}
+
+.bc-admin-form-summary-card.warning {
+  border-color: #ffe58f;
+  background: linear-gradient(135deg, #fffbe6 0%, #fff7e6 100%);
+}
+
+.bc-admin-form-summary-card.info {
+  border-color: #bae0ff;
+  background: linear-gradient(135deg, #e6f4ff 0%, #f0f7ff 100%);
+}
+
+.bc-admin-form-summary-label {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.bc-admin-form-summary-value {
+  margin-top: 4px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 26px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bc-admin-form-summary-card.success .bc-admin-form-summary-value {
+  color: #389e0d;
+}
+
+.bc-admin-form-summary-card.danger .bc-admin-form-summary-value {
+  color: #cf1322;
+}
+
+.bc-admin-form-summary-card.warning .bc-admin-form-summary-value {
+  color: #d48806;
+}
+
+.bc-admin-form-summary-card.info .bc-admin-form-summary-value {
+  color: #1677ff;
+}
+
+.bc-admin-form-section {
+  margin-bottom: 16px;
+  padding: 16px 16px 4px;
+  border: 1px solid rgba(5, 5, 5, 0.06);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.bc-admin-form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.bc-admin-form-section-title::before {
+  display: block;
+  width: 4px;
+  height: 16px;
+  border-radius: 4px;
+  background: #1677ff;
+  content: '';
+}
+
+.bc-admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+}
+
+.bc-admin-form-grid-full {
+  grid-column: 1 / -1;
+}
+
+.bc-admin-form .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.bc-admin-form .ant-form-item-label {
+  padding-bottom: 6px;
+  font-weight: 600;
+}
+
+.bc-admin-form .ant-input,
+.bc-admin-form .ant-input-number,
+.bc-admin-form .ant-select-selector,
+.bc-admin-form .ant-picker {
+  border-radius: 10px !important;
+}
+
+.bc-admin-form-muted {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  line-height: 20px;
+}
+
 @media (max-width: 767px) {
   .bc-order-upsert-modal {
     max-width: calc(100vw - 16px);
@@ -98,6 +260,32 @@ body.bc-mobile-fullscreen .bc-icp-footer {
 
   .bc-order-upsert-modal .ant-modal-footer {
     padding-bottom: 16px;
+  }
+
+  .bc-admin-form-modal {
+    max-width: calc(100vw - 16px);
+  }
+
+  .bc-admin-form-modal .ant-modal-content {
+    max-height: calc(100vh - 16px);
+    padding: 16px 16px 0;
+  }
+
+  .bc-admin-form-modal .ant-modal-body {
+    max-height: calc(100vh - 160px);
+    padding-right: 0;
+  }
+
+  .bc-admin-form-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bc-admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bc-admin-form-grid-full {
+    grid-column: auto;
   }
 }
 

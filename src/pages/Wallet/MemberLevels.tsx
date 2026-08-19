@@ -106,7 +106,9 @@ export default function MemberLevelsPage() {
             <ModalForm
                 title={editing ? '编辑会员等级' : '新增会员等级'}
                 open={open}
-                modalProps={{ destroyOnClose: true, onCancel: () => setOpen(false) }}
+                layout="vertical"
+                width={820}
+                modalProps={{ destroyOnClose: true, onCancel: () => setOpen(false), className: 'bc-admin-form-modal' }}
                 initialValues={editing || { enabled: true, isDefault: false, sortOrder: 100, minRechargeAmount: 0, minAnnualContribution: 0, benefitsText: '' }}
                 onFinish={async (values) => {
                     const payload = {
@@ -129,20 +131,41 @@ export default function MemberLevelsPage() {
                     }
                 }}
             >
-                <ProFormText name="code" label="等级编码" rules={[{ required: true, message: '请输入编码' }]} disabled={!!editing?.id} />
-                <ProFormText name="name" label="等级名称" rules={[{ required: true, message: '请输入名称' }]} />
-                <ProFormDigit name="sortOrder" label="排序" min={0} fieldProps={{ precision: 0 }} />
-                <ProFormDigit name="minRechargeAmount" label="充值达标门槛" min={0} fieldProps={{ precision: 2 }} />
-                <ProFormDigit name="minAnnualContribution" label="贡献值门槛" min={0} fieldProps={{ precision: 0 }} />
-                <ProFormTextArea
-                    name="benefitsText"
-                    label="会员权益"
-                    fieldProps={{ autoSize: { minRows: 4, maxRows: 8 } }}
-                    extra="每行一个权益"
-                />
-                <ProFormText name="description" label="说明" />
-                <ProFormSwitch name="isDefault" label="默认等级" />
-                <ProFormSwitch name="enabled" label="启用" />
+                <div className="bc-admin-form">
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">基础信息</div>
+                        <div className="bc-admin-form-grid">
+                            <ProFormText name="code" label="等级编码" rules={[{ required: true, message: '请输入编码' }]} disabled={!!editing?.id} />
+                            <ProFormText name="name" label="等级名称" rules={[{ required: true, message: '请输入名称' }]} />
+                            <ProFormDigit name="sortOrder" label="排序" min={0} fieldProps={{ precision: 0 }} />
+                        </div>
+                    </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">升级门槛</div>
+                        <div className="bc-admin-form-grid">
+                            <ProFormDigit name="minRechargeAmount" label="充值达标门槛" min={0} fieldProps={{ precision: 2 }} />
+                            <ProFormDigit name="minAnnualContribution" label="贡献值门槛" min={0} fieldProps={{ precision: 0 }} />
+                        </div>
+                    </div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">权益与状态</div>
+                        <div className="bc-admin-form-grid">
+                            <div className="bc-admin-form-grid-full">
+                                <ProFormTextArea
+                                    name="benefitsText"
+                                    label="会员权益"
+                                    fieldProps={{ autoSize: { minRows: 4, maxRows: 8 } }}
+                                    extra="每行一个权益"
+                                />
+                            </div>
+                            <div className="bc-admin-form-grid-full">
+                                <ProFormText name="description" label="说明" />
+                            </div>
+                            <ProFormSwitch name="isDefault" label="默认等级" />
+                            <ProFormSwitch name="enabled" label="启用" />
+                        </div>
+                    </div>
+                </div>
             </ModalForm>
         </PageContainer>
     );

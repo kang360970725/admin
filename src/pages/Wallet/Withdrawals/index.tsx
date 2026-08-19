@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {Button, message, Tag, Space, Alert, Descriptions, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm} from 'antd';
+import {Button, message, Tag, Space, Alert, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { history, useModel } from '@umijs/max';
@@ -256,8 +256,11 @@ const WithdrawalsPage: React.FC = () => {
             }>
                 title={currentRow ? `审批提现 - ${currentRow.requestNo}` : '审批提现'}
                 open={reviewOpen}
+                layout="vertical"
+                width={820}
                 modalProps={{
                     destroyOnClose: true,
+                    className: 'bc-admin-form-modal',
                     onCancel: () => {
                         setReviewOpen(false);
                         setCurrentRow(null);
@@ -298,93 +301,94 @@ const WithdrawalsPage: React.FC = () => {
                 }}
             >
                 {/* ✅ 审批详情：钱包数据 + 收款码 */}
-                {currentRow ? (
-                    <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                        <Alert
-                            type="info"
-                            showIcon
-                            message={`申请人：${currentRow?.user?.nickname || currentRow?.user?.name || currentRow.userId}`}
-                            description={`申请金额：${Number(currentRow.amount || 0).toFixed(2)} 元`}
+                <div className="bc-admin-form">
+                    {currentRow ? (
+                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                            <div className="bc-admin-form-summary">
+                                <div className="bc-admin-form-summary-card info">
+                                    <div className="bc-admin-form-summary-label">申请人</div>
+                                    <div className="bc-admin-form-summary-value">{currentRow?.user?.nickname || currentRow?.user?.name || currentRow.userId}</div>
+                                </div>
+                                <div className="bc-admin-form-summary-card danger">
+                                    <div className="bc-admin-form-summary-label">申请金额</div>
+                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow.amount || 0).toFixed(2)}</div>
+                                </div>
+                                <div className="bc-admin-form-summary-card info">
+                                    <div className="bc-admin-form-summary-label">可用余额</div>
+                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.availableBalance || 0).toFixed(2)}</div>
+                                </div>
+                                <div className="bc-admin-form-summary-card warning">
+                                    <div className="bc-admin-form-summary-label">冻结余额</div>
+                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.frozenBalance || 0).toFixed(2)}</div>
+                                </div>
+                            </div>
+
+                            <div className="bc-admin-form-section">
+                                <div className="bc-admin-form-section-title">审核提示</div>
+                                <Alert
+                                    type={reviewError.includes('钱包冻结余额存在缺口') ? 'error' : 'info'}
+                                    showIcon
+                                    message={reviewError || '如遇冻结余额缺口，可直接进入单用户异常修复页排查'}
+                                    action={
+                                        <Button
+                                            size="small"
+                                            type="primary"
+                                            onClick={() => {
+                                                const userId = Number(currentRow?.userId || 0);
+                                                if (!Number.isFinite(userId) || userId <= 0) {
+                                                    message.error('缺少用户ID，无法跳转异常修复');
+                                                    return;
+                                                }
+                                                history.push(`/wallet/replay-preview?userId=${userId}&mode=full&autostart=1`);
+                                            }}
+                                        >
+                                            前往异常修复
+                                        </Button>
+                                    }
+                                />
+                            </div>
+
+                            <div className="bc-admin-form-section">
+                                <div className="bc-admin-form-section-title">收款信息</div>
+                                <Alert
+                                    type={currentRow?.withdrawQrCodeUrl ? 'success' : 'warning'}
+                                    showIcon
+                                    message={currentRow?.withdrawQrCodeUrl ? '已获取收款二维码' : '未获取到收款二维码（请提醒用户上传）'}
+                                    description={
+                                        currentRow?.withdrawQrCodeUrl ? (
+                                            <Image
+                                                src={currentRow.withdrawQrCodeUrl}
+                                                width={180}
+                                                style={{ borderRadius: 12 }}
+                                            />
+                                        ) : (
+                                            <span>该用户未上传或二维码不可用</span>
+                                        )
+                                    }
+                                />
+                            </div>
+                        </Space>
+                    ) : null}
+
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">审批结论</div>
+                        <ProFormRadio.Group
+                            name="approve"
+                            label="审批结果"
+                            rules={[{ required: true, message: '请选择审批结果' }]}
+                            options={[
+                                { label: '通过', value: true },
+                                { label: '驳回', value: false },
+                            ]}
                         />
-
-                        <Descriptions bordered size="small" column={1}>
-                            {(() => {
-                                const w = currentRow?.wallet;
-                                const available = Number(w?.availableBalance || 0);
-                                const frozen = Number(w?.frozenBalance || 0);
-                                const total = available + frozen;
-                                return (
-                                    <>
-                                        <Descriptions.Item label="总余额">
-                                            {total.toFixed(2)}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label="可用余额">
-                                            {available.toFixed(2)}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label="冻结余额">
-                                            {frozen.toFixed(2)}
-                                        </Descriptions.Item>
-                                    </>
-                                );
-                            })()}
-                        </Descriptions>
-
-                        <Alert
-                            type={reviewError.includes('钱包冻结余额存在缺口') ? 'error' : 'info'}
-                            showIcon
-                            message={reviewError || '如遇冻结余额缺口，可直接进入单用户异常修复页排查'}
-                            action={
-                                <Button
-                                    size="small"
-                                    type="primary"
-                                    onClick={() => {
-                                        const userId = Number(currentRow?.userId || 0);
-                                        if (!Number.isFinite(userId) || userId <= 0) {
-                                            message.error('缺少用户ID，无法跳转异常修复');
-                                            return;
-                                        }
-                                        history.push(`/wallet/replay-preview?userId=${userId}&mode=full&autostart=1`);
-                                    }}
-                                >
-                                    前往异常修复
-                                </Button>
-                            }
+                        <ProFormTextArea
+                            name="reviewRemark"
+                            label="审批备注"
+                            placeholder="可选：填写审批说明（通过/驳回原因）"
+                            fieldProps={{ rows: 3, maxLength: 200 }}
                         />
-
-                        <Alert
-                            type={currentRow?.withdrawQrCodeUrl ? 'success' : 'warning'}
-                            showIcon
-                            message={currentRow?.withdrawQrCodeUrl ? '已获取收款二维码' : '未获取到收款二维码（请提醒用户上传）'}
-                            description={
-                                currentRow?.withdrawQrCodeUrl ? (
-                                    <Image
-                                        src={currentRow.withdrawQrCodeUrl}
-                                        width={180}
-                                        style={{ borderRadius: 12 }}
-                                    />
-                                ) : (
-                                    <span>该用户未上传或二维码不可用</span>
-                                )
-                            }
-                        />
-                    </Space>
-                ) : null}
-
-                <ProFormRadio.Group
-                    name="approve"
-                    label="审批结果"
-                    rules={[{ required: true, message: '请选择审批结果' }]}
-                    options={[
-                        { label: '通过', value: true },
-                        { label: '驳回', value: false },
-                    ]}
-                />
-                <ProFormTextArea
-                    name="reviewRemark"
-                    label="审批备注"
-                    placeholder="可选：填写审批说明（通过/驳回原因）"
-                    fieldProps={{ rows: 3, maxLength: 200 }}
-                />
+                    </div>
+                </div>
             </ModalForm>
         </>
     );

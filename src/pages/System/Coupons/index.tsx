@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import { PageContainer } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
+import { useAccess } from 'umi';
 import {
   createCouponTemplate,
   getCouponTemplates,
@@ -80,6 +81,7 @@ const formatTime = (v?: string | null) => {
 };
 
 const CouponsPage: React.FC = () => {
+  const access = useAccess();
   const [tab, setTab] = useState<'templates' | 'user-coupons'>('templates');
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<any[]>([]);
@@ -177,13 +179,21 @@ const CouponsPage: React.FC = () => {
     setGrantUserLoading(true);
     try {
       const kw = String(keyword || '').trim();
-      const res: any = await getUsers({ page: 1, limit: 50, keyword: kw || undefined });
+      const res: any = await getUsers({
+        page: 1,
+        limit: 50,
+        search: kw || undefined,
+        scene: 'MEMBER',
+      });
       const list = Array.isArray(res?.data) ? res.data : [];
       setGrantUserOptions(
-        list.map((item: any) => ({
-          value: Number(item.id),
-          label: `${item?.name || item?.realName || '未命名'}（${item?.phone || '-'}） #${item?.id}`,
-        })),
+        list.map((item: any) => {
+          const memberCode = String(item?.memberProfile?.memberCode || '').trim();
+          return {
+            value: Number(item.id),
+            label: `${item?.name || item?.realName || '未命名会员'}（${item?.phone || '-'}）${memberCode ? ` · 编码${memberCode}` : ''}`,
+          };
+        }),
       );
     } catch (e) {
       console.error(e);
@@ -337,12 +347,14 @@ const CouponsPage: React.FC = () => {
             />
             <Button type="primary" onClick={() => loadData(1, limit)}>查询</Button>
             <Button onClick={() => setCreateOpen(true)}>新建模板</Button>
-            <Button onClick={() => setGrantOpen(true)}>手动发券</Button>
+            {access.canGrantMemberCoupon ? (
+              <Button onClick={() => setGrantOpen(true)}>会员手动发券</Button>
+            ) : null}
           </Space>
         ) : (
           <Space wrap style={{ marginBottom: 12 }}>
             <Input
-              placeholder="用户姓名/手机号"
+              placeholder="会员编码/姓名/手机号"
               allowClear
               style={{ width: 220 }}
               onChange={(e) => setCouponFilter((s: any) => ({ ...s, keyword: e.target.value || undefined }))}
@@ -365,6 +377,9 @@ const CouponsPage: React.FC = () => {
               onChange={(v) => setCouponFilter((s: any) => ({ ...s, status: v || undefined }))}
             />
             <Button type="primary" onClick={() => loadData(1, limit)}>查询</Button>
+            {access.canGrantMemberCoupon ? (
+              <Button onClick={() => setGrantOpen(true)}>会员手动发券</Button>
+            ) : null}
           </Space>
         )}
 
@@ -561,7 +576,7 @@ const CouponsPage: React.FC = () => {
       </Modal>
 
       <Modal
-        title="发券"
+        title="会员手动发券"
         open={grantOpen}
         onCancel={() => setGrantOpen(false)}
         onOk={async () => {
@@ -586,11 +601,11 @@ const CouponsPage: React.FC = () => {
         confirmLoading={submitting}
       >
         <Form form={formGrant} layout="vertical" initialValues={{ count: 1 }}>
-          <Form.Item name="userIds" label="发放用户" rules={[{ required: true, message: '请选择至少一个用户' }]}>
+          <Form.Item name="userIds" label="发放会员" rules={[{ required: true, message: '请选择至少一个会员' }]}>
             <Select
               showSearch
               mode="multiple"
-              placeholder="输入姓名、手机号后搜索用户"
+              placeholder="输入会员编码、姓名或手机号后搜索"
               filterOption={false}
               options={grantUserOptions}
               loading={grantUserLoading}

@@ -35,6 +35,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canEditStaffUser = isSuperAdmin || has('users:staff:edit:button');
   const canEditInternalUser = isSuperAdmin || has('users:internal:edit:button');
   const canDeleteMemberUser = isSuperAdmin || has('users:member:delete:button');
+  const canGrantMemberCoupon = isSuperAdmin || has('users:member:coupon-grant:button');
   const canDeleteStaffUser = isSuperAdmin || has('users:staff:delete:button');
   const canDeleteInternalUser = isSuperAdmin || has('users:internal:delete:button');
   const canAssignStaffRole = isSuperAdmin || has('users:staff:assign-role:button');
@@ -100,6 +101,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewExcellentStaff: isSuperAdmin || has('users:excellent-staff:page'),
     canManageExcellentStaff: isSuperAdmin || has('users:excellent-staff:manage:button'),
     canManualMemberRecharge: isSuperAdmin || has('users:member:recharge:button'),
+    canGrantMemberCoupon,
     canAdjustMemberGrowth: isSuperAdmin || has('users:member:growth-adjust:button'),
     canManageMemberGameCards: isSuperAdmin || has('users:member:game-card:button'),
     canCreateRating: isSuperAdmin,
@@ -125,6 +127,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewWalletOverview,
     canViewWalletMemberLevels: has('wallet:member-levels:page') || has('wallet:withdrawals:page'),
     canViewWalletRechargePlans: has('wallet:recharge-plans:page') || has('wallet:withdrawals:page'),
+    canViewWalletMemberRecharges: has('wallet:member-recharges:page') || has('wallet:withdrawals:page'),
     canViewWalletTransactions: has('wallet:transactions:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet,
     canViewWalletReplayPreview: has('wallet:replay-preview:page') || has('wallet:withdrawals:page'),
     canViewWithdrawals: has('wallet:withdrawals:page'),

@@ -194,6 +194,7 @@ export interface GetUsersParams {
     scene?: string;
     anonymousOnly?: boolean | string;
     includeStaffMembers?: boolean | string;
+    memberState?: string;
     loginInactiveDays?: number;
     acceptInactiveDays?: number;
 }
@@ -239,6 +240,13 @@ export async function getUsers(params: GetUsersParams): Promise<PaginationRespon
 export async function getMemberRechargePlans() {
     return request(`${API_BASE}/member/recharge-plans`, {
         method: 'GET',
+    });
+}
+
+export async function getMemberRechargeOrders(params?: any) {
+    return request(`${API_BASE}/member/recharge-orders`, {
+        method: 'GET',
+        params,
     });
 }
 
