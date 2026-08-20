@@ -117,6 +117,11 @@ function FilterTuneIcon() {
 }
 
 export default function PublicMenuGalleryPage() {
+  const forceWechatReviewMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search || '');
+    return ['1', 'true', 'yes', 'on'].includes(String(params.get('wechatReview') || '').toLowerCase());
+  }, []);
   const [items, setItems] = useState<PublicMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -302,10 +307,11 @@ export default function PublicMenuGalleryPage() {
         setCustomerServiceConfig({
           consultText: normalizeText(config?.consultText) || '详询客服',
           qrCodeUrl: normalizeText(config?.qrCodeUrl),
+          wechatReviewMode: Boolean(config?.wechatReviewMode),
           remark: normalizeText(config?.remark),
         });
       } catch {
-        setCustomerServiceConfig({ consultText: '详询客服', qrCodeUrl: '' });
+        setCustomerServiceConfig({ consultText: '详询客服', qrCodeUrl: '', wechatReviewMode: false });
       }
     })();
   }, []);
@@ -360,7 +366,7 @@ export default function PublicMenuGalleryPage() {
   );
 
   const hasActiveFilter = selectedCategory !== 'ALL' || sortMode !== 'default' || priceRange !== 'all';
-  const isWechatReviewMode = Boolean(customerServiceConfig.wechatReviewMode);
+  const isWechatReviewMode = forceWechatReviewMode || Boolean(customerServiceConfig.wechatReviewMode);
 
   const bannerItem = useMemo(() => {
     return bannerProtocols
