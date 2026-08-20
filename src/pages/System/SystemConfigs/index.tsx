@@ -284,7 +284,7 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
   try {
     const parsed = JSON.parse(raw || '{}');
     const tags = Array.isArray(parsed?.tags) ? parsed.tags : [];
-    const tagMap = new Map(
+    const tagMap = new Map<string, { code: string; name: string; enabled: boolean; sort: number }>(
       tags.map((item: any, index: number) => [
         String(item?.code || '').trim().toLowerCase(),
         {
@@ -815,6 +815,9 @@ const SystemConfigsPage: React.FC = () => {
                                 extra={<a onClick={() => remove(field.name)}>删除</a>}
                               >
                                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                                  <Form.Item name={[field.name, 'id']} hidden>
+                                    <Input />
+                                  </Form.Item>
                                   <Space size={16} wrap>
                                     <Form.Item
                                       label="分组名称"
