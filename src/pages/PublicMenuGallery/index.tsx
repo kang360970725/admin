@@ -360,6 +360,7 @@ export default function PublicMenuGalleryPage() {
   );
 
   const hasActiveFilter = selectedCategory !== 'ALL' || sortMode !== 'default' || priceRange !== 'all';
+  const isWechatReviewMode = Boolean(customerServiceConfig.wechatReviewMode);
 
   const bannerItem = useMemo(() => {
     return bannerProtocols
@@ -400,6 +401,69 @@ export default function PublicMenuGalleryPage() {
     const idx = Math.abs(Number(id || 0)) % heights.length;
     return heights[idx] || 180;
   };
+
+  if (isWechatReviewMode) {
+    return (
+      <div className="public-menu-gallery-page review-mode">
+        <div className="gallery-review-shell">
+          <section className="gallery-review-hero">
+            <div className="gallery-review-eyebrow">LMSD Club Service Information</div>
+            <Title level={2} className="gallery-review-title">平台服务说明</Title>
+            <Paragraph className="gallery-review-desc">
+              本页面用于展示平台线上互动服务范围、服务流程与用户须知，不提供直接交易、支付、下载或诱导分享功能。
+            </Paragraph>
+          </section>
+
+          <section className="gallery-review-card">
+            <div className="gallery-review-section-title">服务范围</div>
+            <div className="gallery-review-grid">
+              <div className="gallery-review-item">
+                <div className="gallery-review-item-title">线上娱乐协助</div>
+                <div className="gallery-review-item-text">提供游戏相关的信息咨询、流程说明和服务匹配协助。</div>
+              </div>
+              <div className="gallery-review-item">
+                <div className="gallery-review-item-title">服务项目展示</div>
+                <div className="gallery-review-item-text">展示平台可提供的项目类型，具体内容以平台确认结果为准。</div>
+              </div>
+              <div className="gallery-review-item">
+                <div className="gallery-review-item-title">用户权益说明</div>
+                <div className="gallery-review-item-text">说明服务前注意事项、履约边界、售后与投诉处理方式。</div>
+              </div>
+            </div>
+          </section>
+
+          <section className="gallery-review-card">
+            <div className="gallery-review-section-title">服务流程</div>
+            <ol className="gallery-review-steps">
+              <li>用户了解平台服务说明与注意事项。</li>
+              <li>平台根据用户需求进行服务信息确认。</li>
+              <li>双方确认服务内容、时间安排与履约规则。</li>
+              <li>服务完成后，用户可通过平台反馈体验或提交售后诉求。</li>
+            </ol>
+          </section>
+
+          <section className="gallery-review-card">
+            <div className="gallery-review-section-title">合规说明</div>
+            <div className="gallery-review-copy">
+              平台不支持违法违规、低俗擦边、赌博诈骗、诱导分享、恶意营销或侵犯他人权益的内容与行为。未成年人应在监护人指导下合理使用网络服务。
+            </div>
+          </section>
+
+          <section className="gallery-review-card">
+            <div className="gallery-review-section-title">用户须知</div>
+            <div className="gallery-review-copy">
+              本页面展示内容仅为服务信息说明，不构成即时交易承诺。具体服务安排、收费标准、退款售后与权益保障以平台正式确认和相关协议为准。
+            </div>
+          </section>
+
+          <footer className="gallery-review-footer">
+            <div>蓝猫爽打 · 线上互动服务平台</div>
+            <div>蜀ICP备2026039511号-1</div>
+          </footer>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="public-menu-gallery-page">

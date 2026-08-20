@@ -830,6 +830,7 @@ export interface PublicMenuDetail extends PublicMenuItem {
 export type MiniappCustomerServiceConfig = {
     consultText: string;
     qrCodeUrl?: string;
+    wechatReviewMode?: boolean;
     remark?: string;
 };
 

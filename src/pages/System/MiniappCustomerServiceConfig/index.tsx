@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Card, Form, Image, Input, Space, Typography, Upload, message } from 'antd';
+import { Alert, Button, Card, Form, Image, Input, Space, Switch, Typography, Upload, message } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import {
   getMiniappCustomerServiceConfig,
@@ -14,6 +14,7 @@ const { Paragraph, Text } = Typography;
 const defaultConfig: MiniappCustomerServiceConfig = {
   consultText: '详询客服',
   qrCodeUrl: '',
+  wechatReviewMode: false,
   remark: '',
 };
 
@@ -70,6 +71,7 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
       const config = {
         consultText: String(values.consultText || defaultConfig.consultText).trim() || defaultConfig.consultText,
         qrCodeUrl: String(values.qrCodeUrl || '').trim(),
+        wechatReviewMode: Boolean(values.wechatReviewMode),
         remark: String(values.remark || '').trim(),
       };
       await upsertMiniappCustomerServiceConfig(config);
@@ -88,8 +90,19 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
         <Paragraph type="secondary">
           该配置用于公开菜单页商品无图片详情时的弹窗提示，后续也可复用到小程序客服入口。
         </Paragraph>
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="微信审核模式"
+          description="开启后，公开菜单 /menu 将展示合规说明页，不展示商品价格、客服二维码和下单咨询引导，适合微信外链申诉审核期间使用。"
+        />
 
         <Form form={form} layout="vertical" initialValues={defaultConfig}>
+          <Form.Item name="wechatReviewMode" label="微信审核模式" valuePropName="checked">
+            <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+          </Form.Item>
+
           <Form.Item
             name="consultText"
             label="弹窗提示文字"
