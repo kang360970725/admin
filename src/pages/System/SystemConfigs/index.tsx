@@ -313,7 +313,6 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
           return {
             ...item,
             id: String(item?.id || '').trim(),
-            name: String(item?.name || '').trim(),
             enabled: item?.enabled !== false,
             priority: Number.isFinite(Number(item?.priority)) ? Number(item.priority) : 0,
             tagCode,
@@ -321,6 +320,7 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
             tagEnabled: tag?.enabled !== false,
             sort: Number.isFinite(Number(tag?.sort)) ? Number(tag?.sort) : index + 1,
             tagCodes: tagCode ? [tagCode] : [],
+            name: `${String(tag?.name || item?.tagName || item?.name || tagCode || `标签 ${index + 1}`).trim()}规则`,
             firstWithdrawMinAcceptedDays: Number(item?.firstWithdrawMinAcceptedDays ?? 15),
             dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
             settlementFreezeExperienceDays: Number(item?.settlementFreezeExperienceDays ?? 3),
@@ -369,9 +369,10 @@ function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
   const rules = rawRules
     .map((item: any, index: number) => {
       const tagCode = String(item?.tagCode || item?.code || '').trim().toLowerCase();
+      const tagName = String(item?.tagName || item?.name || tagCode || `标签 ${index + 1}`).trim();
       return {
         id: String(item?.id || `${tagCode || `rule_${index + 1}`}_rule`).trim(),
-        name: String(item?.name || `${String(item?.tagName || tagCode || `标签 ${index + 1}`).trim()}规则`).trim(),
+        name: `${tagName}规则`,
         enabled: item?.enabled !== false,
         priority: Number.isFinite(Number(item?.priority)) ? Number(item.priority) : 0,
         tagCodes: tagCode ? [tagCode] : [],
