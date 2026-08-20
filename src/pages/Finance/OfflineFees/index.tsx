@@ -21,6 +21,10 @@ import {
 
 const money = (v: any) => Number(v ?? 0).toFixed(2);
 const monthValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM') : String(value || ''));
+const dateValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM-DD') : String(value || '').slice(0, 10));
+const errorMessage = (e: any, fallback: string) => (
+  e?.data?.message || e?.response?.data?.message || e?.message || fallback
+);
 
 const statusTextMap: Record<string, string> = {
   UNPAID: '未缴费',
@@ -68,7 +72,7 @@ const OfflineFeesPage: React.FC = () => {
       const list = await listOfflineStaffOptions({ keyword: String(keyword || '').trim() || undefined });
       setStaffOptions(Array.isArray(list) ? list : []);
     } catch (e: any) {
-      message.error(e?.data?.message || e?.message || '获取线下服务者列表失败');
+      message.error(errorMessage(e, '获取服务者列表失败'));
     } finally {
       setStaffLoading(false);
     }
@@ -82,7 +86,7 @@ const OfflineFeesPage: React.FC = () => {
   const openCreateContract = async () => {
     setEditingContract(null);
     contractForm.resetFields();
-    contractForm.setFieldsValue({ startMonth: dayjs(), status: 'ACTIVE' });
+    contractForm.setFieldsValue({ startDate: dayjs(), status: 'ACTIVE' });
     setContractOpen(true);
     await fetchOfflineStaffOptions();
   };
@@ -92,8 +96,8 @@ const OfflineFeesPage: React.FC = () => {
     contractForm.setFieldsValue({
       userId: row.userId,
       monthlyAmount: Number(row.monthlyAmount || 0),
-      startMonth: row.startMonth ? dayjs(row.startMonth, 'YYYY-MM') : undefined,
-      endMonth: row.endMonth ? dayjs(row.endMonth, 'YYYY-MM') : undefined,
+      startDate: row.startDate ? dayjs(row.startDate) : row.startMonth ? dayjs(`${row.startMonth}-20`) : undefined,
+      endDate: row.endDate ? dayjs(row.endDate) : row.endMonth ? dayjs(`${row.endMonth}-20`) : undefined,
       status: row.status,
       remark: row.remark || '',
     });
@@ -128,8 +132,18 @@ const OfflineFeesPage: React.FC = () => {
       width: 120,
       render: (_, row) => `¥${money(row.monthlyAmount)}`,
     },
-    { title: '开始月份', dataIndex: 'startMonth', width: 110 },
-    { title: '结束月份', dataIndex: 'endMonth', width: 110, render: (_, row) => row.endMonth || '长期' },
+    {
+      title: '开始时间',
+      dataIndex: 'startDate',
+      width: 120,
+      render: (_, row) => (row.startDate ? dayjs(row.startDate).format('YYYY-MM-DD') : row.startMonth ? `${row.startMonth}-20` : '-'),
+    },
+    {
+      title: '结束时间',
+      dataIndex: 'endDate',
+      width: 120,
+      render: (_, row) => (row.endDate ? dayjs(row.endDate).format('YYYY-MM-DD') : row.endMonth ? `${row.endMonth}-20` : '长期'),
+    },
     {
       title: '状态',
       dataIndex: 'status',
@@ -178,7 +192,7 @@ const OfflineFeesPage: React.FC = () => {
         dataIndex: 'dueAt',
         width: 160,
         search: false,
-        render: (_, row) => (row.dueAt ? dayjs(row.dueAt).format('YYYY-MM-DD HH:mm') : '-'),
+        render: (_, row) => (row.dueAt ? dayjs(row.dueAt).format('YYYY-MM-DD') : '-'),
       },
       { title: '扣费金额', dataIndex: 'shouldPayAmount', width: 110, search: false, render: (_, row) => `¥${money(row.shouldPayAmount)}` },
       { title: '收费累计', dataIndex: 'manualPaidAmount', width: 110, search: false, render: (_, row) => `¥${money(row.manualPaidAmount || 0)}` },
@@ -218,7 +232,7 @@ const OfflineFeesPage: React.FC = () => {
                     message.success('已减免');
                     billActionRef.current?.reload();
                   } catch (e: any) {
-                    message.error(e?.data?.message || e?.message || '减免失败');
+                    message.error(errorMessage(e, '减免失败'));
                   }
                 }}
               >
@@ -296,7 +310,7 @@ const OfflineFeesPage: React.FC = () => {
                         setSelectedBillRowKeys([]);
                         billActionRef.current?.reload();
                       } catch (e: any) {
-                        message.error(e?.data?.message || e?.message || '批量删除失败');
+                        message.error(errorMessage(e, '批量删除失败'));
                       }
                     }}
                   >
@@ -353,8 +367,8 @@ const OfflineFeesPage: React.FC = () => {
             const payload = {
               userId: Number(values.userId),
               monthlyAmount: Number(values.monthlyAmount || 0),
-              startMonth: monthValue(values.startMonth),
-              endMonth: values.endMonth ? monthValue(values.endMonth) : null,
+              startDate: dateValue(values.startDate),
+              endDate: values.endDate ? dateValue(values.endDate) : null,
               status: values.status,
               remark: values.remark,
             };
@@ -369,19 +383,19 @@ const OfflineFeesPage: React.FC = () => {
             setEditingContract(null);
             contractActionRef.current?.reload();
           } catch (e: any) {
-            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '保存失败');
+            if (!e?.errorFields) message.error(errorMessage(e, '保存失败'));
           } finally {
             setSubmitting(false);
           }
         }}
       >
         <Form form={contractForm} layout="vertical">
-          <Form.Item label="线下服务者" name="userId" rules={[{ required: true, message: '请选择线下服务者' }]}>
+          <Form.Item label="服务者" name="userId" rules={[{ required: true, message: '请选择服务者' }]}>
             <Select
               showSearch
               optionFilterProp="label"
               loading={staffLoading}
-              placeholder="请选择线下服务者"
+              placeholder="请选择服务者"
               disabled={Boolean(editingContract)}
               onSearch={fetchOfflineStaffOptions}
               options={staffSelectOptions}
@@ -390,11 +404,16 @@ const OfflineFeesPage: React.FC = () => {
           <Form.Item label="每月费用" name="monthlyAmount" rules={[{ required: true, message: '请输入每月费用' }]}>
             <InputNumber min={0.01} step={10} precision={2} style={{ width: '100%' }} addonBefore="¥" />
           </Form.Item>
-          <Form.Item label="开始月份" name="startMonth" rules={[{ required: true, message: '请选择开始月份' }]}>
-            <DatePicker picker="month" style={{ width: '100%' }} format="YYYY-MM" />
+          <Form.Item
+            label="开始时间"
+            name="startDate"
+            rules={[{ required: true, message: '请选择开始时间' }]}
+            extra="系统会按该日期的“日”作为每月线下管理费账单到期日，并在到期日前 3 天自动生成账单。"
+          >
+            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
           </Form.Item>
-          <Form.Item label="结束月份" name="endMonth">
-            <DatePicker picker="month" style={{ width: '100%' }} format="YYYY-MM" allowClear />
+          <Form.Item label="结束时间" name="endDate">
+            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" allowClear />
           </Form.Item>
           <Form.Item label="状态" name="status" rules={[{ required: true, message: '请选择状态' }]}>
             <Select options={[{ label: '启用', value: 'ACTIVE' }, { label: '停用', value: 'INACTIVE' }]} />
@@ -419,7 +438,7 @@ const OfflineFeesPage: React.FC = () => {
             setGenerateOpen(false);
             billActionRef.current?.reload();
           } catch (e: any) {
-            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '生成失败');
+            if (!e?.errorFields) message.error(errorMessage(e, '生成失败'));
           } finally {
             setSubmitting(false);
           }
@@ -456,7 +475,7 @@ const OfflineFeesPage: React.FC = () => {
             payForm.resetFields();
             billActionRef.current?.reload();
           } catch (e: any) {
-            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '缴费失败');
+            if (!e?.errorFields) message.error(errorMessage(e, '缴费失败'));
           } finally {
             setSubmitting(false);
           }
@@ -496,7 +515,7 @@ const OfflineFeesPage: React.FC = () => {
             externalForm.resetFields();
             billActionRef.current?.reload();
           } catch (e: any) {
-            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '确认失败');
+            if (!e?.errorFields) message.error(errorMessage(e, '确认失败'));
           } finally {
             setSubmitting(false);
           }

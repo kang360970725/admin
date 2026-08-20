@@ -1690,12 +1690,10 @@ export async function getWithdrawInfo() {
 export async function getOfflineFeeGuardInfo() {
     return request<{
         hasOutstanding: boolean;
-        partialMinPay: number;
         bill: any | null;
         availableBalance: number;
         frozenBalance: number;
         walletTotal: number;
-        canPartialPayByWalletRule: boolean;
     }>(`${API_BASE}/offline-fees/withdrawal/guard-info`, {
         method: 'POST',
     });
@@ -1713,7 +1711,6 @@ export async function applyWithdrawal(data: {
     idempotencyKey: string;
     remark?: string;
     channel?: string | 'MANUAL' | 'WECHAT';
-    payOfflineFeeAmount?: number;
 }) {
     return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/apply`, {
         method: 'POST',
@@ -2071,6 +2068,8 @@ export interface OfflineFeeContract {
     monthlyAmount: number;
     startMonth: string;
     endMonth?: string | null;
+    startDate?: string | null;
+    endDate?: string | null;
     status: 'ACTIVE' | 'INACTIVE';
     remark?: string | null;
     user?: {
@@ -2134,8 +2133,8 @@ export async function listOfflineFeeContracts(data: {
 export async function createOfflineFeeContract(data: {
     userId: number;
     monthlyAmount: number;
-    startMonth: string;
-    endMonth?: string | null;
+    startDate: string;
+    endDate?: string | null;
     status?: 'ACTIVE' | 'INACTIVE';
     remark?: string;
 }) {
@@ -2148,8 +2147,8 @@ export async function createOfflineFeeContract(data: {
 export async function updateOfflineFeeContract(data: {
     id: number;
     monthlyAmount?: number;
-    startMonth?: string;
-    endMonth?: string | null;
+    startDate?: string;
+    endDate?: string | null;
     status?: 'ACTIVE' | 'INACTIVE';
     remark?: string;
 }) {
@@ -2252,6 +2251,19 @@ export async function batchDeleteOfflineFeeBills(data: { billIds: number[] }) {
         blockedBillIds: number[];
         notFoundBillIds: number[];
     }>(`${API_BASE}/offline-fees/bills/batch-delete`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function listMyOfflineFeeBills() {
+    return request<OfflineFeeBill[]>(`${API_BASE}/offline-fees/my/pending`, {
+        method: 'GET',
+    });
+}
+
+export async function confirmMyOfflineFeeBill(data: { billId: number }) {
+    return request<OfflineFeeBill>(`${API_BASE}/offline-fees/my/confirm`, {
         method: 'POST',
         data,
     });

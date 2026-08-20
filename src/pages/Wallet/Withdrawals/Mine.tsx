@@ -1,5 +1,4 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import type {FormInstance} from 'antd';
 import {Alert, Button, Divider, Form, List, message, Space, Tag, Tooltip, Typography, Upload} from 'antd';
 import type {ActionType} from '@ant-design/pro-components';
 import {
@@ -12,7 +11,14 @@ import {
 } from '@ant-design/pro-components';
 import {useModel} from '@umijs/max';
 import {UploadOutlined, WechatOutlined} from '@ant-design/icons';
-import {confirmMyEquipmentRentalBill, getOfflineFeeGuardInfo, getWithdrawInfo, listMyEquipmentRentalBills} from "@/services/api";
+import {
+    confirmMyEquipmentRentalBill,
+    confirmMyOfflineFeeBill,
+    getOfflineFeeGuardInfo,
+    getWithdrawInfo,
+    listMyEquipmentRentalBills,
+    listMyOfflineFeeBills,
+} from "@/services/api";
 import {
     applyWithdrawal,
     getMyWithdrawals,
@@ -34,7 +40,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const {availableBalance, onApplied} = props;
 
     const actionRef = useRef<ActionType>();
-    const formRef = useRef<FormInstance>();
+    const [form] = Form.useForm();
 
     const {initialState} = useModel('@@initialState');
     const userId = Number((initialState as any)?.currentUser?.id || 0);
@@ -48,30 +54,26 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     );
     const [offlineFeeGuard, setOfflineFeeGuard] = useState<{
         hasOutstanding: boolean;
-        partialMinPay: number;
         bill: any | null;
         availableBalance: number;
         frozenBalance: number;
         walletTotal: number;
-        canPartialPayByWalletRule: boolean;
     }>({
         hasOutstanding: false,
-        partialMinPay: 100,
         bill: null,
         availableBalance: 0,
         frozenBalance: 0,
         walletTotal: 0,
-        canPartialPayByWalletRule: true,
     });
 
     const [open, setOpen] = useState(false);
     const [hasPending, setHasPending] = useState(false);
     const [rentalBills, setRentalBills] = useState<any[]>([]);
     const [rentalLoading, setRentalLoading] = useState(false);
+    const [offlineFeeBills, setOfflineFeeBills] = useState<any[]>([]);
+    const [offlineFeeLoading, setOfflineFeeLoading] = useState(false);
 
-    const withdrawAmount = Form.useWatch('amount', formRef.current);
-    const payOfflineFeeAmountWatch = Form.useWatch('payOfflineFeeAmount', formRef.current);
-
+    const withdrawAmount = Form.useWatch('amount', form);
     const [qrUrl, setQrUrl] = useState<string | null>(null);
     const [qrLoading, setQrLoading] = useState(false);
     const [qrUploading, setQrUploading] = useState(false);
@@ -113,12 +115,10 @@ const WithdrawalMine: React.FC<Props> = (props) => {
             setWithdrawStaffEmploymentStatus(String((res as any)?.staffEmploymentStatus || currentUser?.staffEmploymentStatus || 'ACTIVE'));
             setOfflineFeeGuard({
                 hasOutstanding: Boolean(guardInfo?.hasOutstanding),
-                partialMinPay: Number(guardInfo?.partialMinPay || 100),
                 bill: guardInfo?.bill || null,
                 availableBalance: Number(guardInfo?.availableBalance || 0),
                 frozenBalance: Number(guardInfo?.frozenBalance || 0),
                 walletTotal: Number(guardInfo?.walletTotal || 0),
-                canPartialPayByWalletRule: Boolean(guardInfo?.canPartialPayByWalletRule ?? true),
             });
 
         } catch (e: any) {
@@ -154,26 +154,14 @@ const WithdrawalMine: React.FC<Props> = (props) => {
         return Math.floor(n / 10) * 10;
     }, [availableBalance]);
 
-    const maxWithdrawByOfflineFee = useMemo(() => {
-        if (!offlineFeeGuard.hasOutstanding) return maxWithdraw;
-
-        const rawPay = Number(payOfflineFeeAmountWatch || 0);
-        const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
-        const pay = Math.max(0, Math.min(rawPay, remaining));
-
-        const n = Number(availableBalance || 0) - pay;
-        if (!Number.isFinite(n) || n <= 0) return 0;
-        return Math.floor(n / 10) * 10;
-    }, [offlineFeeGuard, payOfflineFeeAmountWatch, availableBalance, maxWithdraw]);
-
     useEffect(() => {
         if (!open) return;
 
-        const currentAmount = Number(formRef.current?.getFieldValue('amount') || 0);
-        if (currentAmount > maxWithdrawByOfflineFee) {
-            formRef.current?.setFieldsValue({ amount: maxWithdrawByOfflineFee });
+        const currentAmount = Number(form.getFieldValue('amount') || 0);
+        if (currentAmount > maxWithdraw) {
+            form.setFieldsValue({ amount: maxWithdraw });
         }
-    }, [open, maxWithdrawByOfflineFee]);
+    }, [form, open, maxWithdraw]);
 
     const genIdempotencyKey = () =>
         `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -190,8 +178,21 @@ const WithdrawalMine: React.FC<Props> = (props) => {
         }
     };
 
+    const fetchOfflineFeeBills = async () => {
+        try {
+            setOfflineFeeLoading(true);
+            const rows = await listMyOfflineFeeBills();
+            setOfflineFeeBills(Array.isArray(rows) ? rows : []);
+        } catch (e) {
+            setOfflineFeeBills([]);
+        } finally {
+            setOfflineFeeLoading(false);
+        }
+    };
+
     useEffect(() => {
         void fetchRentalBills();
+        void fetchOfflineFeeBills();
     }, []);
 
     const fetchQrCodeUrl = async () => {
@@ -333,6 +334,49 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 />
             ) : null}
 
+            {offlineFeeBills.length ? (
+                <Alert
+                    type="warning"
+                    showIcon
+                    style={{marginBottom: 16}}
+                    message="存在待结线下费用账单"
+                    description={(
+                        <List
+                            size="small"
+                            loading={offlineFeeLoading}
+                            dataSource={offlineFeeBills}
+                            renderItem={(item: any) => (
+                                <List.Item
+                                    actions={[
+                                        <Button
+                                            key="confirm"
+                                            type="primary"
+                                            size="small"
+                                            onClick={async () => {
+                                                try {
+                                                    await confirmMyOfflineFeeBill({billId: Number(item.id)});
+                                                    message.success('线下费用已确认扣除');
+                                                    await fetchOfflineFeeBills();
+                                                    await fetchWithdrawInfo();
+                                                    onApplied?.();
+                                                } catch (e: any) {
+                                                    message.error(e?.data?.message || e?.response?.data?.message || e?.message || '确认失败');
+                                                }
+                                            }}
+                                        >
+                                            确认扣费
+                                        </Button>,
+                                    ]}
+                                >
+                                    {item.billMonth} 线下费用 ¥{Number(item.remainingAmount || item.shouldPayAmount || 0).toFixed(2)}
+                                    {item.dueAt ? <Tag style={{marginLeft: 8}}>到期 {dayjs(item.dueAt).format('YYYY-MM-DD')}</Tag> : null}
+                                </List.Item>
+                            )}
+                        />
+                    )}
+                />
+            ) : null}
+
             <ProTable<WalletWithdrawalRequest>
                 headerTitle="提现记录"
                 rowKey="id"
@@ -347,7 +391,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             type="primary"
                             disabled={hasPending || maxWithdraw <= 0}
                             onClick={async () => {
-                                formRef.current?.resetFields();
+                                form.resetFields();
                                 setQrUrl(null);
                                 setOpen(true);
                                 await fetchWithdrawInfo();
@@ -371,9 +415,9 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                 pagination={{pageSize: 20}}
             />
 
-            <ModalForm<{ amount: number; channel: 'MANUAL' | 'WECHAT'; remark?: string; payOfflineFeeAmount?: number }>
+            <ModalForm<{ amount: number; channel: 'MANUAL' | 'WECHAT'; remark?: string }>
                 title="申请提现"
-                formRef={formRef}
+                form={form}
                 open={open}
                 modalProps={{
                     destroyOnClose: true,
@@ -401,21 +445,16 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             return false;
                         }
 
-                        if (amount > maxWithdrawByOfflineFee) {
-                            message.error(`提现金额不能超过当前上限（${maxWithdrawByOfflineFee}）`);
+                        if (amount > maxWithdraw) {
+                            message.error(`提现金额不能超过当前上限（${maxWithdraw}）`);
                             return false;
                         }
 
                         const channel = (values.channel || 'MANUAL') as any;
-                        const payOfflineFeeAmount = Number(values.payOfflineFeeAmount || 0) || 0;
 
                         if (offlineFeeGuard.hasOutstanding) {
-                            const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
-                            const isPartialPay = payOfflineFeeAmount > 0 && payOfflineFeeAmount < remaining;
-                            if (isPartialPay && !offlineFeeGuard.canPartialPayByWalletRule) {
-                                message.error('当前钱包总额度（可用+冻结）不满足部分补缴条件，请选择全额缴纳');
-                                return false;
-                            }
+                            message.error('存在临近到期的线下费用账单未结清，请先完成账单缴费后再申请提现');
+                            return false;
                         }
 
                         if (channel === 'MANUAL') {
@@ -433,7 +472,6 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             idempotencyKey,
                             remark: values.remark || '',
                             channel,
-                            payOfflineFeeAmount: payOfflineFeeAmount || undefined,
                         });
 
                         if (!res.id) {
@@ -471,7 +509,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                             <Space>
                                 <Text>可用余额：</Text>
                                 <Text strong>{Number(availableBalance || 0).toFixed(2)}</Text>
-                                <Text type="secondary">（本次最多可提：{maxWithdrawByOfflineFee}，最少提现10元）</Text>
+                                <Text type="secondary">（本次最多可提：{maxWithdraw}，最少提现10元）</Text>
                             </Space>
                         }
                     />
@@ -590,7 +628,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                         name="amount"
                         label="提现金额"
                         min={10}
-                        max={maxWithdrawByOfflineFee}
+                        max={maxWithdraw}
                         fieldProps={{
                             precision: 0,
                             step: 10,
@@ -599,8 +637,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 <Button
                                     size="small"
                                     type="link"
-                                    disabled={hasPending || maxWithdrawByOfflineFee <= 0}
-                                    onClick={() => formRef.current?.setFieldsValue({amount: maxWithdrawByOfflineFee})}
+                                    disabled={hasPending || maxWithdraw <= 0}
+                                    onClick={() => form.setFieldsValue({amount: maxWithdraw})}
                                 >
                                     全部提现
                                 </Button>
@@ -613,7 +651,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                     const n = Number(v);
                                     if (!Number.isFinite(n) || n <= 0) throw new Error('提现金额非法');
                                     if (n % 10 !== 0) throw new Error('提现金额必须是 10 的整数');
-                                    if (n > maxWithdrawByOfflineFee) throw new Error(`不能提现超过 ${maxWithdrawByOfflineFee}`);
+                                    if (n > maxWithdraw) throw new Error(`不能提现超过 ${maxWithdraw}`);
                                 },
                             },
                         ]}
@@ -642,89 +680,16 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
                     {offlineFeeGuard.hasOutstanding ? (
                         <Alert
-                            type="warning"
-                            showIcon
-                            message={
-                                `上月线下费用未缴：${Number(offlineFeeGuard?.bill?.remainingAmount || 0).toFixed(2)}`
-                            }
-                            description={
-                                offlineFeeGuard?.bill?.enforceFullPayment
-                                    ? '当前账单已强制全额缴纳，必须本次补齐。'
-                                    : `本次可部分补缴，最低 ${offlineFeeGuard.partialMinPay}。`
-                            }
-                        />
-                    ) : null}
-
-                    {offlineFeeGuard.hasOutstanding && !offlineFeeGuard.canPartialPayByWalletRule ? (
-                        <Alert
                             type="error"
                             showIcon
-                            message="当前钱包总额度不足以支持“部分补缴”"
+                            message={
+                                `线下费用账单未结清：¥${Number(offlineFeeGuard?.bill?.remainingAmount || 0).toFixed(2)}`
+                            }
                             description={
-                                `钱包总额度（可用+冻结）${offlineFeeGuard.walletTotal.toFixed(2)}，` +
-                                `未缴金额 ${Number(offlineFeeGuard?.bill?.remainingAmount || 0).toFixed(2)}。请本次全额缴纳。`
+                                offlineFeeGuard?.bill?.dueAt
+                                    ? `账单到期日：${dayjs(offlineFeeGuard.bill.dueAt).format('YYYY-MM-DD')}。请先完成线下费用账单缴费后再申请提现。`
+                                    : '请先完成线下费用账单缴费后再申请提现。'
                             }
-                        />
-                    ) : null}
-
-                    {offlineFeeGuard.hasOutstanding ? (
-                        <ProFormDigit
-                            name="payOfflineFeeAmount"
-                            label="本次补缴线下费用"
-                            min={
-                                offlineFeeGuard?.bill?.enforceFullPayment
-                                    ? Number(offlineFeeGuard?.bill?.remainingAmount || 0)
-                                    : 0
-                            }
-                            max={Number(offlineFeeGuard?.bill?.remainingAmount || 0)}
-                            fieldProps={{
-                                precision: 2,
-                                step: 10,
-                                addonAfter: (
-                                    <Button
-                                        size="small"
-                                        type="link"
-                                        onClick={() =>
-                                            {
-                                                const fullPay = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
-                                                const nextMax = Math.floor(Math.max(0, Number(availableBalance || 0) - fullPay) / 10) * 10;
-                                                const currentAmount = Number(formRef.current?.getFieldValue('amount') || 0);
-
-                                                formRef.current?.setFieldsValue({
-                                                    payOfflineFeeAmount: fullPay,
-                                                    // 若当前提现金额超限，自动收敛到联动上限，避免提交时报余额不足
-                                                    amount: currentAmount > nextMax ? nextMax : currentAmount,
-                                                });
-                                            }
-                                        }
-                                    >
-                                        全额缴纳
-                                    </Button>
-                                ),
-                            }}
-                            rules={[
-                                {
-                                    validator: async (_: any, v: any) => {
-                                        const remaining = Number(offlineFeeGuard?.bill?.remainingAmount || 0);
-                                        const partialMinPay = Number(offlineFeeGuard?.partialMinPay || 100);
-                                        const enforce = Boolean(offlineFeeGuard?.bill?.enforceFullPayment);
-                                        const n = Number(v || 0);
-
-                                        if (remaining <= 0) return;
-                                        if (!Number.isFinite(n) || n <= 0) {
-                                            throw new Error(`请填写补缴金额（最低 ${partialMinPay}）`);
-                                        }
-                                        if (n > remaining) throw new Error('补缴金额不能超过未缴金额');
-                                        if (enforce && n < remaining) throw new Error('该账单要求强制全额缴纳');
-                                        if (!enforce && n < remaining && !offlineFeeGuard.canPartialPayByWalletRule) {
-                                            throw new Error('当前钱包总额度不满足部分补缴条件，请全额缴纳');
-                                        }
-                                        if (!enforce && n < partialMinPay && n < remaining) {
-                                            throw new Error(`部分补缴最低为 ${partialMinPay}`);
-                                        }
-                                    },
-                                },
-                            ]}
                         />
                     ) : null}
 
