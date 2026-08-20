@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Button, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Tag } from 'antd';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Tag } from 'antd';
 import dayjs from 'dayjs';
-import { resetUserWithdrawQrCode, updateUser, User } from '@/services/api';
+import { resetUserWithdrawQrCode, updateUser, User, type StaffRuleEngineConfig, type StaffRuleItem } from '@/services/api';
 
 const { Option } = Select;
 
@@ -12,8 +12,11 @@ interface EditUserModalProps {
     onSuccess: () => void;
     availableRatings?: any[];
     staffTagOptions?: Array<{ label: string; value: string }>;
+    staffRuleEngineConfig?: StaffRuleEngineConfig | null;
     isSuperAdmin?: boolean;
 }
+
+const DEFAULT_STAFF_RULE_GROUP_CODE = 'default_rule';
 
 const EditUserModal: React.FC<EditUserModalProps> = ({
     visible,
@@ -22,28 +25,20 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     onSuccess,
     availableRatings = [],
     staffTagOptions = [],
+    staffRuleEngineConfig = null,
     isSuperAdmin = false,
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
     const [resetQrLoading, setResetQrLoading] = React.useState(false);
     const [userType, setUserType] = useState('REGISTERED_USER');
-    const [workMode, setWorkMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
+    const watchedStaffRuleGroup = Form.useWatch('staffTags', form);
 
     const handleUserTypeChange = (value: string) => {
         setUserType(value);
 
         if (value !== 'STAFF') {
-            setWorkMode('ONLINE');
             form.setFieldsValue({ workMode: 'ONLINE', offlineJoinedAt: null });
-        }
-    };
-
-    const handleWorkModeChange = (value: 'ONLINE' | 'OFFLINE') => {
-        setWorkMode(value);
-
-        if (value === 'ONLINE') {
-            form.setFieldsValue({ offlineJoinedAt: null });
         }
     };
 
@@ -53,7 +48,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
             const currentWorkMode = (user.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
 
             setUserType(currentUserType);
-            setWorkMode(currentWorkMode);
 
             form.setFieldsValue({
                 name: user.name,
@@ -77,6 +71,41 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
     const isStaff = userType === 'STAFF';
     const staffEditLocked = isStaff && !isSuperAdmin;
+    const currentStaffRuleGroup = String(watchedStaffRuleGroup || (Array.isArray(user?.staffTags) ? user?.staffTags?.[0] : '') || DEFAULT_STAFF_RULE_GROUP_CODE);
+    const formatStaffRuleGroupName = (code?: string) => {
+        const value = String(code || '').trim();
+        if (!value || value === DEFAULT_STAFF_RULE_GROUP_CODE) {
+            return String(staffRuleEngineConfig?.defaultRule?.name || '默认规则配置').trim() || '默认规则配置';
+        }
+        return String(staffTagOptions.find((item) => item.value === value)?.label || value).replace(/（默认）$/, '');
+    };
+    const matchedStaffRule = useMemo<StaffRuleItem | null>(() => {
+        const config = staffRuleEngineConfig;
+        if (!config) return user?.matchedStaffRule || null;
+        const groupCode = String(currentStaffRuleGroup || '').trim();
+        if (!groupCode || groupCode === DEFAULT_STAFF_RULE_GROUP_CODE) {
+            return config.defaultRule || null;
+        }
+        const rules = Array.isArray(config.rules) ? config.rules : [];
+        return (
+            rules
+                .filter((rule) => rule?.enabled !== false)
+                .filter((rule) => Array.isArray(rule.tagCodes) && rule.tagCodes.includes(groupCode))
+                .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))[0] ||
+            config.defaultRule ||
+            null
+        );
+    }, [currentStaffRuleGroup, staffRuleEngineConfig, user?.matchedStaffRule]);
+    const ruleSummary = {
+        depositAmount: Number(matchedStaffRule?.depositAmount ?? user?.matchedDepositAmount ?? user?.depositLimit ?? 0),
+        firstWithdrawMinBalance: Number(matchedStaffRule?.firstWithdrawMinBalance ?? user?.matchedFirstWithdrawMinBalance ?? 1000),
+        firstWithdrawMinAcceptedDays: Number(matchedStaffRule?.firstWithdrawMinAcceptedDays ?? user?.matchedFirstWithdrawMinAcceptedDays ?? 15),
+        quitCoolingDays: Number(matchedStaffRule?.quitCoolingDays ?? user?.matchedQuitCoolingDays ?? 180),
+        depositForfeitDays: Number(matchedStaffRule?.depositForfeitDays ?? user?.matchedDepositForfeitDays ?? 0),
+        dormantFreezeDays: Number(matchedStaffRule?.dormantFreezeDays ?? 0),
+        settlementFreezeExperienceDays: Number(matchedStaffRule?.settlementFreezeExperienceDays ?? 3),
+        settlementFreezeRegularDays: Number(matchedStaffRule?.settlementFreezeRegularDays ?? 7),
+    };
     const accountStatusOptions = staffEditLocked
         ? [
             { label: '正常', value: 'ACTIVE' },
@@ -107,11 +136,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 // 统一在前端将服务者工作模式字段转换为后端最终格式
                 if (values.userType === 'STAFF') {
                     payload.staffTags = values.staffTags ? [values.staffTags] : [];
-                    payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
-                    payload.offlineJoinedAt =
-                        payload.workMode === 'OFFLINE' && values.offlineJoinedAt
-                            ? dayjs(values.offlineJoinedAt).startOf('day').toISOString()
-                            : null;
+                    delete payload.workMode;
+                    delete payload.offlineJoinedAt;
                 } else {
                     payload.workMode = 'ONLINE';
                     payload.offlineJoinedAt = null;
@@ -142,7 +168,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
         form.resetFields();
         if (user) {
             setUserType(user.userType);
-            setWorkMode((user.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE');
         }
         onCancel();
     };
@@ -342,46 +367,6 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                     </div>
                 </div>
 
-                {isStaff && (
-                    <div className="bc-admin-form-section">
-                        <div className="bc-admin-form-section-title">服务者信息</div>
-                    <div className="bc-admin-form-grid">
-                        <Form.Item
-                            label="服务者工作模式"
-                            name="workMode"
-                            rules={[{ required: true, message: '请选择服务者工作模式' }]}
-                        >
-                            <Select onChange={handleWorkModeChange} disabled={staffEditLocked}>
-                                <Option value="ONLINE">线上</Option>
-                                <Option value="OFFLINE">线下</Option>
-                            </Select>
-                        </Form.Item>
-
-                        <Form.Item
-                            label="线下入职时间"
-                            name="offlineJoinedAt"
-                            rules={[
-                                {
-                                    validator: async (_, value) => {
-                                        const mode = form.getFieldValue('workMode');
-                                        if (mode === 'OFFLINE' && !value) {
-                                            throw new Error('线下服务者必须填写入驻时间');
-                                        }
-                                    },
-                                },
-                            ]}
-                        >
-                            <DatePicker
-                                style={{ width: '100%' }}
-                                placeholder="请选择线下入职时间"
-                                disabled={workMode !== 'OFFLINE' || staffEditLocked}
-                                allowClear
-                            />
-                        </Form.Item>
-                    </div>
-                    </div>
-                )}
-
                 {isStaff && currentRating && (
                     <div
                         style={{
@@ -412,10 +397,20 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 </Form.Item>
 
                 {isStaff && (
-                    <div style={{ color: '#666', fontSize: 12, lineHeight: '20px' }}>
-                        <div>当前规则押金：¥{Number(user?.matchedDepositAmount ?? user?.depositLimit ?? 0)}</div>
-                        <div>首次提现限制：¥{Number(user?.matchedFirstWithdrawMinBalance ?? 1000)}</div>
-                        <div>退出平台冷却期：{Number(user?.matchedQuitCoolingDays ?? 180)} 天</div>
+                    <div className="bc-admin-form-section">
+                        <div className="bc-admin-form-section-title">规则核算</div>
+                        <div className="bc-admin-form-grid">
+                            <div>规则分组：{formatStaffRuleGroupName(currentStaffRuleGroup) || '未设置'}</div>
+                            <div>命中规则：{matchedStaffRule?.name || '未命中，走默认规则'}</div>
+                            <div>保证金阈值：¥{ruleSummary.depositAmount}</div>
+                            <div>首次提现余额限制：¥{ruleSummary.firstWithdrawMinBalance}</div>
+                            <div>首次提现接单满：{ruleSummary.firstWithdrawMinAcceptedDays} 天</div>
+                            <div>退出平台冷却期：{ruleSummary.quitCoolingDays} 天</div>
+                            <div>押金不退限制：{ruleSummary.depositForfeitDays} 天</div>
+                            <div>长期未接单冻结：{ruleSummary.dormantFreezeDays} 天</div>
+                            <div>体验单冻结周期：{ruleSummary.settlementFreezeExperienceDays} 天</div>
+                            <div>普通单冻结周期：{ruleSummary.settlementFreezeRegularDays} 天</div>
+                        </div>
                     </div>
                 )}
             </Form>

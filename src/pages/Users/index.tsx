@@ -4,6 +4,7 @@ import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
+import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
 import ChangeLevelModal from './components/ChangeLevelModal';
@@ -192,6 +193,7 @@ export default function UsersPage() {
     const [staffClearUser, setStaffClearUser] = useState<any>(null);
     const [staffClearForm] = Form.useForm();
     const [staffTagOptions, setStaffTagOptions] = useState<Array<{ label: string; value: string }>>([]);
+    const [staffRuleEngineConfig, setStaffRuleEngineConfig] = useState<StaffRuleEngineConfig | null>(null);
     const [staffStatusTab, setStaffStatusTab] = useState<'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED'>('ACTIVE');
     const [memberStateTab, setMemberStateTab] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
@@ -229,11 +231,13 @@ export default function UsersPage() {
     useEffect(() => {
         if (sceneConfig.key === 'MEMBER') {
             setStaffTagOptions([]);
+            setStaffRuleEngineConfig(null);
             return;
         }
         const loadStaffRuleEngine = async () => {
             try {
                 const config = await getStaffRuleEngineConfig();
+                setStaffRuleEngineConfig(config || null);
                 const tags = Array.isArray(config?.tags) ? config.tags : [];
                 const defaultRuleName = String(config?.defaultRule?.name || '默认规则配置').trim() || '默认规则配置';
                 const enabledTagOptions = tags
@@ -249,6 +253,7 @@ export default function UsersPage() {
                         ],
                 );
             } catch (error) {
+                setStaffRuleEngineConfig(null);
                 console.error('加载服务者规则分组失败:', error);
             }
         };
@@ -1593,6 +1598,7 @@ export default function UsersPage() {
                 user={editingUser}
                 availableRatings={availableRatings}
                 staffTagOptions={staffTagOptions}
+                staffRuleEngineConfig={staffRuleEngineConfig}
                 isSuperAdmin={access.canSeeAdmin}
                 onCancel={() => {
                     setEditModalVisible(false);
