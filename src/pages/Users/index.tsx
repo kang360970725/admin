@@ -73,6 +73,8 @@ const userCouponStatusMap: Record<string, { text: string; color?: string }> = {
     LOCKED: { text: '已锁定', color: 'orange' },
 };
 
+const DEFAULT_STAFF_RULE_GROUP_CODE = 'default_rule';
+
 const renderReviewSummary = (record: any) => {
     const avg = Number(record?.reviewStats?.averageScore ?? 0);
     const count = Number(record?.reviewStats?.reviewCount ?? 0);
@@ -233,10 +235,18 @@ export default function UsersPage() {
             try {
                 const config = await getStaffRuleEngineConfig();
                 const tags = Array.isArray(config?.tags) ? config.tags : [];
+                const defaultRuleName = String(config?.defaultRule?.name || '默认规则配置').trim() || '默认规则配置';
+                const enabledTagOptions = tags
+                    .filter((item: any) => item?.enabled !== false)
+                    .map((item: any) => ({ label: item?.name || item?.code, value: item?.code }));
+                const hasDefaultOption = enabledTagOptions.some((item: any) => item.value === DEFAULT_STAFF_RULE_GROUP_CODE);
                 setStaffTagOptions(
-                    tags
-                        .filter((item: any) => item?.enabled !== false)
-                        .map((item: any) => ({ label: item?.name || item?.code, value: item?.code })),
+                    hasDefaultOption
+                        ? enabledTagOptions
+                        : [
+                            { label: `${defaultRuleName}（默认）`, value: DEFAULT_STAFF_RULE_GROUP_CODE },
+                            ...enabledTagOptions,
+                        ],
                 );
             } catch (error) {
                 console.error('加载服务者规则分组失败:', error);
@@ -244,6 +254,13 @@ export default function UsersPage() {
         };
         loadStaffRuleEngine();
     }, [sceneConfig.key]);
+
+    const formatStaffRuleGroupName = (code: string) => {
+        const value = String(code || '').trim();
+        if (!value) return '';
+        const matched = staffTagOptions.find((item) => item.value === value);
+        return String(matched?.label || value).replace(/（默认）$/, '');
+    };
 
     useEffect(() => {
         if (sceneConfig.key === 'STAFF' && access.canViewStaffWalletStats) {
@@ -880,7 +897,7 @@ export default function UsersPage() {
                     <div style={{ color: '#999', fontSize: 12, marginBottom: 4 }}>服务者规则分组</div>
                     {tags.length ? (
                         <Space size={4} wrap>
-                            {tags.map((item: string) => <Tag key={item}>{item}</Tag>)}
+                            {tags.map((item: string) => <Tag key={item}>{formatStaffRuleGroupName(item)}</Tag>)}
                         </Space>
                     ) : (
                         <Tag>未设置</Tag>
@@ -1197,7 +1214,7 @@ export default function UsersPage() {
                 if (!rows.length) return <Tag>未设置</Tag>;
                 return (
                     <Space size={4} wrap>
-                        {rows.map((item) => <Tag key={item}>{item}</Tag>)}
+                        {rows.map((item) => <Tag key={item}>{formatStaffRuleGroupName(item)}</Tag>)}
                     </Space>
                 );
             },
@@ -1675,7 +1692,9 @@ export default function UsersPage() {
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">规则核算</div>
                         <div className="bc-admin-form-grid">
-                            <div>规则分组：{(staffExitPreview?.staffTags || []).join('、') || '未设置'}</div>
+                            <div>
+                                规则分组：{(staffExitPreview?.staffTags || []).map(formatStaffRuleGroupName).filter(Boolean).join('、') || '未设置'}
+                            </div>
                             <div>命中规则：{staffExitPreview?.matchedStaffRule?.name || '未命中，走默认规则'}</div>
                             <div>入驻天数：{Number(staffExitPreview?.inShopDays ?? 0)} 天</div>
                             <div>有效接单量：{Number(staffExitPreview?.effectiveAcceptedOrderCount ?? 0)} / {Number(staffExitPreview?.minAcceptedOrdersForDepositRefund ?? 50)} 单</div>

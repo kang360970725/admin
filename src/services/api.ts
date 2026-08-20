@@ -2047,9 +2047,14 @@ export interface OfflineFeeBill {
     shouldPayAmount: number;
     paidAmount: number;
     remainingAmount: number;
+    manualPaidAmount?: number;
+    externalPaidAmount?: number;
+    waivedAmount?: number;
     status: 'UNPAID' | 'PARTIAL' | 'PAID' | 'WAIVED';
     enforceFullPayment: boolean;
     lastRemindAt?: string | null;
+    dueAt?: string | null;
+    remark?: string | null;
     generatedAt: string;
     user?: {
         id: number;
@@ -2057,6 +2062,24 @@ export interface OfflineFeeBill {
         phone: string;
         workMode?: 'ONLINE' | 'OFFLINE';
         offlineJoinedAt?: string | null;
+    };
+}
+
+export interface OfflineFeeContract {
+    id: number;
+    userId: number;
+    monthlyAmount: number;
+    startMonth: string;
+    endMonth?: string | null;
+    status: 'ACTIVE' | 'INACTIVE';
+    remark?: string | null;
+    user?: {
+        id: number;
+        name?: string;
+        realName?: string;
+        phone: string;
+        workMode?: 'ONLINE' | 'OFFLINE';
+        staffEmploymentStatus?: string;
     };
 }
 
@@ -2083,7 +2106,54 @@ export async function listOfflineFeeBills(data: {
         total: number;
         page: number;
         limit: number;
+        stats?: {
+            billAmount: number;
+            remainingAmount: number;
+            chargedAmount: number;
+            externalPaidAmount: number;
+            waivedAmount: number;
+        };
     }>(`${API_BASE}/offline-fees/bills/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function listOfflineFeeContracts(data: {
+    status?: string;
+    userId?: number;
+    page?: number;
+    limit?: number;
+}) {
+    return request<{ list: OfflineFeeContract[]; total: number; page: number; limit: number }>(
+        `${API_BASE}/offline-fees/contracts/list`,
+        { method: 'POST', data },
+    );
+}
+
+export async function createOfflineFeeContract(data: {
+    userId: number;
+    monthlyAmount: number;
+    startMonth: string;
+    endMonth?: string | null;
+    status?: 'ACTIVE' | 'INACTIVE';
+    remark?: string;
+}) {
+    return request<OfflineFeeContract>(`${API_BASE}/offline-fees/contracts/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateOfflineFeeContract(data: {
+    id: number;
+    monthlyAmount?: number;
+    startMonth?: string;
+    endMonth?: string | null;
+    status?: 'ACTIVE' | 'INACTIVE';
+    remark?: string;
+}) {
+    return request<OfflineFeeContract>(`${API_BASE}/offline-fees/contracts/update`, {
         method: 'POST',
         data,
     });
@@ -2106,7 +2176,10 @@ export async function listOfflineStaffOptions(data?: { keyword?: string }) {
 export async function manualCreateOfflineFeeBill(data: {
     userId: number;
     month: string;
-    performanceBaseAmount: number;
+    performanceBaseAmount?: number;
+    amount?: number;
+    dueAt?: string;
+    remark?: string;
 }) {
     return request(`${API_BASE}/offline-fees/bills/manual-entry`, {
         method: 'POST',
@@ -2116,7 +2189,10 @@ export async function manualCreateOfflineFeeBill(data: {
 
 export async function updateOfflineFeeBill(data: {
     billId: number;
-    performanceBaseAmount: number;
+    performanceBaseAmount?: number;
+    amount?: number;
+    dueAt?: string;
+    remark?: string;
 }) {
     return request(`${API_BASE}/offline-fees/bills/update`, {
         method: 'POST',
@@ -2145,6 +2221,13 @@ export async function payOfflineFeeBill(data: { billId: number; amount: number; 
     });
 }
 
+export async function confirmOfflineFeeBillPaidExternal(data: { billId: number; amount: number; remark: string }) {
+    return request(`${API_BASE}/offline-fees/bills/confirm-paid-external`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function waiveOfflineFeeBill(data: { billId: number; remark?: string }) {
     return request(`${API_BASE}/offline-fees/bills/waive`, {
         method: 'POST',
@@ -2159,8 +2242,16 @@ export async function deleteOfflineFeeBill(data: { billId: number }) {
     });
 }
 
-export async function refundOfflineFeeBill(data: { billId: number; remark?: string }) {
-    return request(`${API_BASE}/offline-fees/bills/refund`, {
+export async function batchDeleteOfflineFeeBills(data: { billIds: number[] }) {
+    return request<{
+        success: boolean;
+        requested: number;
+        deleted: number;
+        skipped: number;
+        deletedBillIds: number[];
+        blockedBillIds: number[];
+        notFoundBillIds: number[];
+    }>(`${API_BASE}/offline-fees/bills/batch-delete`, {
         method: 'POST',
         data,
     });
@@ -2260,7 +2351,19 @@ export async function listEquipmentRentalBills(data: {
     page?: number;
     limit?: number;
 }) {
-    return request<{ list: EquipmentRentalBill[]; total: number; page: number; limit: number }>(
+    return request<{
+        list: EquipmentRentalBill[];
+        total: number;
+        page: number;
+        limit: number;
+        stats?: {
+            billAmount: number;
+            remainingAmount: number;
+            chargedAmount: number;
+            externalPaidAmount: number;
+            waivedAmount: number;
+        };
+    }>(
         `${API_BASE}/equipment-rental-fees/bills/list`,
         { method: 'POST', data },
     );

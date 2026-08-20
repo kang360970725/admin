@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, Button, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Tabs, Tag } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Row, Select, Space, Statistic, Tabs, Tag } from 'antd';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -32,6 +32,13 @@ const EquipmentRentalFeesPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const [billStats, setBillStats] = useState({
+    billAmount: 0,
+    chargedAmount: 0,
+    externalPaidAmount: 0,
+    waivedAmount: 0,
+    remainingAmount: 0,
+  });
   const [contractForm] = Form.useForm();
   const [generateForm] = Form.useForm();
   const [externalPaidForm] = Form.useForm();
@@ -106,7 +113,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
     {
       title: '操作',
       valueType: 'option',
-      width: 120,
+      width: 260,
       render: (_, row) => [<a key="edit" onClick={() => openEditContract(row)}>编辑</a>],
     },
   ], []);
@@ -117,7 +124,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
       dataIndex: 'billMonth',
       width: 120,
       valueType: 'dateMonth',
-      transform: (value) => ({ billMonth: value ? monthValue(value) : undefined }),
+      transform: (value: any) => ({ billMonth: value ? monthValue(value) : undefined }),
     },
     {
       title: '员工',
@@ -257,6 +264,14 @@ const EquipmentRentalFeesPage: React.FC = () => {
         description="系统每月自动生成账单；提前生成的未来账单不会影响提现，进入缴费日前 1 天后才会在提现时预留。扣费时允许可用余额变负，但扣费后可用余额 + 冻结余额的总资产不能小于 0。"
       />
 
+      <Row gutter={[12, 12]}>
+        <Col xs={12} md={4}><Card size="small"><Statistic title="账单金额" value={billStats.billAmount} precision={2} prefix="¥" /></Card></Col>
+        <Col xs={12} md={5}><Card size="small"><Statistic title="收费累计" value={billStats.chargedAmount} precision={2} prefix="¥" /></Card></Col>
+        <Col xs={12} md={5}><Card size="small"><Statistic title="其他渠道收取" value={billStats.externalPaidAmount} precision={2} prefix="¥" /></Card></Col>
+        <Col xs={12} md={5}><Card size="small"><Statistic title="减免" value={billStats.waivedAmount} precision={2} prefix="¥" /></Card></Col>
+        <Col xs={12} md={5}><Card size="small"><Statistic title="未结清" value={billStats.remainingAmount} precision={2} prefix="¥" /></Card></Col>
+      </Row>
+
       <Tabs
         items={[
           {
@@ -308,6 +323,13 @@ const EquipmentRentalFeesPage: React.FC = () => {
                     status: params.status,
                     userId: params.userId ? Number(params.userId) : undefined,
                     onlyRisk: params.onlyRisk === true || params.onlyRisk === 'true',
+                  });
+                  setBillStats({
+                    billAmount: Number(res?.stats?.billAmount || 0),
+                    chargedAmount: Number(res?.stats?.chargedAmount || 0),
+                    externalPaidAmount: Number(res?.stats?.externalPaidAmount || 0),
+                    waivedAmount: Number(res?.stats?.waivedAmount || 0),
+                    remainingAmount: Number(res?.stats?.remainingAmount || 0),
                   });
                   return { data: res?.list || [], total: Number(res?.total || 0), success: true };
                 }}
