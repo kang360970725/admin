@@ -25,6 +25,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const has = (key: string) => permissions.includes(key);
   const canViewMemberUsers = isSuperAdmin || has('users:member:page');
   const canViewStaffUsers = isSuperAdmin || has('users:staff:page');
+  const canViewStaffRentalRisk = isSuperAdmin || has('users:staff-rental-risk:page');
   const canViewInternalUsers = isSuperAdmin || has('users:internal:page');
   const canViewAllUsers = false;
   const canManageStaffUsers = canViewStaffUsers;
@@ -67,9 +68,10 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || hasLegacySystemAdmin,
 
     // 用户/评级
-    canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewInternalUsers || canViewAllUsers,
+    canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewStaffRentalRisk || canViewInternalUsers || canViewAllUsers,
     canViewMemberUsers,
     canViewStaffUsers,
+    canViewStaffRentalRisk,
     canViewInternalUsers,
     canViewAllUsers,
     canViewStaffRatings: has('staff-ratings:page'),

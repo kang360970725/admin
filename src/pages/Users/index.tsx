@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
+import {Alert, Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
@@ -140,6 +140,31 @@ const canExitOrClearStaff = (record: any) => {
     return status === 'ACTIVE' || status === 'FROZEN';
 };
 
+const getRentalRiskLevel = (referenceBalance: number) => {
+    if (referenceBalance < 500) {
+        return {
+            color: '#ff4d4f',
+            tagColor: 'red',
+            text: '高风险',
+            desc: '低于500，建议先收取押金或确认风险',
+        };
+    }
+    if (referenceBalance < 1000) {
+        return {
+            color: '#faad14',
+            tagColor: 'gold',
+            text: '需谨慎',
+            desc: '500-1000，建议人工复核',
+        };
+    }
+    return {
+        color: '#52c41a',
+        tagColor: 'green',
+        text: '较安全',
+        desc: '1000以上，可作为免押参考',
+    };
+};
+
 export default function UsersPage() {
     const access = useAccess();
     const location = useLocation();
@@ -197,14 +222,16 @@ export default function UsersPage() {
     const [staffStatusTab, setStaffStatusTab] = useState<'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED'>('ACTIVE');
     const [memberStateTab, setMemberStateTab] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
-    const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean }> = {
+    const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean; readOnly?: boolean }> = {
         '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
         '/users/staff': { key: 'STAFF', title: '服务者管理', defaultUserType: 'STAFF', showStaffRating: true, showWorkMetrics: true },
+        '/users/rental-risk': { key: 'STAFF_RENTAL_RISK', title: '租号风控查询', defaultUserType: 'STAFF', showStaffRating: false, showWorkMetrics: false, readOnly: true },
         '/users/internal': { key: 'INTERNAL', title: '后台人员管理', showStaffRating: false, showWorkMetrics: false },
         '/users/all': { key: 'ALL', title: '全部用户', showStaffRating: true, showWorkMetrics: true },
     };
 
     const sceneConfig = sceneMap[location.pathname] || sceneMap['/users/members'];
+    const isRentalRiskScene = sceneConfig.key === 'STAFF_RENTAL_RISK';
 
     useEffect(() => {
         if (sceneConfig.key === 'STAFF') {
@@ -735,6 +762,8 @@ export default function UsersPage() {
     };
 
     const renderActionButtons = (record: any, compact = false) => {
+        if (sceneConfig.readOnly) return null;
+
         const isStaffScene = sceneConfig.key === 'STAFF';
         const canEditCurrentUser =
             sceneConfig.key === 'MEMBER'
@@ -1075,7 +1104,7 @@ export default function UsersPage() {
             key: 'role',
             search: false,
             width: 120,
-            hideInTable: sceneConfig.key === 'MEMBER',
+            hideInTable: sceneConfig.key === 'MEMBER' || isRentalRiskScene,
             render: (role: any) => (
                 role ? (
                     <Tag color="purple">{role.name}</Tag>
@@ -1148,7 +1177,7 @@ export default function UsersPage() {
             key: 'wechatBindings',
             width: 180,
             search: false,
-            hideInTable: sceneConfig.key === 'MEMBER',
+            hideInTable: sceneConfig.key === 'MEMBER' || isRentalRiskScene,
             render: (bindings: any[]) => {
                 const first = Array.isArray(bindings) ? bindings[0] : null;
                 if (!first) return <Tag>未绑定</Tag>;
@@ -1172,6 +1201,7 @@ export default function UsersPage() {
             key: 'memberAssets',
             width: 180,
             search: false,
+            hideInTable: isRentalRiskScene,
             render: (_: any, record: any) => {
                 const profile = record?.memberProfile || {};
                 const points = Number(record?.memberPointAccount?.availablePoints ?? 0);
@@ -1213,7 +1243,7 @@ export default function UsersPage() {
             dataIndex: 'staffTags',
             width: 180,
             search: false,
-            hideInTable: sceneConfig.key === 'MEMBER',
+            hideInTable: sceneConfig.key === 'MEMBER' || isRentalRiskScene,
             render: (tags: string[]) => {
                 const rows = Array.isArray(tags) ? tags : [];
                 if (!rows.length) return <Tag>未设置</Tag>;
@@ -1224,20 +1254,66 @@ export default function UsersPage() {
                 );
             },
         },
+        isRentalRiskScene ? {
+            title: '租号风控灯',
+            key: 'rentalRisk',
+            width: 240,
+            search: false,
+            fixed: 'left',
+            render: (_: any, record: any) => {
+                const wallet = record?.wallet || {};
+                const available = Number(wallet?.availableBalance ?? 0);
+                const deposit = Number(wallet?.depositBalance ?? 0);
+                const withdrawFrozen = Number(wallet?.withdrawFrozenBalance ?? 0);
+                const reference = Number(wallet?.rentalRiskReferenceBalance ?? (available + deposit - withdrawFrozen));
+                const risk = getRentalRiskLevel(reference);
+                return (
+                    <Tooltip title={risk.desc}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, lineHeight: '18px' }}>
+                            <span
+                                style={{
+                                    width: 12,
+                                    height: 12,
+                                    borderRadius: 999,
+                                    background: risk.color,
+                                    boxShadow: `0 0 0 4px ${risk.color}22`,
+                                    flex: '0 0 auto',
+                                }}
+                            />
+                            <div>
+                                <div>
+                                    <Tag color={risk.tagColor as any}>{risk.text}</Tag>
+                                    <span style={{ color: '#1677ff', fontWeight: 600 }}>
+                                        ¥{reference.toFixed(2)}
+                                    </span>
+                                </div>
+                                <div style={{ color: '#999', fontSize: 12 }}>
+                                    参考=可用+保证金-提现冻结
+                                </div>
+                            </div>
+                        </div>
+                    </Tooltip>
+                );
+            },
+        } : null,
         {
             title: '钱包',
             key: 'wallet',
-            width: 140,
+            width: isRentalRiskScene ? 220 : 140,
             search: false,
             render: (_: any, record: any) => {
 
                 const available = Number(record?.wallet?.availableBalance ?? 0);
                 const frozen = Number(record?.wallet?.frozenBalance ?? 0);
+                const deposit = Number(record?.wallet?.depositBalance ?? 0);
+                const withdrawFrozen = Number(record?.wallet?.withdrawFrozenBalance ?? 0);
 
                 return (
                     <div
-                        style={{ cursor: 'pointer', lineHeight: '18px' }}
-                        onClick={() => openWallet(record)}
+                        style={{ cursor: isRentalRiskScene ? 'default' : 'pointer', lineHeight: '18px' }}
+                        onClick={() => {
+                            if (!isRentalRiskScene) openWallet(record);
+                        }}
                     >
                         <div style={{ color: '#1677ff', fontSize: 12 }}>
                             可用 ¥{available.toFixed(1)}
@@ -1246,6 +1322,16 @@ export default function UsersPage() {
                         <div style={{ color: '#faad14', fontSize: 12 }}>
                             冻结 ¥{frozen.toFixed(1)}
                         </div>
+                        {isRentalRiskScene ? (
+                            <>
+                                <div style={{ color: '#52c41a', fontSize: 12 }}>
+                                    保证金 ¥{deposit.toFixed(1)}
+                                </div>
+                                <div style={{ color: withdrawFrozen > 0 ? '#ff4d4f' : '#999', fontSize: 12 }}>
+                                    提现冻结 ¥{withdrawFrozen.toFixed(1)}
+                                </div>
+                            </>
+                        ) : null}
                     </div>
                 );
             },
@@ -1255,7 +1341,7 @@ export default function UsersPage() {
             dataIndex: 'matchedDepositAmount',
             width: 120,
             search: false,
-            hideInTable: sceneConfig.key === 'MEMBER',
+            hideInTable: sceneConfig.key === 'MEMBER' || isRentalRiskScene,
             render: (v: any, record: any) => (
                 <Tag color="gold">
                     ¥{Number(v ?? record?.depositLimit ?? 500)}
@@ -1267,6 +1353,7 @@ export default function UsersPage() {
             dataIndex: 'canWithdraw',
             width: 90,
             search: false,
+            hideInTable: isRentalRiskScene,
             render: (value: boolean, record: any) => (
                 <Switch
                     checked={value}
@@ -1395,6 +1482,7 @@ export default function UsersPage() {
             search: false,
             width: 200,
             fixed: 'right',
+            hideInTable: isRentalRiskScene,
             render: (_: any, record: any) => renderActionButtons(record),
         },
     ].filter(Boolean) as any[];
@@ -1427,6 +1515,9 @@ export default function UsersPage() {
     };
 
     const canCreateCurrentSceneUser =
+        isRentalRiskScene
+            ? false
+            :
         sceneConfig.key === 'MEMBER'
             ? access.canCreateMemberUser
             : sceneConfig.key === 'STAFF'
@@ -1437,6 +1528,16 @@ export default function UsersPage() {
 
     return (
         <PageContainer title={sceneConfig.title}>
+            {isRentalRiskScene ? (
+                <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message="租号放号风控参考"
+                    description="风控参考余额 = 可用余额 + 保证金 - 提现冻结金额。提现申请会冻结余额，若只看钱包总额可能误判可承接风险。红色低于500，黄色500-1000，绿色1000以上。"
+                />
+            ) : null}
+
             {sceneConfig.key === 'STAFF' && access.canViewStaffWalletStats ? (
             <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]} style={{ marginBottom: isMobile ? 12 : 20 }}>
 
@@ -1535,7 +1636,7 @@ export default function UsersPage() {
                             includeStaffMembers: sceneConfig.key === 'MEMBER' ? 'true' : undefined,
                             ...(sceneConfig.key === 'MEMBER' ? { memberState: memberStateTab } : {}),
                             ...(sceneConfig.key === 'STAFF' ? { staffEmploymentStatus: staffStatusTab } : {}),
-                            ...(sceneConfig.key !== 'STAFF' && _ignoredStatus ? { status: _ignoredStatus } : {}),
+                            ...(sceneConfig.key !== 'STAFF' && sceneConfig.key !== 'STAFF_RENTAL_RISK' && _ignoredStatus ? { status: _ignoredStatus } : {}),
                             ...queryRest, // search 表单字段会在这里（例如 search/userType/status）
                         };
 
@@ -1558,9 +1659,9 @@ export default function UsersPage() {
                 search={{
                     labelWidth: 'auto',
                     span: isMobile ? 24 : undefined,
-                    collapsed: isMobile && sceneConfig.key === 'STAFF' ? false : undefined,
-                    defaultCollapsed: isMobile && sceneConfig.key === 'STAFF' ? false : isMobile,
-                    collapseRender: isMobile && sceneConfig.key === 'STAFF' ? false : undefined,
+                    collapsed: isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? false : undefined,
+                    defaultCollapsed: isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? false : isMobile,
+                    collapseRender: isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? false : undefined,
                 }}
                 toolBarRender={() => [
                     canCreateCurrentSceneUser && (

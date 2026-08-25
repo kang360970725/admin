@@ -191,6 +191,7 @@ export interface GetUsersParams {
     keyword?: string;
     userType?: string;
     status?: string;
+    staffEmploymentStatus?: string;
     scene?: string;
     anonymousOnly?: boolean | string;
     includeStaffMembers?: boolean | string;
