@@ -244,6 +244,10 @@ export default function UsersPage() {
 
     // 加载可用的服务者评级
     useEffect(() => {
+        if (isRentalRiskScene) {
+            setAvailableRatings([]);
+            return;
+        }
         const loadRatings = async () => {
             try {
                 const ratings = await getAvailableRatings();
@@ -253,10 +257,10 @@ export default function UsersPage() {
             }
         };
         loadRatings();
-    }, []);
+    }, [isRentalRiskScene]);
 
     useEffect(() => {
-        if (sceneConfig.key === 'MEMBER') {
+        if (sceneConfig.key === 'MEMBER' || isRentalRiskScene) {
             setStaffTagOptions([]);
             setStaffRuleEngineConfig(null);
             return;
@@ -285,7 +289,7 @@ export default function UsersPage() {
             }
         };
         loadStaffRuleEngine();
-    }, [sceneConfig.key]);
+    }, [isRentalRiskScene, sceneConfig.key]);
 
     const formatStaffRuleGroupName = (code: string) => {
         const value = String(code || '').trim();
