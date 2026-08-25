@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Alert, Badge, Button, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
+import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
@@ -165,6 +165,13 @@ const getRentalRiskLevel = (referenceBalance: number) => {
     };
 };
 
+const maskRentalRiskPhone = (phone?: string) => {
+    const text = String(phone || '').trim();
+    if (!text) return '-';
+    if (text.length <= 5) return text.replace(/.(?=.{2})/g, '*');
+    return `${text.slice(0, 3)}${'*'.repeat(Math.max(1, text.length - 5))}${text.slice(-2)}`;
+};
+
 export default function UsersPage() {
     const access = useAccess();
     const location = useLocation();
@@ -221,6 +228,7 @@ export default function UsersPage() {
     const [staffRuleEngineConfig, setStaffRuleEngineConfig] = useState<StaffRuleEngineConfig | null>(null);
     const [staffStatusTab, setStaffStatusTab] = useState<'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED'>('ACTIVE');
     const [memberStateTab, setMemberStateTab] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+    const [hasRentalRiskSearched, setHasRentalRiskSearched] = useState(false);
 
     const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean; readOnly?: boolean }> = {
         '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
@@ -232,6 +240,10 @@ export default function UsersPage() {
 
     const sceneConfig = sceneMap[location.pathname] || sceneMap['/users/members'];
     const isRentalRiskScene = sceneConfig.key === 'STAFF_RENTAL_RISK';
+
+    useEffect(() => {
+        setHasRentalRiskSearched(false);
+    }, [location.pathname]);
 
     useEffect(() => {
         if (sceneConfig.key === 'STAFF') {
@@ -955,7 +967,7 @@ export default function UsersPage() {
             hideInTable: true,
             valueType: 'text',
             fieldProps: {
-                placeholder: 'ID / 手机号 / 姓名',
+                placeholder: isRentalRiskScene ? '请输入服务者ID / 手机号 / 姓名后查询' : 'ID / 手机号 / 姓名',
             },
         },
         {
@@ -987,7 +999,7 @@ export default function UsersPage() {
             fixed: 'left',
             render: (_: any, record: any) => (
                 <Space size={4}>
-                    <span>{record?.phone || '-'}</span>
+                    <span>{isRentalRiskScene ? maskRentalRiskPhone(record?.phone) : (record?.phone || '-')}</span>
                     {isAnonymousUserRecord(record) ? <Tag color="volcano">匿名</Tag> : null}
                 </Space>
             ),
@@ -1635,8 +1647,19 @@ export default function UsersPage() {
             <ProTable
                 columns={tableColumns}
                 scroll={isMobile && sceneConfig.key === 'STAFF' ? undefined : { x: 'max-content' }}
+                manualRequest={isRentalRiskScene}
                 request={async (params) => {
                     try {
+                        if (isRentalRiskScene) {
+                            const keyword = String((params as any)?.search || '').trim();
+                            if (!keyword && !hasRentalRiskSearched) {
+                                return {
+                                    data: [],
+                                    success: true,
+                                    total: 0,
+                                };
+                            }
+                        }
                         const { current, pageSize, ...rest } = params;
                         const { staffEmploymentStatus: _ignoredStaffEmploymentStatus, status: _ignoredStatus, ...queryRest } = rest as any;
                         const query = {
@@ -1672,6 +1695,40 @@ export default function UsersPage() {
                     collapsed: isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? false : undefined,
                     defaultCollapsed: isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? false : isMobile,
                     collapseRender: isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? false : undefined,
+                    searchText: isRentalRiskScene ? '查询' : undefined,
+                    resetText: isRentalRiskScene ? '清空' : undefined,
+                }}
+                form={isRentalRiskScene ? {
+                    submitter: {
+                        render: (_props: any, doms: any[]) => {
+                            const reset = doms?.[0];
+                            const submit = doms?.[1];
+                            return [
+                                reset ? React.cloneElement(reset, {
+                                    key: 'reset',
+                                    onClick: (...args: any[]) => {
+                                        setHasRentalRiskSearched(false);
+                                        reset.props?.onClick?.(...args);
+                                    },
+                                }) : null,
+                                submit ? React.cloneElement(submit, {
+                                    key: 'submit',
+                                    onClick: (...args: any[]) => {
+                                        setHasRentalRiskSearched(true);
+                                        submit.props?.onClick?.(...args);
+                                    },
+                                }) : null,
+                            ].filter(Boolean);
+                        },
+                    },
+                } : undefined}
+                locale={{
+                    emptyText: isRentalRiskScene ? (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={hasRentalRiskSearched ? '没有查询到服务者余额信息' : '请输入服务者ID、手机号或姓名后点击查询'}
+                        />
+                    ) : undefined,
                 }}
                 toolBarRender={() => [
                     canCreateCurrentSceneUser && (
