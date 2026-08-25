@@ -1263,9 +1263,11 @@ export default function UsersPage() {
             render: (_: any, record: any) => {
                 const wallet = record?.wallet || {};
                 const available = Number(wallet?.availableBalance ?? 0);
+                const frozen = Number(wallet?.frozenBalance ?? 0);
                 const deposit = Number(wallet?.depositBalance ?? 0);
                 const withdrawFrozen = Number(wallet?.withdrawFrozenBalance ?? 0);
-                const reference = Number(wallet?.rentalRiskReferenceBalance ?? (available + deposit - withdrawFrozen));
+                const nonWithdrawFrozen = Number(wallet?.nonWithdrawFrozenBalance ?? Math.max(0, frozen - withdrawFrozen));
+                const reference = Number(wallet?.rentalRiskReferenceBalance ?? (available + nonWithdrawFrozen + deposit));
                 const risk = getRentalRiskLevel(reference);
                 return (
                     <Tooltip title={risk.desc}>
@@ -1288,7 +1290,7 @@ export default function UsersPage() {
                                     </span>
                                 </div>
                                 <div style={{ color: '#999', fontSize: 12 }}>
-                                    参考=可用+保证金-提现冻结
+                                    参考=可用+非提现冻结+保证金
                                 </div>
                             </div>
                         </div>
@@ -1307,6 +1309,7 @@ export default function UsersPage() {
                 const frozen = Number(record?.wallet?.frozenBalance ?? 0);
                 const deposit = Number(record?.wallet?.depositBalance ?? 0);
                 const withdrawFrozen = Number(record?.wallet?.withdrawFrozenBalance ?? 0);
+                const nonWithdrawFrozen = Number(record?.wallet?.nonWithdrawFrozenBalance ?? Math.max(0, frozen - withdrawFrozen));
 
                 return (
                     <div
@@ -1329,6 +1332,9 @@ export default function UsersPage() {
                                 </div>
                                 <div style={{ color: withdrawFrozen > 0 ? '#ff4d4f' : '#999', fontSize: 12 }}>
                                     提现冻结 ¥{withdrawFrozen.toFixed(1)}
+                                </div>
+                                <div style={{ color: '#722ed1', fontSize: 12 }}>
+                                    非提现冻结 ¥{nonWithdrawFrozen.toFixed(1)}
                                 </div>
                             </>
                         ) : null}
@@ -1534,7 +1540,7 @@ export default function UsersPage() {
                     showIcon
                     style={{ marginBottom: 12 }}
                     message="租号放号风控参考"
-                    description="风控参考余额 = 可用余额 + 保证金 - 提现冻结金额。提现申请会冻结余额，若只看钱包总额可能误判可承接风险。红色低于500，黄色500-1000，绿色1000以上。"
+                    description="风控参考余额 = 可用余额 + 非提现冻结金额 + 保证金。提现冻结金额不纳入参考，结算冻结等未解冻收益可作为后续可释放资产参考。红色低于500，黄色500-1000，绿色1000以上。"
                 />
             ) : null}
 
