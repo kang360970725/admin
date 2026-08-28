@@ -29,6 +29,7 @@ import {
   grantUserCoupon,
   updateCouponTemplateStatus,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const templateStatusDict: Record<string, string> = {
   DRAFT: '草稿',
@@ -191,7 +192,7 @@ const CouponsPage: React.FC = () => {
           const memberCode = String(item?.memberProfile?.memberCode || '').trim();
           return {
             value: Number(item.id),
-            label: `${item?.name || item?.realName || '未命名会员'}（${item?.phone || '-'}）${memberCode ? ` · 编码${memberCode}` : ''}`,
+            label: `${item?.name || item?.realName || '未命名会员'}（${maskPhone(item?.phone)}）${memberCode ? ` · 编码${memberCode}` : ''}`,
           };
         }),
       );

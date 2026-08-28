@@ -16,6 +16,7 @@ import {
   updateGameProject,
 } from '@/services/api';
 import { uploadFileToCosBySts } from '@/utils/cosUpload';
+import { maskPhone } from '@/utils/privacy';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -559,7 +560,7 @@ const GameProjectManagement: React.FC = () => {
           loading={reviewLoading}
           dataSource={reviewRows}
           columns={[
-            { title: '用户', dataIndex: ['user', 'name'], key: 'user', render: (_: any, r: any) => (r?.anonymous ? '匿名用户' : (r?.user?.name || r?.user?.phone || `用户${r?.user?.id || ''}`)) },
+            { title: '用户', dataIndex: ['user', 'name'], key: 'user', render: (_: any, r: any) => (r?.anonymous ? '匿名用户' : (r?.user?.name || maskPhone(r?.user?.phone) || `用户${r?.user?.id || ''}`)) },
             { title: '订单ID', dataIndex: 'orderId', key: 'orderId', width: 90 },
             { title: '评分', dataIndex: 'score', key: 'score', width: 70 },
             {

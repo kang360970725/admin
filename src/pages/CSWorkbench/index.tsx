@@ -36,6 +36,7 @@ import {
 import dayjs from 'dayjs';
 import {history, useModel, useNavigate} from '@umijs/max';
 import {
+    assignDispatch,
     createOrder,
     getGameProjectOptions,
     getOrders,
@@ -44,6 +45,7 @@ import {
     updatePlayerWorkMode,
 } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
+import { maskPhone } from '@/utils/privacy';
 import OrderUpsertModal from "@/pages/Orders/components/OrderForm";
 
 const { Text } = Typography;
@@ -233,12 +235,12 @@ export default function CSWorkbenchPage() {
             const map: Record<number, string> = {};
             const options: OptionItem[] = safeArray(arr).map((u: any) => ({
                 value: Number(u.id),
-                label: `${u.name || '未命名'}（${u.phone || '-'}）`,
+                label: `${u.name || '未命名'}（${maskPhone(u.phone)}）`,
             }));
             safeArray(arr).forEach((u: any) => {
                 const id = Number(u.id);
                 if (Number.isFinite(id) && id > 0) {
-                    map[id] = String(u.name || u.phone || '未命名');
+                    map[id] = String(u.name || maskPhone(u.phone) || '未命名');
                 }
             });
             setPlayerOptions(options);
@@ -267,7 +269,7 @@ export default function CSWorkbenchPage() {
             const items: PlayerManageItem[] = safeArray(arr).map((u: any) => ({
                 id: Number(u.id),
                 name: String(u.name || '未命名'),
-                phone: String(u.phone || '-'),
+                phone: maskPhone(u.phone),
                 ratingName: String(u.ratingName || u?.staffRating?.name || '-'),
                 todayHandledCount: Number(u.todayHandledCount ?? 0),
                 workMode: u.workMode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE',
@@ -293,7 +295,7 @@ export default function CSWorkbenchPage() {
             const rows = Array.isArray(res?.data) ? res.data : [];
             const options = rows.map((row: any) => {
                 const uid = row?.user?.id ? `用户#${row.user.id}` : '用户#-';
-                const uname = row?.user?.name || row?.user?.phone || '-';
+                const uname = row?.user?.name || maskPhone(row?.user?.phone) || '-';
                 const tname = row?.template?.name || `模板#${row?.templateId ?? '-'}`;
                 return {
                     value: Number(row.id),
@@ -653,7 +655,7 @@ export default function CSWorkbenchPage() {
 
     const renderPlayers = (row: OrderRow) => {
         const players =
-            row.currentDispatch?.participants?.map((p: any) => p?.user?.name || p?.user?.phone).filter(Boolean) || [];
+            row.currentDispatch?.participants?.map((p: any) => p?.user?.name || maskPhone(p?.user?.phone)).filter(Boolean) || [];
         if (!players.length) return <Text type="secondary">-</Text>;
         return (
             <Space size={6} wrap>

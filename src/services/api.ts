@@ -1529,6 +1529,7 @@ export interface WalletWithdrawalRequest {
     amount: number;
     status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'PAYING' | 'PAID' | 'FAILED' | 'CANCELED';
     channel: 'WECHAT' | 'MANUAL';
+    transferStatus?: 'NOT_STARTED' | 'PROCESSING' | 'WAIT_USER_CONFIRM' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'MANUAL_FALLBACK';
     idempotencyKey: string;
     requestNo: string;
     remark?: string | null;
@@ -1543,6 +1544,10 @@ export interface WalletWithdrawalRequest {
 
     outTradeNo?: string | null;
     channelTradeNo?: string | null;
+    transferStartedAt?: string | null;
+    transferFinishedAt?: string | null;
+    manualFallbackAt?: string | null;
+    manualFallbackBy?: number | null;
     callbackRaw?: string | null;
     failReason?: string | null;
     message?: string | null;
@@ -1575,8 +1580,31 @@ export async function reviewWithdrawal(data: {
     reviewerId: number;
     approve: boolean;
     reviewRemark?: string;
+    channel?: 'MANUAL' | 'WECHAT';
+    autoTransfer?: boolean;
 }) {
     return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/review`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function queryWechatWithdrawalTransfer(data: { requestId: number }) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/wechat-transfer/query`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function fallbackWithdrawalToManual(data: { requestId: number; remark?: string }) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/fallback-manual`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function markManualWithdrawalPaid(data: { requestId: number; remark?: string }) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/manual-paid`, {
         method: 'POST',
         data,
     });
@@ -1602,6 +1630,7 @@ export async function postWithdrawalsList(data: {
     page: number;
     pageSize: number;
     status?: string;
+    transferStatus?: string;
     channel?: string;
     userId?: number;
     requestNo?: string;
@@ -1628,6 +1657,7 @@ export interface WithdrawalReconcileUserRow {
 
 export async function postWithdrawalsReconcileSummary(data: {
     status?: string;
+    transferStatus?: string;
     channel?: string;
     userId?: number;
     requestNo?: string;
@@ -1681,6 +1711,17 @@ export async function getWithdrawInfo() {
         firstWithdrawMinAcceptedDays: number;
         matchedStaffRule?: StaffRuleItem | null;
         workMode?: 'ONLINE' | 'OFFLINE';
+        wechatAutoTransfer?: {
+            autoEnabled: boolean;
+            wechatEnabled: boolean;
+            eligibilityMode: string;
+            eligible: boolean;
+            reasons: string[];
+            wechatBinding: {
+                bound: boolean;
+                message?: string;
+            };
+        };
     }>(`${API_BASE}/wallet/withdrawals/withdraw-info`, {
         method: 'GET',
     });
@@ -3169,6 +3210,20 @@ export async function uploadWithdrawQrCode(file: File) {
 export async function getWithdrawQrCodeUrl() {
     return request<{ url: string | null }>(`${API_BASE}/wallet/withdraw/qr-code-url`, {
         method: 'GET',
+    });
+}
+
+export async function getWechatBindH5Url(params: { redirectUri: string }) {
+    return request<{ success: boolean; url?: string; appId?: string; message?: string }>(`${API_BASE}/mini/auth/bind-wechat-h5-url`, {
+        method: 'GET',
+        params,
+    });
+}
+
+export async function bindWechatH5(data: { code: string }) {
+    return request<{ success: boolean; appId?: string; openidMasked?: string; message?: string }>(`${API_BASE}/mini/auth/bind-wechat-h5`, {
+        method: 'POST',
+        data,
     });
 }
 

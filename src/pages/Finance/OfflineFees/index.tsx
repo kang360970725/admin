@@ -18,6 +18,7 @@ import {
   updateOfflineFeeContract,
   waiveOfflineFeeBill,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const money = (v: any) => Number(v ?? 0).toFixed(2);
 const monthValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM') : String(value || ''));
@@ -79,7 +80,7 @@ const OfflineFeesPage: React.FC = () => {
   };
 
   const staffSelectOptions = staffOptions.map((staff) => ({
-    label: `${staff.name || staff.realName || staff.phone} (${staff.phone})`,
+    label: `${staff.name || staff.realName || maskPhone(staff.phone)} (${maskPhone(staff.phone)})`,
     value: staff.id,
   }));
 
@@ -123,9 +124,9 @@ const OfflineFeesPage: React.FC = () => {
       title: '服务者',
       dataIndex: 'userId',
       width: 160,
-      render: (_, row) => row.user?.name || row.user?.realName || row.user?.phone || `#${row.userId}`,
+      render: (_, row) => row.user?.name || row.user?.realName || maskPhone(row.user?.phone) || `#${row.userId}`,
     },
-    { title: '手机号', dataIndex: ['user', 'phone'], width: 130 },
+    { title: '手机号', dataIndex: ['user', 'phone'], width: 130, render: (v) => maskPhone(v as any) },
     {
       title: '每月费用',
       dataIndex: 'monthlyAmount',
@@ -184,9 +185,9 @@ const OfflineFeesPage: React.FC = () => {
             if (open && !staffOptions.length) void fetchOfflineStaffOptions();
           },
         },
-        render: (_, row) => row.user?.name || row.user?.phone || `#${row.userId}`,
+        render: (_, row) => row.user?.name || maskPhone(row.user?.phone) || `#${row.userId}`,
       },
-      { title: '手机号', dataIndex: ['user', 'phone'], width: 120, search: false },
+      { title: '手机号', dataIndex: ['user', 'phone'], width: 120, search: false, render: (v) => maskPhone(v as any) },
       {
         title: '扣费时间',
         dataIndex: 'dueAt',

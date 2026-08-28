@@ -27,6 +27,7 @@ import {
   type WalletReplayPreview,
 } from '@/services/api';
 import { useLocation } from '@umijs/max';
+import { maskPhone } from '@/utils/privacy';
 
 type ReplayRow = WalletReplayPreview['replayRows'][number];
 type WalletTxRow = any;
@@ -299,7 +300,7 @@ export default function WalletReplayPreviewPage() {
               columns={[
                 { title: '用户ID', dataIndex: 'userId', width: 100 },
                 { title: '姓名', dataIndex: 'name', width: 120, render: (v: any) => v || '--' },
-                { title: '手机', dataIndex: 'phone', width: 140, render: (v: any) => v || '--' },
+                { title: '手机', dataIndex: 'phone', width: 140, render: (v: any) => maskPhone(v) },
                 { title: '当前总余额', width: 120, render: (_: any, row: any) => formatNumber(Number(row?.currentAvailable || 0) + Number(row?.currentFrozen || 0)) },
                 {
                   title: '数据差额',

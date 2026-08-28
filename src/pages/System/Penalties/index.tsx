@@ -35,6 +35,7 @@ import {
   postPenaltyTicketCreate,
   postPenaltyTicketRemind,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const PenaltiesPage: React.FC = () => {
   const currentUser = React.useMemo(() => {
@@ -199,7 +200,7 @@ const PenaltiesPage: React.FC = () => {
       setStaffOptions(
         list.map((u: any) => ({
           value: Number(u.id),
-          label: `${u?.name || u?.realName || '未命名'} (${u?.phone || '-'}) #${u?.id}`,
+          label: `${u?.name || u?.realName || '未命名'} (${maskPhone(u?.phone)}) #${u?.id}`,
         })),
       );
     } catch {
@@ -378,7 +379,7 @@ const PenaltiesPage: React.FC = () => {
 
   const columnsTickets = [
     { title: '罚单号', dataIndex: 'ticketNo', width: 180 },
-    { title: '陪玩', width: 180, render: (_: any, row: any) => `${row?.user?.name || '-'}(${row?.user?.phone || '-'})` },
+    { title: '陪玩', width: 180, render: (_: any, row: any) => `${row?.user?.name || '-'}(${maskPhone(row?.user?.phone)})` },
     { title: '规则金额', dataIndex: 'ruleAmount', width: 110 },
     { title: '最终金额', dataIndex: 'finalAmount', width: 110 },
     { title: '状态', dataIndex: 'statusLabel', width: 140 },
@@ -399,7 +400,7 @@ const PenaltiesPage: React.FC = () => {
   const columnsAppeals = [
     { title: '申诉ID', dataIndex: 'id', width: 90 },
     { title: '罚单号', width: 180, render: (_: any, row: any) => row?.ticket?.ticketNo || '-' },
-    { title: '陪玩', width: 180, render: (_: any, row: any) => `${row?.user?.name || '-'}(${row?.user?.phone || '-'})` },
+    { title: '陪玩', width: 180, render: (_: any, row: any) => `${row?.user?.name || '-'}(${maskPhone(row?.user?.phone)})` },
     { title: '状态', dataIndex: 'statusLabel', width: 130 },
     { title: '申诉说明', dataIndex: 'content', ellipsis: true },
     { title: '提交时间', dataIndex: 'createdAt', width: 170, render: (v: string) => fmt(v) },
@@ -417,7 +418,7 @@ const PenaltiesPage: React.FC = () => {
   const columnsFlows = [
     { title: '流水ID', dataIndex: 'id', width: 90 },
     { title: '罚单号', width: 180, render: (_: any, row: any) => row?.ticket?.ticketNo || '-' },
-    { title: '陪玩', width: 180, render: (_: any, row: any) => `${row?.user?.name || '-'}(${row?.user?.phone || '-'})` },
+    { title: '陪玩', width: 180, render: (_: any, row: any) => `${row?.user?.name || '-'}(${maskPhone(row?.user?.phone)})` },
     { title: '类型', dataIndex: 'bizTypeLabel', width: 150 },
     { title: '金额', dataIndex: 'amount', width: 120 },
     { title: '变动前', dataIndex: 'beforeBalance', width: 110 },
@@ -489,7 +490,7 @@ const PenaltiesPage: React.FC = () => {
                           dataSource={ranking}
                           columns={[
                             { title: '排名', dataIndex: 'rank', width: 70 },
-                            { title: '陪玩', render: (_: any, row: any) => `${row?.user?.name || '-'}(${row?.user?.phone || '-'})` },
+                            { title: '陪玩', render: (_: any, row: any) => `${row?.user?.name || '-'}(${maskPhone(row?.user?.phone)})` },
                             { title: '罚单数', dataIndex: 'penaltyCount', width: 90 },
                             { title: '扣款总额', dataIndex: 'totalDeductedAmount', width: 120 },
                           ]}

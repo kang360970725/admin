@@ -25,6 +25,7 @@ import {
     getPerformanceDashboardList,
     getPerformanceDashboardOverview,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
@@ -408,7 +409,7 @@ export default function PerformanceDashboardPage() {
                     <Avatar src={record.avatar}>{record.userName?.[0]}</Avatar>
                     <div>
                         <div style={{ fontWeight: 600 }}>{record.userName || '-'}</div>
-                        <div style={{ fontSize: 12, color: '#999' }}>{record.phone || '-'}</div>
+                        <div style={{ fontSize: 12, color: '#999' }}>{maskPhone(record.phone)}</div>
                     </div>
                 </Space>
             ),

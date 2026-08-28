@@ -16,6 +16,7 @@ import {
   updateEquipmentRentalContract,
   waiveEquipmentRentalBill,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const money = (v: any) => Number(v ?? 0).toFixed(2);
 const monthValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM') : String(value || ''));
@@ -54,7 +55,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
       });
       const rows = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
       setStaffOptions(rows.map((item: any) => ({
-        label: `${item.name || item.realName || item.phone || `#${item.id}`} (${item.phone || '-'})`,
+        label: `${item.name || item.realName || maskPhone(item.phone) || `#${item.id}`} (${maskPhone(item.phone)})`,
         value: Number(item.id),
       })));
     } catch (e: any) {
@@ -96,9 +97,9 @@ const EquipmentRentalFeesPage: React.FC = () => {
       dataIndex: 'userId',
       width: 160,
       search: false,
-      render: (_, row) => row.user?.name || row.user?.phone || `#${row.userId}`,
+      render: (_, row) => row.user?.name || maskPhone(row.user?.phone) || `#${row.userId}`,
     },
-    { title: '手机号', dataIndex: ['user', 'phone'], width: 130, search: false },
+    { title: '手机号', dataIndex: ['user', 'phone'], width: 130, search: false, render: (v) => maskPhone(v as any) },
     { title: '月租', dataIndex: 'monthlyAmount', width: 100, search: false, render: (_, row) => `¥${money(row.monthlyAmount)}` },
     { title: '起租日', dataIndex: 'startDate', width: 120, search: false, render: (_, row) => row.startDate ? dayjs(row.startDate).format('YYYY-MM-DD') : row.startMonth || '-' },
     { title: '结束日', dataIndex: 'endDate', width: 120, search: false, render: (_, row) => row.endDate ? dayjs(row.endDate).format('YYYY-MM-DD') : row.endMonth || '-' },
@@ -142,7 +143,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
           if (open && !staffOptions.length) void fetchStaffOptions();
         },
       },
-      render: (_, row) => row.user?.name || row.user?.phone || `#${row.userId}`,
+      render: (_, row) => row.user?.name || maskPhone(row.user?.phone) || `#${row.userId}`,
     },
     {
       title: '状态',

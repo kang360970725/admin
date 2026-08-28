@@ -28,6 +28,7 @@ import {
     Tooltip,
     Typography,
 } from 'antd';
+import { maskPhone } from '@/utils/privacy';
 import {
     AppstoreOutlined,
     CheckCircleOutlined,
@@ -164,7 +165,7 @@ const OrderDetailPage: React.FC = () => {
         const snapshot = Array.isArray(renewalGroup?.memberNamesSnapshot) ? renewalGroup.memberNamesSnapshot : [];
         if (snapshot.length) {
             return snapshot
-                .map((member: any) => member?.name || member?.phone || (member?.id ? `#${member.id}` : ''))
+                .map((member: any) => member?.name || maskPhone(member?.phone) || (member?.id ? `#${member.id}` : ''))
                 .filter(Boolean);
         }
         const userIds = Array.isArray(renewalGroup?.memberUserIds) ? renewalGroup.memberUserIds : [];
@@ -1432,7 +1433,7 @@ const OrderDetailPage: React.FC = () => {
     const renderParticipantIdentity = (player: any) => {
         const u = player?.user || {};
         const name = u?.name || u?.nickname || '未命名';
-        const phone = u?.phone || '-';
+        const phone = maskPhone(u?.phone);
         const ratingName = getParticipantRatingName(player);
 
         return (
@@ -1463,10 +1464,10 @@ const OrderDetailPage: React.FC = () => {
 
         const orderNo = String(o?.autoSerial ?? o?.id ?? '-');
         const customerId = o?.customerGameId ?? '-';
-        const csName = o?.dispatcher?.name || o?.dispatcher?.phone || '客服';
+        const csName = o?.dispatcher?.name || maskPhone(o?.dispatcher?.phone) || '客服';
 
         const formatPlayerLine = (player: any) => {
-            const name = player?.user?.name || player?.user?.nickname || player?.user?.phone || player?.userId || '陪玩';
+            const name = player?.user?.name || player?.user?.nickname || maskPhone(player?.user?.phone) || player?.userId || '陪玩';
             const ratingName = getParticipantRatingName(player);
             return ratingName ? `${name}（${ratingName}）` : `${name}`;
         };
@@ -2098,7 +2099,7 @@ const OrderDetailPage: React.FC = () => {
                 if (!Number.isFinite(userId) || userId <= 0) continue;
                 if (map.has(userId)) continue;
                 const name = p?.user?.name || p?.user?.realName || `打手#${userId}`;
-                const phone = p?.user?.phone ? `(${p.user.phone})` : '';
+                const phone = p?.user?.phone ? `(${maskPhone(p.user.phone)})` : '';
                 const ratingName = getParticipantRatingName(p);
                 map.set(userId, {
                     value: userId,
@@ -2463,7 +2464,7 @@ const OrderDetailPage: React.FC = () => {
 
                 <Space size={8} wrap>
                     <Tag style={{borderRadius: 999}}>
-                        派单客服：{order?.dispatcher ? `${order?.dispatcher.name || '-'}（${order?.dispatcher.phone || '-'}）` : '-'}
+                        派单客服：{order?.dispatcher ? `${order?.dispatcher.name || '-'}（${maskPhone(order?.dispatcher.phone)}）` : '-'}
                     </Tag>
                     <Tag
                         style={{borderRadius: 999}}>下单：{order?.orderTime ? new Date(order.orderTime).toLocaleString() : '-'}</Tag>
@@ -2484,7 +2485,7 @@ const OrderDetailPage: React.FC = () => {
                                 <Space direction="vertical" size={6} style={{width: '100%'}}>
                                     <Space style={{justifyContent: 'space-between', width: '100%'}}>
                                         <Typography.Text strong>
-                                            {u?.name || '未命名'}（{u?.phone || '-'}）
+                                            {u?.name || '未命名'}（{maskPhone(u?.phone)}）
                                         </Typography.Text>
                                         <Tag style={{borderRadius: 999}}>{p?.acceptedAt ? '已接单' : '未接单'}</Tag>
                                     </Space>
@@ -2975,7 +2976,7 @@ const OrderDetailPage: React.FC = () => {
                     <Descriptions.Item label="客户联系方式">
                         {order?.orderSource === 'MINIAPP_SELF_SERVICE' && order?.status === 'WAIT_ASSIGN'
                             ? (order?.customerUser
-                                ? `${order?.customerUser?.name || '-'}（${order?.customerUser?.phone || '-'}）`
+                                ? `${order?.customerUser?.name || '-'}（${maskPhone(order?.customerUser?.phone)}）`
                                 : '-')
                             : '-'}
                     </Descriptions.Item>
@@ -2984,7 +2985,7 @@ const OrderDetailPage: React.FC = () => {
                         order?.status === 'WAIT_ASSIGN' &&
                         (!order?.dispatcher || order?.dispatcher?.userType === 'REGISTERED_USER')
                             ? '待分配'
-                            : (order?.dispatcher ? `${order?.dispatcher.name || '-'}（${order?.dispatcher.phone || '-'}）` : '-')}
+                            : (order?.dispatcher ? `${order?.dispatcher.name || '-'}（${maskPhone(order?.dispatcher.phone)}）` : '-')}
                     </Descriptions.Item>
 
                     <Descriptions.Item
@@ -3111,7 +3112,7 @@ const OrderDetailPage: React.FC = () => {
                                         {
                                             title: '参与者',
                                             dataIndex: 'name',
-                                            render: (_: any, r: any) => `${r.name}（${r.phone}）`,
+                                            render: (_: any, r: any) => `${r.name}（${maskPhone(r.phone)}）`,
                                         },
                                         {
                                             title: '收益',

@@ -15,6 +15,7 @@ import {
   getUsers,
   User,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const weekdayText: Record<number, string> = {
   0: '周日',
@@ -90,9 +91,9 @@ const DutyCsSchedulesPage: React.FC = () => {
     {
       title: '客服',
       dataIndex: ['user', 'name'],
-      render: (_, row) => row.user?.name || row.user?.realName || row.user?.phone || `#${row.userId}`,
+      render: (_, row) => row.user?.name || row.user?.realName || maskPhone(row.user?.phone) || `#${row.userId}`,
     },
-    { title: '手机号', dataIndex: ['user', 'phone'], width: 120, search: false },
+    { title: '手机号', dataIndex: ['user', 'phone'], width: 120, search: false, render: (v) => maskPhone(v as any) },
     {
       title: '星期',
       width: 240,
@@ -171,12 +172,12 @@ const DutyCsSchedulesPage: React.FC = () => {
     {
       title: '休假客服',
       search: false,
-      render: (_, row) => row.user?.name || row.user?.realName || row.user?.phone || `#${row.userId}`,
+      render: (_, row) => row.user?.name || row.user?.realName || maskPhone(row.user?.phone) || `#${row.userId}`,
     },
     {
       title: '代班客服',
       search: false,
-      render: (_, row) => row.substituteUser?.name || row.substituteUser?.realName || row.substituteUser?.phone || `#${row.substituteUserId}`,
+      render: (_, row) => row.substituteUser?.name || row.substituteUser?.realName || maskPhone(row.substituteUser?.phone) || `#${row.substituteUserId}`,
     },
     {
       title: '休假时间',
@@ -355,7 +356,7 @@ const DutyCsSchedulesPage: React.FC = () => {
               showSearch
               optionFilterProp="label"
               options={csUsers.map((u) => ({
-                label: `${u.name || u.realName || u.phone} (${u.phone})`,
+                label: `${u.name || u.realName || maskPhone(u.phone)} (${maskPhone(u.phone)})`,
                 value: u.id,
               }))}
             />
@@ -482,7 +483,7 @@ const DutyCsSchedulesPage: React.FC = () => {
               showSearch
               optionFilterProp="label"
               options={csUsers.map((u) => ({
-                label: `${u.name || u.realName || u.phone} (${u.phone})`,
+                label: `${u.name || u.realName || maskPhone(u.phone)} (${maskPhone(u.phone)})`,
                 value: u.id,
               }))}
             />
@@ -493,7 +494,7 @@ const DutyCsSchedulesPage: React.FC = () => {
               showSearch
               optionFilterProp="label"
               options={csUsers.map((u) => ({
-                label: `${u.name || u.realName || u.phone} (${u.phone})`,
+                label: `${u.name || u.realName || maskPhone(u.phone)} (${maskPhone(u.phone)})`,
                 value: u.id,
               }))}
             />

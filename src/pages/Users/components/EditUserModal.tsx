@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Tag } from 'antd';
 import dayjs from 'dayjs';
 import { resetUserWithdrawQrCode, updateUser, User, type StaffRuleEngineConfig, type StaffRuleItem } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const { Option } = Select;
 
@@ -177,7 +178,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
 
     return (
         <Modal
-            title={`编辑用户 - ${user?.name || user?.phone}`}
+            title={`编辑用户 - ${user?.name || maskPhone(user?.phone)}`}
             open={visible}
             onOk={handleOk}
             onCancel={handleCancel}
@@ -192,7 +193,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                 <div className="bc-admin-form-grid">
                     <div>
                         <Form.Item label="手机号">
-                            <Input value={user?.phone} disabled />
+                            <Input value={maskPhone(user?.phone)} disabled />
                         </Form.Item>
 
                         <Form.Item

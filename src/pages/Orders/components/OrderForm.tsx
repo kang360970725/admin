@@ -29,6 +29,7 @@ import {
 import dayjs from 'dayjs';
 import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
+import { maskPhone } from '@/utils/privacy';
 
 type ProjectItem = {
     id: number;
@@ -288,7 +289,7 @@ export default function OrderUpsertModal(props: {
             const map: Record<number, string> = {};
             const opts: OptionItem[] = list.map((u: any) => {
                 const id = Number(u?.id);
-                const name = String(u?.name || u?.phone || '未命名');
+                const name = String(u?.name || maskPhone(u?.phone) || '未命名');
                 map[id] = name;
                 return {
                     value: id,
@@ -352,7 +353,7 @@ export default function OrderUpsertModal(props: {
                 nextMeta[id] = { name, phone, balance };
                 return {
                     value: id,
-                    label: `${name}${phone ? `（${phone}）` : ''}${memberCode ? ` · 编码${memberCode}` : ''} · 储值¥${balance.toFixed(2)}`,
+                    label: `${name}${phone ? `（${maskPhone(phone)}）` : ''}${memberCode ? ` · 编码${memberCode}` : ''} · 储值¥${balance.toFixed(2)}`,
                 };
             });
             setMemberMetaMap((prev) => ({ ...prev, ...nextMeta }));
@@ -1071,7 +1072,7 @@ export default function OrderUpsertModal(props: {
                                 fontSize: 12,
                             }}>
                                 {selectedMember
-                                    ? `当前会员：${selectedMember.name}${selectedMember.phone ? `（${selectedMember.phone}）` : ''}，可用储值余额 ¥${selectedMember.balance.toFixed(2)}，本单需扣 ¥${watchedPaidAmount.toFixed(2)}`
+                                    ? `当前会员：${selectedMember.name}${selectedMember.phone ? `（${maskPhone(selectedMember.phone)}）` : ''}，可用储值余额 ¥${selectedMember.balance.toFixed(2)}，本单需扣 ¥${watchedPaidAmount.toFixed(2)}`
                                     : '使用会员储值时，请先选择对应会员。'}
                                 {balanceInsufficient ? (
                                     <div style={{ marginTop: 6, color: '#dc2626', fontWeight: 600 }}>

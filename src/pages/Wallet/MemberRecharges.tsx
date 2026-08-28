@@ -5,6 +5,7 @@ import { Button, Descriptions, message, Modal, Space, Tag } from 'antd';
 import dayjs from 'dayjs';
 import { getCouponTemplates, getMemberRechargeOrders } from '@/services/api';
 import { generateMemberRechargeReceiptImage } from '@/utils/receiptImage';
+import { maskPhone } from '@/utils/privacy';
 
 const statusMap: Record<string, { text: string; color?: string }> = {
     PENDING: { text: '待支付', color: 'orange' },
@@ -71,8 +72,8 @@ export default function MemberRechargesPage() {
         const receiptTime = record?.createdAt ? dayjs(record.createdAt).format('YYYY-MM-DD HH:mm:ss') : dayjs().format('YYYY-MM-DD HH:mm:ss');
         const textLines = [
             '会员储值小票',
-            `会员：${user?.name || user?.phone || '-'}`,
-            `手机号：${user?.phone || '-'}`,
+            `会员：${user?.name || maskPhone(user?.phone) || '-'}`,
+            `手机号：${maskPhone(user?.phone)}`,
             `会员编码：${user?.memberProfile?.memberCode || '-'}`,
             `充值单号：${receiptNo}`,
             `本次储值：${money(rechargeAmount)}`,
@@ -88,8 +89,8 @@ export default function MemberRechargesPage() {
         const nextReceiptImage = await generateMemberRechargeReceiptImage(
             '蓝猫爽打 · 会员储值小票',
             [
-                { label: '会员', value: user?.name || user?.phone || '-' },
-                { label: '手机号', value: user?.phone || '-' },
+                { label: '会员', value: user?.name || maskPhone(user?.phone) || '-' },
+                { label: '手机号', value: maskPhone(user?.phone) },
                 { label: '会员编码', value: user?.memberProfile?.memberCode || '-' },
                 { label: '充值单号', value: receiptNo },
                 { label: '本次储值', value: money(rechargeAmount), highlight: true },
@@ -144,8 +145,8 @@ export default function MemberRechargesPage() {
             search: false,
             render: (_: any, record: any) => (
                 <Space direction="vertical" size={0}>
-                    <span>{record?.user?.name || record?.user?.phone || '-'}</span>
-                    <span style={{ color: '#999', fontSize: 12 }}>{record?.user?.phone || '-'}</span>
+                    <span>{record?.user?.name || maskPhone(record?.user?.phone)}</span>
+                    <span style={{ color: '#999', fontSize: 12 }}>{maskPhone(record?.user?.phone)}</span>
                 </Space>
             ),
         },

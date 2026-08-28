@@ -13,6 +13,7 @@ import OrderUpsertModal from './components/OrderForm';
 import {PageContainer, ProTable, type ActionType} from '@ant-design/pro-components';
 import dayjs from 'dayjs';
 import { useIsMobile } from '@/utils/useIsMobile';
+import { maskPhone } from '@/utils/privacy';
 
 /**
  * ✅ 订单状态字典（前端兜底）
@@ -232,7 +233,7 @@ const OrdersPage: React.FC = () => {
 
     const getCurrentPlayerNames = (row: any) => {
         return row?.currentDispatch?.participants
-            ?.map((p: any) => p?.user?.name || p?.user?.phone)
+            ?.map((p: any) => p?.user?.name || maskPhone(p?.user?.phone))
             ?.filter(Boolean) || [];
     };
 
@@ -496,7 +497,7 @@ const OrdersPage: React.FC = () => {
             search: false,
             hideInTable: isMobile,
             render: (_: any, row: any) => {
-                const players = row.currentDispatch?.participants?.map((p: any) => p.user?.name || p.user?.phone) || [];
+                const players = row.currentDispatch?.participants?.map((p: any) => p.user?.name || maskPhone(p.user?.phone)) || [];
                 if (players.length === 0) return '-';
                 return (
                     <Space wrap>

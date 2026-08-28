@@ -20,6 +20,20 @@ const hiddenKeys = new Set([
   'miniapp_protocols',
   'goods_category_tree',
   'goods_tag_list',
+  // 自动到账方案经调研暂不可行，先从后台配置入口屏蔽；H5 微信授权绑定能力保留给会员 H5 复用。
+  'withdraw_auto_transfer_enabled',
+  'withdraw_wechat_transfer_enabled',
+  'withdraw_wechat_transfer_mock',
+  'withdraw_auto_single_limit',
+  'withdraw_auto_first_limit',
+  'withdraw_auto_user_day_limit',
+  'withdraw_auto_user_month_limit',
+  'withdraw_auto_platform_day_limit',
+  'withdraw_auto_eligibility',
+  'wechat_transfer_scene_id',
+  'wechat_transfer_notify_url',
+  'wechat_transfer_appid',
+  'wechat_transfer_appsecret',
 ]);
 
 const categoryMeta = {
@@ -27,7 +41,7 @@ const categoryMeta = {
   WECHAT: { label: '微信配置', color: 'green' },
   PAYMENT: { label: '支付回调', color: 'blue' },
   COS: { label: '对象存储', color: 'magenta' },
-  FINANCE: { label: '费用规则', color: 'gold' },
+  FINANCE: { label: '资金/费用规则', color: 'gold' },
   OTHER: { label: '其他配置', color: 'default' },
 } as const;
 
@@ -395,7 +409,7 @@ function resolveCategory(row: SystemConfigItem): CategoryKey {
   if (key.startsWith('wechat_mini_')) return 'WECHAT';
   if (key === 'app_public_base_url' || key.startsWith('wechat_pay_')) return 'PAYMENT';
   if (key.startsWith('cos_')) return 'COS';
-  if (key.startsWith('offline_fee_')) return 'FINANCE';
+  if (key.startsWith('offline_fee_') || key.startsWith('withdraw_') || key.startsWith('wechat_transfer_')) return 'FINANCE';
   return 'OTHER';
 }
 

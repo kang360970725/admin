@@ -20,6 +20,7 @@ import {
     getWalletDepositTransactions,
     manualDeposit,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 export default function UserWalletDrawer(props: any) {
     const { visible, user, onClose } = props;
@@ -260,7 +261,7 @@ export default function UserWalletDrawer(props: any) {
 
     return (
         <Drawer
-            title={`用户钱包 - ${user?.phone ?? ''}`}
+            title={`用户钱包 - ${maskPhone(user?.phone)}`}
             width={950}
             open={visible}
             onClose={onClose}

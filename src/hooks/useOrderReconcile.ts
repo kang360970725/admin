@@ -1,5 +1,6 @@
 // src/hooks/useOrderReconcile.ts
 import { useMemo } from 'react';
+import { maskPhone } from '@/utils/privacy';
 
 type WalletTxStatus = 'FROZEN' | 'AVAILABLE' | 'REVERSED';
 
@@ -108,7 +109,7 @@ export function useOrderReconcile(order: any): {
                 perUser[key] = {
                     userId: Number(s?.userId ?? u?.id ?? 0),
                     name: u?.name || '-',
-                    phone: u?.phone || '-',
+                    phone: maskPhone(u?.phone),
                     incomeCents: 0,
                     expenseAbsCents: 0,
                     netCents: 0,
@@ -141,7 +142,7 @@ export function useOrderReconcile(order: any): {
                 perUser[key] = {
                     userId: Number(bonus?.userId ?? u?.id ?? 0),
                     name: u?.name || '-',
-                    phone: u?.phone || '-',
+                    phone: maskPhone(u?.phone),
                     incomeCents: 0,
                     expenseAbsCents: 0,
                     netCents: 0,

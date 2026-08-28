@@ -3,7 +3,13 @@ import {Button, message, Tag, Space, Alert, Image, Card, Row, Col, Statistic, Da
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { history, useModel } from '@umijs/max';
-import { cancelWithdrawal, getPendingWithdrawals, reviewWithdrawal, type WalletWithdrawalRequest } from '@/services/api';
+import {
+    cancelWithdrawal,
+    getPendingWithdrawals,
+    markManualWithdrawalPaid,
+    reviewWithdrawal,
+    type WalletWithdrawalRequest,
+} from '@/services/api';
 import dayjs from "dayjs";
 
 /**
@@ -97,6 +103,31 @@ const WithdrawalsPage: React.FC = () => {
             },
         },
         {
+            title: '打款状态',
+            dataIndex: 'transferStatus',
+            width: 130,
+            search: false,
+            render: (_: any, row: any) => {
+                const s = String(row.transferStatus || 'NOT_STARTED');
+                if (s === 'NOT_STARTED') return <Tag>未发起</Tag>;
+                if (s === 'PROCESSING') return <Tag color="processing">通道处理中</Tag>;
+                if (s === 'WAIT_USER_CONFIRM') return <Tag color="warning">待用户确认</Tag>;
+                if (s === 'SUCCESS') return <Tag color="success">通道成功</Tag>;
+                if (s === 'FAILED') return <Tag color="error">通道失败</Tag>;
+                if (s === 'CANCELLED') return <Tag>已撤销</Tag>;
+                if (s === 'MANUAL_FALLBACK') return <Tag color="blue">已转人工</Tag>;
+                return <Tag>{s}</Tag>;
+            },
+        },
+        {
+            title: '通道单号',
+            dataIndex: 'channelTradeNo',
+            width: 180,
+            search: false,
+            ellipsis: true,
+            render: (_: any, row: any) => row.channelTradeNo || row.outTradeNo || '-',
+        },
+        {
             title: '申请时间',
             dataIndex: 'createdAt',
             width: 180,
@@ -157,6 +188,32 @@ const WithdrawalsPage: React.FC = () => {
                             }}
                         >
                             <Button danger>直接废除</Button>
+                        </Popconfirm>,
+                    );
+                }
+
+                if (row.channel === 'MANUAL' && ['APPROVED', 'FAILED'].includes(String(row.status || ''))) {
+                    actions.push(
+                        <Popconfirm
+                            key="manual-paid"
+                            title="确认人工扫码已打款？"
+                            description="确认后会扣减提现冻结并将申请置为已打款。"
+                            okText="确认已打款"
+                            cancelText="取消"
+                            onConfirm={async () => {
+                                try {
+                                    await markManualWithdrawalPaid({
+                                        requestId: Number(row.id),
+                                        remark: '管理员确认人工扫码已打款',
+                                    });
+                                    message.success('已确认人工打款');
+                                    actionRef.current?.reload();
+                                } catch (e: any) {
+                                    message.error(e?.data?.message || e?.response?.data?.message || e?.message || '确认失败');
+                                }
+                            }}
+                        >
+                            <Button type="primary">人工已打款</Button>
                         </Popconfirm>,
                     );
                 }
@@ -252,6 +309,7 @@ const WithdrawalsPage: React.FC = () => {
             {/* ✅ 审批弹窗：通过/驳回 */}
             <ModalForm<{
                 approve: boolean;
+                channel?: 'MANUAL' | 'WECHAT';
                 reviewRemark?: string;
             }>
                 title={currentRow ? `审批提现 - ${currentRow.requestNo}` : '审批提现'}
@@ -269,6 +327,7 @@ const WithdrawalsPage: React.FC = () => {
                 }}
                 initialValues={{
                     approve: true,
+                    channel: 'MANUAL',
                     reviewRemark: '',
                 }}
                 onFinish={async (values) => {
@@ -279,6 +338,8 @@ const WithdrawalsPage: React.FC = () => {
                             requestId: currentRow.id,
                             reviewerId,
                             approve: Boolean(values.approve),
+                            channel: 'MANUAL',
+                            autoTransfer: false,
                             reviewRemark: values.reviewRemark || '',
                         });
 
@@ -380,6 +441,13 @@ const WithdrawalsPage: React.FC = () => {
                                 { label: '通过', value: true },
                                 { label: '驳回', value: false },
                             ]}
+                        />
+                        <Alert
+                            type="info"
+                            showIcon
+                            style={{ marginBottom: 12 }}
+                            message="当前仅保留人工线下打款"
+                            description="微信自动到账方案已暂时屏蔽，审批通过后按现有人工扫码打款流程处理。"
                         />
                         <ProFormTextArea
                             name="reviewRemark"

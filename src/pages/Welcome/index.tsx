@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { Card, Space, Typography, Tag, Spin } from 'antd';
 import { useModel, useNavigate } from 'umi';
+import { maskPhone } from '@/utils/privacy';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -19,7 +20,7 @@ export default function WelcomePage() {
     const { initialState } = useModel('@@initialState');
     const user: any = initialState?.currentUser;
 
-    const name = user?.name || user?.phone || '当前用户';
+    const name = user?.name || maskPhone(user?.phone) || '当前用户';
 
     // ✅ 是否移动端：优先用视口宽度，其次 UA
     const isMobile = useMemo(() => {

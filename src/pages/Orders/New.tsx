@@ -10,6 +10,7 @@ import {
     getGameProjectOptions,
     getPlayerOptions,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 type ProjectOptionItem = {
     label: string;
@@ -81,7 +82,7 @@ const NewOrderPage: React.FC = () => {
             const list = Array.isArray(res) ? res : (res?.data ?? []);
             const options: OptionItem[] = list.map((u: any) => ({
                 value: Number(u.id),
-                label: `${u.name || '未命名'}（${u.phone || '-'}）`,
+                label: `${u.name || '未命名'}（${maskPhone(u.phone)}）`,
             }));
             setPlayerOptions(options);
         } catch (e) {

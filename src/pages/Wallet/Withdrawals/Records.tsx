@@ -10,6 +10,7 @@ import {
     type WithdrawalReconcileUserRow,
 } from '@/services/api';
 import dayjs from 'dayjs';
+import { maskPhone } from '@/utils/privacy';
 
 const { Text } = Typography;
 
@@ -28,6 +29,18 @@ const renderStatusTag = (s: any) => {
     if (s === 'FAILED') return <Tag color="error">打款失败</Tag>;
     if (s === 'CANCELED') return <Tag>已废除</Tag>;
     return <Tag>{String(s || '-')}</Tag>;
+};
+
+const renderTransferStatusTag = (s: any) => {
+    const status = String(s || 'NOT_STARTED');
+    if (status === 'NOT_STARTED') return <Tag>未发起</Tag>;
+    if (status === 'PROCESSING') return <Tag color="processing">通道处理中</Tag>;
+    if (status === 'WAIT_USER_CONFIRM') return <Tag color="warning">待用户确认</Tag>;
+    if (status === 'SUCCESS') return <Tag color="success">通道成功</Tag>;
+    if (status === 'FAILED') return <Tag color="error">通道失败</Tag>;
+    if (status === 'CANCELLED') return <Tag>已撤销</Tag>;
+    if (status === 'MANUAL_FALLBACK') return <Tag color="blue">已转人工</Tag>;
+    return <Tag>{status}</Tag>;
 };
 
 const canCancelWithdrawal = (status: any) => !['PAID', 'REJECTED', 'CANCELED'].includes(String(status || ''));
@@ -174,6 +187,30 @@ const WithdrawalRecords: React.FC = () => {
             render: (_: any, row: any) => renderStatusTag(row.status),
         },
         {
+            title: '打款状态',
+            dataIndex: 'transferStatus',
+            width: 130,
+            valueType: 'select',
+            valueEnum: {
+                NOT_STARTED: { text: '未发起' },
+                PROCESSING: { text: '通道处理中' },
+                WAIT_USER_CONFIRM: { text: '待用户确认' },
+                SUCCESS: { text: '通道成功' },
+                FAILED: { text: '通道失败' },
+                CANCELLED: { text: '已撤销' },
+                MANUAL_FALLBACK: { text: '已转人工' },
+            },
+            render: (_: any, row: any) => renderTransferStatusTag(row.transferStatus),
+        },
+        {
+            title: '通道单号',
+            dataIndex: 'channelTradeNo',
+            width: 180,
+            search: false,
+            ellipsis: true,
+            render: (_: any, row: any) => row.channelTradeNo || row.outTradeNo || '-',
+        },
+        {
             title: '申请时间',
             dataIndex: 'createdAt',
             width: 180,
@@ -315,7 +352,7 @@ const WithdrawalRecords: React.FC = () => {
                                 <Space direction="vertical" size={0}>
                                     <Text strong>{row.name || row.realName || '-'}</Text>
                                     <Text type="secondary" style={{ fontSize: 12 }}>
-                                        ID：{row.userId} {row.phone ? `| ${row.phone}` : ''}
+                                        ID：{row.userId} {row.phone ? `| ${maskPhone(row.phone)}` : ''}
                                     </Text>
                                 </Space>
                             ),
@@ -409,6 +446,7 @@ const WithdrawalRecords: React.FC = () => {
                         page,
                         pageSize,
                         status: params.status as any,
+                        transferStatus: params.transferStatus as any,
                         channel: params.channel as any,
                         userId: params.userId ? Number(params.userId) : undefined,
                         requestNo: params.requestNo ? String(params.requestNo) : undefined,

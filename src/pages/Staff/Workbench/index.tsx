@@ -36,6 +36,7 @@ import {
     ordersMyStats,
     usersWorkStatus,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 type DictMap = Record<string, Record<string, string>>;
 
@@ -857,14 +858,14 @@ const WorkbenchPage: React.FC = () => {
         const orderNo = String(order?.autoSerial ?? order?.id ?? '-');
         const assignedAt = poolDispatch?.assignedAt ? dayjs(poolDispatch.assignedAt).format('YYYY-MM-DD HH:mm') : '-';
         const dispatcherText = order?.dispatcher
-            ? `${order?.dispatcher?.name || '-'}（${order?.dispatcher?.phone || '-'}）`
+            ? `${order?.dispatcher?.name || '-'}（${maskPhone(order?.dispatcher?.phone)}）`
             : '-';
 
         const ps = participantsActive(poolDispatch);
         const playerNames =
             ps.length > 0
                 ? ps
-                    .map((p: any) => p?.user?.name || p?.user?.nickname || p?.user?.phone || p?.userId)
+                    .map((p: any) => p?.user?.name || p?.user?.nickname || maskPhone(p?.user?.phone) || p?.userId)
                     .filter(Boolean)
                     .join('、')
                 : '-';
@@ -920,7 +921,7 @@ const WorkbenchPage: React.FC = () => {
         // 进行中
         const customerId = order?.customerGameId || '-';
         const wmText =
-            `${currentUser?.name ?? ''} ${currentUser?.username || currentUser?.phone || ''}`.trim() || 'BlueCat';
+            `${currentUser?.name ?? ''} ${currentUser?.username || maskPhone(currentUser?.phone) || ''}`.trim() || 'BlueCat';
         const extra = buildAcceptedExtraInfo(poolDispatch);
 
         return (

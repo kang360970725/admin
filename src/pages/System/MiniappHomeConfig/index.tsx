@@ -13,6 +13,7 @@ import {
   upsertMiniappHomeConfig,
 } from '@/services/api';
 import { uploadFileToCosBySts } from '@/utils/cosUpload';
+import { maskPhone } from '@/utils/privacy';
 
 const { Text } = Typography;
 
@@ -482,7 +483,7 @@ const MiniappHomeConfigPage: React.FC = () => {
                             ...(currentList || []),
                             {
                               id: s.id,
-                              name: s.name || s.phone || `用户${s.id}`,
+                              name: s.name || maskPhone(s.phone) || `用户${s.id}`,
                               labelA: s?.staffRating?.name || '陪玩师',
                               labelB: s?.workStatus || 'IDLE',
                               score: '5.0',
@@ -495,7 +496,7 @@ const MiniappHomeConfigPage: React.FC = () => {
                         }}
                         style={{ cursor: 'pointer' }}
                       >
-                        {s.name || s.phone}#{s.id}
+                        {s.name || maskPhone(s.phone)}#{s.id}
                       </Tag>
                     ))}
                   </Space>

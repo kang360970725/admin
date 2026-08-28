@@ -17,6 +17,7 @@ import {
   postChestGeneratePromotion,
   postChestPromotionList,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 export default function ChestDemoPage() {
   const { initialState } = useModel('@@initialState');
@@ -402,7 +403,7 @@ export default function ChestDemoPage() {
                       { title: '已用次数', dataIndex: 'usedKeys', width: 100 },
                       { title: '剩余次数', dataIndex: 'remainingKeys', width: 100 },
                       { title: '用户', dataIndex: ['redeemedUser', 'name'], width: 140, render: (_: any, row: any) => row?.redeemedUser?.name || '-' },
-                      { title: '手机号', dataIndex: ['redeemedUser', 'phone'], width: 140, render: (_: any, row: any) => row?.redeemedUser?.phone || '-' },
+                      { title: '手机号', dataIndex: ['redeemedUser', 'phone'], width: 140, render: (_: any, row: any) => maskPhone(row?.redeemedUser?.phone) },
                       { title: '抽奖时间', dataIndex: 'redeemedAt', width: 180, render: (_: any, row: any) => formatBjt(row?.redeemedAt) },
                       { title: '创建时间', dataIndex: 'createdAt', width: 180, render: (_: any, row: any) => formatBjt(row?.createdAt) },
                       {
@@ -518,7 +519,7 @@ export default function ChestDemoPage() {
             { title: '中奖时间', dataIndex: 'createdAt', width: 180, render: (_: any, row: any) => formatBjt(row?.createdAt) },
             { title: '用户ID', dataIndex: ['user', 'id'], width: 90 },
             { title: '用户', dataIndex: ['user', 'name'], width: 120, render: (_: any, row: any) => row?.user?.name || '-' },
-            { title: '手机号', dataIndex: ['user', 'phone'], width: 140, render: (_: any, row: any) => row?.user?.phone || '-' },
+            { title: '手机号', dataIndex: ['user', 'phone'], width: 140, render: (_: any, row: any) => maskPhone(row?.user?.phone) },
             { title: '抽中物品', dataIndex: 'rewardName', width: 180 },
             { title: '物品类型', dataIndex: 'rewardType', width: 120 },
             { title: '消耗钥匙', dataIndex: 'costKeys', width: 100 },

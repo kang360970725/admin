@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, Form, Input, Alert, message, Button } from 'antd';
 import { resetUserPassword, User } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const { TextArea } = Input;
 
@@ -74,7 +75,7 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
 
     return (
         <Modal
-            title={`重置密码 - ${user?.name || user?.phone}`}
+            title={`重置密码 - ${user?.name || maskPhone(user?.phone)}`}
             open={visible}
             onOk={tempPassword ? undefined : handleOk}
             onCancel={handleClose}
@@ -116,7 +117,7 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
                         layout="vertical"
                         name="resetPasswordForm"
                         initialValues={{
-                            remark: `为用户 ${user?.name || user?.phone} 重置密码`,
+                            remark: `为用户 ${user?.name || maskPhone(user?.phone)} 重置密码`,
                         }}
                     >
                         <Form.Item

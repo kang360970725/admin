@@ -13,6 +13,7 @@ import AssignRoleModal from '@/components/AssignRoleModal';
 import UserWalletDrawer from './components/UserWalletDrawer';
 import {useIsMobile} from '@/utils/useIsMobile';
 import {generateMemberRechargeReceiptImage} from '@/utils/receiptImage';
+import { maskPhone } from '@/utils/privacy';
 
 const formatDaysAgo = (date?: string) => {
     if (!date) return '从未';
@@ -163,13 +164,6 @@ const getRentalRiskLevel = (referenceBalance: number) => {
         text: '较安全',
         desc: '1000以上，可作为免押参考',
     };
-};
-
-const maskRentalRiskPhone = (phone?: string) => {
-    const text = String(phone || '').trim();
-    if (!text) return '-';
-    if (text.length <= 5) return text.replace(/.(?=.{2})/g, '*');
-    return `${text.slice(0, 3)}${'*'.repeat(Math.max(1, text.length - 5))}${text.slice(-2)}`;
 };
 
 export default function UsersPage() {
@@ -587,8 +581,8 @@ export default function UsersPage() {
             : dayjs().format('YYYY-MM-DD HH:mm:ss');
         const receiptTextLines = [
             '会员储值小票',
-            `会员：${memberDetail?.name || memberDetail?.phone || '-'}`,
-            `手机号：${memberDetail?.phone || '-'}`,
+            `会员：${memberDetail?.name || maskPhone(memberDetail?.phone) || '-'}`,
+            `手机号：${maskPhone(memberDetail?.phone)}`,
             `会员编码：${memberDetail?.memberProfile?.memberCode || '-'}`,
             `充值单号：${receiptNo}`,
             `本次储值：¥${rechargeAmount.toFixed(2)}`,
@@ -604,8 +598,8 @@ export default function UsersPage() {
         const receiptImage = await generateMemberRechargeReceiptImage(
             '蓝猫爽打 · 会员储值小票',
             [
-                {label: '会员', value: memberDetail?.name || memberDetail?.phone || '-'},
-                {label: '手机号', value: memberDetail?.phone || '-'},
+                {label: '会员', value: memberDetail?.name || maskPhone(memberDetail?.phone) || '-'},
+                {label: '手机号', value: maskPhone(memberDetail?.phone)},
                 {label: '会员编码', value: memberDetail?.memberProfile?.memberCode || '-'},
                 {label: '充值单号', value: receiptNo},
                 {label: '本次储值', value: `¥${rechargeAmount.toFixed(2)}`, highlight: true},
@@ -891,7 +885,7 @@ export default function UsersPage() {
                             {getStaffEmploymentTag(record)}
                         </div>
                         <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                            #{record?.id} · {record?.phone || '-'}
+                            #{record?.id} · {maskPhone(record?.phone)}
                         </div>
                     </div>
                     <Badge
@@ -962,12 +956,12 @@ export default function UsersPage() {
 
     const columns: any[] = [
         {
-            title: '搜索',
+            title: isRentalRiskScene ? '姓名/昵称' : '搜索',
             dataIndex: 'search',
             hideInTable: true,
             valueType: 'text',
             fieldProps: {
-                placeholder: isRentalRiskScene ? '请输入服务者ID / 手机号 / 姓名后查询' : 'ID / 手机号 / 姓名',
+                placeholder: isRentalRiskScene ? '请输入服务者姓名或昵称精确查询' : 'ID / 手机号 / 姓名',
             },
         },
         {
@@ -999,7 +993,7 @@ export default function UsersPage() {
             fixed: 'left',
             render: (_: any, record: any) => (
                 <Space size={4}>
-                    <span>{isRentalRiskScene ? maskRentalRiskPhone(record?.phone) : (record?.phone || '-')}</span>
+                    <span>{maskPhone(record?.phone)}</span>
                     {isAnonymousUserRecord(record) ? <Tag color="volcano">匿名</Tag> : null}
                 </Space>
             ),
@@ -1726,7 +1720,7 @@ export default function UsersPage() {
                     emptyText: isRentalRiskScene ? (
                         <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={hasRentalRiskSearched ? '没有查询到服务者余额信息' : '请输入服务者ID、手机号或姓名后点击查询'}
+                            description={hasRentalRiskSearched ? '没有查询到服务者余额信息' : '请输入服务者姓名或昵称后点击查询，仅支持精确查询'}
                         />
                     ) : undefined,
                 }}
@@ -1830,7 +1824,7 @@ export default function UsersPage() {
             />
 
             <Modal
-                title={`服务者退出平台 - ${staffExitUser?.name || staffExitUser?.phone || ''}`}
+                title={`服务者退出平台 - ${staffExitUser?.name || maskPhone(staffExitUser?.phone) || ''}`}
                 open={staffExitVisible}
                 onOk={handleStaffExitSubmit}
                 onCancel={() => {
@@ -1905,7 +1899,7 @@ export default function UsersPage() {
             </Modal>
 
             <Modal
-                title={`服务者清退 - ${staffClearUser?.name || staffClearUser?.phone || ''}`}
+                title={`服务者清退 - ${staffClearUser?.name || maskPhone(staffClearUser?.phone) || ''}`}
                 open={staffClearVisible}
                 onOk={handleStaffClearSubmit}
                 onCancel={() => {
@@ -1949,7 +1943,7 @@ export default function UsersPage() {
             </Modal>
 
             <Drawer
-                title={`会员详情 - ${memberDetail?.name || memberDetail?.phone || ''}`}
+                title={`会员详情 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
                 width={760}
                 open={memberDetailVisible}
                 onClose={() => {
@@ -1979,7 +1973,7 @@ export default function UsersPage() {
                         <Descriptions bordered size="small" column={2}>
                             <Descriptions.Item label="会员编码">{memberDetail?.memberProfile?.memberCode || '-'}</Descriptions.Item>
                             <Descriptions.Item label="会员等级">{memberDetail?.memberProfile?.levelCode || 'NONE'}</Descriptions.Item>
-                            <Descriptions.Item label="手机号">{memberDetail?.phone || '-'}</Descriptions.Item>
+                            <Descriptions.Item label="手机号">{maskPhone(memberDetail?.phone)}</Descriptions.Item>
                             <Descriptions.Item label="昵称">{memberDetail?.name || '-'}</Descriptions.Item>
                             <Descriptions.Item label="储值余额">¥{Number(memberDetail?.walletAccount?.availableBalance ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="冻结余额">¥{Number(memberDetail?.walletAccount?.frozenBalance ?? 0).toFixed(2)}</Descriptions.Item>
@@ -2159,7 +2153,7 @@ export default function UsersPage() {
             </Drawer>
 
             <Modal
-                title={`会员手动充值 - ${memberDetail?.name || memberDetail?.phone || ''}`}
+                title={`会员手动充值 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
                 open={memberRechargeVisible}
                 onOk={submitMemberRecharge}
                 onCancel={() => {
@@ -2254,7 +2248,7 @@ export default function UsersPage() {
             </Modal>
 
             <Modal
-                title={`会员发放优惠券 - ${memberDetail?.name || memberDetail?.phone || ''}`}
+                title={`会员发放优惠券 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
                 open={memberCouponGrantVisible}
                 onOk={submitMemberCouponGrant}
                 onCancel={() => {
@@ -2272,7 +2266,7 @@ export default function UsersPage() {
                         <Form.Item label="发放会员">
                             <Input
                                 disabled
-                                value={`${memberDetail?.name || '未命名会员'}（${memberDetail?.phone || '-'}） #${memberDetail?.id || '-'}`}
+                                value={`${memberDetail?.name || '未命名会员'}（${maskPhone(memberDetail?.phone)}） #${memberDetail?.id || '-'}`}
                             />
                         </Form.Item>
                         <Form.Item name="templateId" label="优惠券模板" rules={[{ required: true, message: '请选择优惠券模板' }]}>
@@ -2344,7 +2338,7 @@ export default function UsersPage() {
             </Modal>
 
             <Modal
-                title={`调整会员成长值 - ${memberDetail?.name || memberDetail?.phone || ''}`}
+                title={`调整会员成长值 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
                 open={memberGrowthVisible}
                 onOk={submitMemberGrowthAdjust}
                 onCancel={() => {

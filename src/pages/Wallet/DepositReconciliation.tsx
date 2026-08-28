@@ -4,6 +4,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Drawer, Tag } from 'antd';
 import dayjs from 'dayjs';
 import { getWalletDepositReconciliation } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const employmentStatusMap: Record<string, { text: string; color: string }> = {
   ACTIVE: { text: '正常', color: 'green' },
@@ -113,7 +114,7 @@ export default function DepositReconciliationPage() {
         <div>
           <div>{record.realName || record.name || '-'}</div>
           <div style={{ color: '#999', fontSize: 12 }}>
-            ID：{record.userId}　{record.phone || '-'}
+            ID：{record.userId}　{maskPhone(record.phone)}
           </div>
         </div>
       ),

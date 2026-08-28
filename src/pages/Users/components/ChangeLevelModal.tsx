@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, Form, Input, Select, message, Tag } from 'antd';
 import { changeUserLevel, User } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -57,7 +58,7 @@ const ChangeLevelModal: React.FC<ChangeLevelModalProps> = ({
 
     return (
         <Modal
-            title={`调整服务者评级 - ${user?.name || user?.phone}`}
+            title={`调整服务者评级 - ${user?.name || maskPhone(user?.phone)}`}
             open={visible}
             onOk={handleOk}
             onCancel={handleCancel}

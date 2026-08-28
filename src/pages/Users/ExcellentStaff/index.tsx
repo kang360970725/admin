@@ -10,6 +10,7 @@ import {
   getExcellentStaffList,
   removeExcellentStaff,
 } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 type ExcellentStaffRow = {
   userId: number;
@@ -48,7 +49,7 @@ const ExcellentStaffPage: React.FC = () => {
     try {
       const rows: any = await getExcellentStaffCandidates({ keyword, limit: 80 });
       setCandidateOptions((Array.isArray(rows) ? rows : []).map((item: any) => ({
-        label: `${item.name || `#${item.userId}`}（${item.phone || '无手机号'}）${item.isExcellent ? ' · 已入围' : ''}`,
+        label: `${item.name || `#${item.userId}`}（${maskPhone(item.phone)}）${item.isExcellent ? ' · 已入围' : ''}`,
         value: Number(item.userId),
         disabled: Boolean(item.isExcellent),
       })));
@@ -104,7 +105,7 @@ const ExcellentStaffPage: React.FC = () => {
         <Space direction="vertical" size={2}>
           <Typography.Text strong>{row.name || '-'}</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            ID：{row.userId}　手机号：{row.phone || '-'}
+            ID：{row.userId}　手机号：{maskPhone(row.phone)}
           </Typography.Text>
         </Space>
       ),

@@ -10,11 +10,13 @@ import {
     ProTable,
 } from '@ant-design/pro-components';
 import {useModel} from '@umijs/max';
-import {UploadOutlined, WechatOutlined} from '@ant-design/icons';
+import {UploadOutlined} from '@ant-design/icons';
 import {
     confirmMyEquipmentRentalBill,
     confirmMyOfflineFeeBill,
+    bindWechatH5,
     getOfflineFeeGuardInfo,
+    getWechatBindH5Url,
     getWithdrawInfo,
     listMyEquipmentRentalBills,
     listMyOfflineFeeBills,
@@ -52,6 +54,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const [withdrawStaffEmploymentStatus, setWithdrawStaffEmploymentStatus] = useState<string>(
         String(currentUser?.staffEmploymentStatus || 'ACTIVE'),
     );
+    const [wechatAutoTransfer, setWechatAutoTransfer] = useState<any>(null);
     const [offlineFeeGuard, setOfflineFeeGuard] = useState<{
         hasOutstanding: boolean;
         bill: any | null;
@@ -77,6 +80,8 @@ const WithdrawalMine: React.FC<Props> = (props) => {
     const [qrUrl, setQrUrl] = useState<string | null>(null);
     const [qrLoading, setQrLoading] = useState(false);
     const [qrUploading, setQrUploading] = useState(false);
+
+    const isWechatBrowser = () => /micromessenger/i.test(String(navigator?.userAgent || ''));
 
     /**
      * ✅ 与后端一致的押金计算
@@ -113,6 +118,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
             setDepositLimit(Number(res.depositLimit || 500));
             setWithdrawUserType(String((res as any)?.userType || currentUser?.userType || ''));
             setWithdrawStaffEmploymentStatus(String((res as any)?.staffEmploymentStatus || currentUser?.staffEmploymentStatus || 'ACTIVE'));
+            setWechatAutoTransfer((res as any)?.wechatAutoTransfer || null);
             setOfflineFeeGuard({
                 hasOutstanding: Boolean(guardInfo?.hasOutstanding),
                 bill: guardInfo?.bill || null,
@@ -132,6 +138,47 @@ const WithdrawalMine: React.FC<Props> = (props) => {
             message.error(msg);
         }
     };
+
+    const startWechatBind = async () => {
+        if (!isWechatBrowser()) {
+            message.warning('请在微信内打开当前移动端页面后绑定微信');
+            return;
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set('wechatBind', '1');
+        url.searchParams.delete('code');
+        url.searchParams.delete('state');
+        const res = await getWechatBindH5Url({ redirectUri: url.toString() });
+        if (!res?.success || !res?.url) {
+            message.error(res?.message || '获取微信授权地址失败');
+            return;
+        }
+        window.location.href = res.url;
+    };
+
+    useEffect(() => {
+        const run = async () => {
+            const params = new URLSearchParams(window.location.search || '');
+            if (params.get('wechatBind') !== '1' || !params.get('code')) return;
+            try {
+                const res = await bindWechatH5({ code: String(params.get('code') || '') });
+                if (!res?.success) {
+                    message.error(res?.message || '微信绑定失败');
+                    return;
+                }
+                message.success('微信绑定成功');
+                params.delete('wechatBind');
+                params.delete('code');
+                params.delete('state');
+                const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+                window.history.replaceState({}, document.title, nextUrl);
+                await fetchWithdrawInfo();
+            } catch (e: any) {
+                message.error(e?.data?.message || e?.response?.data?.message || e?.message || '微信绑定失败');
+            }
+        };
+        void run();
+    }, []);
 
     const arrivePreview = useMemo(() => {
 
@@ -538,32 +585,6 @@ const WithdrawalMine: React.FC<Props> = (props) => {
                                 ),
                                 value: 'MANUAL',
                             },
-                            {
-                                label: (
-                                    <Space>
-                                        <WechatOutlined style={{color: '#07C160'}}/>
-                                        <Text strong style={{color: '#07C160'}}>
-                                            微信
-                                        </Text>
-                                        <Text type="secondary">（即将上线）</Text>
-                                    </Space>
-                                ),
-                                value: 'WECHAT',
-                                disabled: true,
-                            },
-                            // {
-                            // label: (
-                            // <Space>
-                            // <AlipayOutlined style={{color: '#1677ff'}}/>
-                            // <Text strong style={{color: '#1677ff'}}>
-                            // 支付宝
-                            // </Text>
-                            // <Text type="secondary">（即将上线）</Text>
-                            // </Space>
-                            // ),
-                            // value: 'ALIPAY',
-                            // disabled: true,
-                            // }
                         ]}
                     />
                     {/* ✅ 仅人工审核时：展示并校验收款码 */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Select, message } from 'antd';
 import { getRoles } from '@/services/api';
+import { maskPhone } from '@/utils/privacy';
 
 const { Option } = Select;
 
@@ -91,7 +92,7 @@ const AssignRoleModal: React.FC<AssignRoleModalProps> = ({
                 </Form.Item>
 
                 <div style={{ color: '#666', fontSize: 12 }}>
-                    <p>当前用户：{user?.name} ({user?.phone})</p>
+                    <p>当前用户：{user?.name} ({maskPhone(user?.phone)})</p>
                     <p>分配角色后，用户将拥有该角色的所有权限</p>
                 </div>
             </Form>

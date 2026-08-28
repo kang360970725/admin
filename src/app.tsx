@@ -1,6 +1,6 @@
 import type { RuntimeConfig } from '@umijs/max';
 import React from 'react';
-import {Avatar, Badge, Button, Dropdown, Input, List, message, Modal, Popover, Result, Space, Typography, notification} from 'antd';
+import {Avatar, Badge, Button, Dropdown, Input, List, message, Modal, Popover, Result, Space, Typography, notification, Watermark} from 'antd';
 import { BellOutlined, InfoCircleFilled, UserOutlined } from '@ant-design/icons';
 import {
     appealMyPenaltyTicket,
@@ -21,6 +21,7 @@ import {
 import { useIsMobile } from '@/utils/useIsMobile';
 import './global.less';
 import { history } from '@umijs/max';
+import { maskPhone } from '@/utils/privacy';
 
 const { Text } = Typography;
 
@@ -224,7 +225,13 @@ async function ensureFreshTokenBeforeRequest(currentToken?: string | null): Prom
 }
 
 function getDisplayName(u?: Partial<CurrentUser>) {
-    return u?.name || u?.phone || '当前陪玩';
+    return u?.name || maskPhone(u?.phone) || '当前陪玩';
+}
+
+function getWatermarkText(u?: Partial<CurrentUser>) {
+    const name = String(u?.name || '').trim();
+    const phone = maskPhone(u?.phone);
+    return [name, phone !== '-' ? phone : ''].filter(Boolean).join(' ') || 'BlueCat';
 }
 
 function getLevelText(u?: Partial<CurrentUser>) {
@@ -902,10 +909,28 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                 sessionStorage.removeItem('LAST_403_CODE');
                 sessionStorage.removeItem('LAST_403_MESSAGE');
             } catch {}
+            const pathname = window.location.pathname || '';
+            const skipWatermark =
+                pathname === '/login' ||
+                pathname === '/reset-password' ||
+                pathname === '/menu' ||
+                pathname.startsWith('/menu/') ||
+                pathname === '/chest-event';
+            const watermarkContent = skipWatermark ? children : (
+                <Watermark
+                    content={getWatermarkText(currentUser)}
+                    gap={[140, 108]}
+                    font={{ fontSize: 14, color: 'rgba(0,0,0,0.075)' }}
+                    zIndex={1}
+                >
+                    {children}
+                </Watermark>
+            );
+
             return (
                 <>
                     {contextHolder}
-                    {children}
+                    {watermarkContent}
 
                     <Modal
                         title="公告中心"
