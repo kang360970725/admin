@@ -46,7 +46,7 @@ export interface User {
     staffTags?: string[];
     matchedDepositAmount?: number;
     matchedFirstWithdrawMinBalance?: number;
-    matchedFirstWithdrawMinAcceptedDays?: number;
+    matchedFirstWithdrawMinAcceptedOrders?: number;
     matchedQuitCoolingDays?: number;
     matchedDepositForfeitDays?: number;
     matchedStaffRule?: StaffRuleItem | null;
@@ -113,7 +113,7 @@ export interface StaffRuleItem {
     tagCodes: string[];
     depositAmount: number;
     firstWithdrawMinBalance: number;
-    firstWithdrawMinAcceptedDays: number;
+    firstWithdrawMinAcceptedOrders: number;
     quitCoolingDays: number;
     depositForfeitDays: number;
     dormantFreezeDays: number;
@@ -154,7 +154,7 @@ export interface StaffExitPreview {
     clearAmount: number;
     depositAmountRule: number;
     firstWithdrawMinBalance: number;
-    firstWithdrawMinAcceptedDays: number;
+    firstWithdrawMinAcceptedOrders: number;
     refundWhenDepositInsufficient: boolean;
     blacklistAllowed: boolean;
     suggestedExitMode: 'RELEASE_TO_AVAILABLE' | 'CLEAR_ALL';
@@ -1708,7 +1708,7 @@ export async function getWithdrawInfo() {
         depositBalance: number;
         depositLimit: number;
         firstWithdrawMinBalance: number;
-        firstWithdrawMinAcceptedDays: number;
+        firstWithdrawMinAcceptedOrders: number;
         matchedStaffRule?: StaffRuleItem | null;
         workMode?: 'ONLINE' | 'OFFLINE';
         wechatAutoTransfer?: {

@@ -100,7 +100,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     const ruleSummary = {
         depositAmount: Number(matchedStaffRule?.depositAmount ?? user?.matchedDepositAmount ?? user?.depositLimit ?? 0),
         firstWithdrawMinBalance: Number(matchedStaffRule?.firstWithdrawMinBalance ?? user?.matchedFirstWithdrawMinBalance ?? 1000),
-        firstWithdrawMinAcceptedDays: Number(matchedStaffRule?.firstWithdrawMinAcceptedDays ?? user?.matchedFirstWithdrawMinAcceptedDays ?? 15),
+        firstWithdrawMinAcceptedOrders: Number(matchedStaffRule?.firstWithdrawMinAcceptedOrders ?? user?.matchedFirstWithdrawMinAcceptedOrders ?? 20),
         quitCoolingDays: Number(matchedStaffRule?.quitCoolingDays ?? user?.matchedQuitCoolingDays ?? 180),
         depositForfeitDays: Number(matchedStaffRule?.depositForfeitDays ?? user?.matchedDepositForfeitDays ?? 0),
         dormantFreezeDays: Number(matchedStaffRule?.dormantFreezeDays ?? 0),
@@ -405,7 +405,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             <div>命中规则：{matchedStaffRule?.name || '未命中，走默认规则'}</div>
                             <div>保证金阈值：¥{ruleSummary.depositAmount}</div>
                             <div>首次提现余额限制：¥{ruleSummary.firstWithdrawMinBalance}</div>
-                            <div>首次提现接单满：{ruleSummary.firstWithdrawMinAcceptedDays} 天</div>
+                            <div>首次提现接单满：{ruleSummary.firstWithdrawMinAcceptedOrders} 单</div>
                             <div>退出平台冷却期：{ruleSummary.quitCoolingDays} 天</div>
                             <div>押金不退限制：{ruleSummary.depositForfeitDays} 天</div>
                             <div>长期未接单冻结：{ruleSummary.dormantFreezeDays} 天</div>

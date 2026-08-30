@@ -276,7 +276,7 @@ function getDefaultStaffRuleEngineConfig(): StaffRuleEngineConfig {
     tagCodes: [],
     depositAmount: 500,
     firstWithdrawMinBalance: 1000,
-    firstWithdrawMinAcceptedDays: 15,
+    firstWithdrawMinAcceptedOrders: 20,
     quitCoolingDays: 180,
     depositForfeitDays: 30,
     dormantFreezeDays: 7,
@@ -316,6 +316,7 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
       name: '默认规则',
       enabled: true,
       tagCodes: [],
+      firstWithdrawMinAcceptedOrders: Number(parsed?.defaultRule?.firstWithdrawMinAcceptedOrders ?? 20),
       dormantFreezeDays: Number(parsed?.defaultRule?.dormantFreezeDays ?? fallback.defaultRule.dormantFreezeDays),
       settlementFreezeExperienceDays: Number(parsed?.defaultRule?.settlementFreezeExperienceDays ?? fallback.defaultRule.settlementFreezeExperienceDays),
       settlementFreezeRegularDays: Number(parsed?.defaultRule?.settlementFreezeRegularDays ?? fallback.defaultRule.settlementFreezeRegularDays),
@@ -335,7 +336,7 @@ function parseStaffRuleEngineConfig(row: SystemConfigItem | null | undefined): S
             sort: Number.isFinite(Number(tag?.sort)) ? Number(tag?.sort) : index + 1,
             tagCodes: tagCode ? [tagCode] : [],
             name: `${String(tag?.name || item?.tagName || item?.name || tagCode || `标签 ${index + 1}`).trim()}规则`,
-            firstWithdrawMinAcceptedDays: Number(item?.firstWithdrawMinAcceptedDays ?? 15),
+            firstWithdrawMinAcceptedOrders: Number(item?.firstWithdrawMinAcceptedOrders ?? 20),
             dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
             settlementFreezeExperienceDays: Number(item?.settlementFreezeExperienceDays ?? 3),
             settlementFreezeRegularDays: Number(item?.settlementFreezeRegularDays ?? 7),
@@ -372,7 +373,7 @@ function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
     tagCodes: [],
     depositAmount: Number(current?.defaultRule?.depositAmount ?? 500),
     firstWithdrawMinBalance: Number(current?.defaultRule?.firstWithdrawMinBalance ?? 1000),
-    firstWithdrawMinAcceptedDays: Number(current?.defaultRule?.firstWithdrawMinAcceptedDays ?? 15),
+    firstWithdrawMinAcceptedOrders: Number(current?.defaultRule?.firstWithdrawMinAcceptedOrders ?? 20),
     quitCoolingDays: Number(current?.defaultRule?.quitCoolingDays ?? 180),
     depositForfeitDays: Number(current?.defaultRule?.depositForfeitDays ?? 30),
     dormantFreezeDays: Number(current?.defaultRule?.dormantFreezeDays ?? 7),
@@ -392,7 +393,7 @@ function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
         tagCodes: tagCode ? [tagCode] : [],
         depositAmount: Number(item?.depositAmount ?? 0),
         firstWithdrawMinBalance: Number(item?.firstWithdrawMinBalance ?? 0),
-        firstWithdrawMinAcceptedDays: Number(item?.firstWithdrawMinAcceptedDays ?? 15),
+        firstWithdrawMinAcceptedOrders: Number(item?.firstWithdrawMinAcceptedOrders ?? 20),
         quitCoolingDays: Number(item?.quitCoolingDays ?? 0),
         depositForfeitDays: Number(item?.depositForfeitDays ?? 0),
         dormantFreezeDays: Number(item?.dormantFreezeDays ?? 7),
@@ -769,11 +770,11 @@ const SystemConfigsPage: React.FC = () => {
                         <Space size={16} wrap>
                           <Form.Item
                             label="首次提现接单满"
-                            name={['staffRuleEngine', 'defaultRule', 'firstWithdrawMinAcceptedDays']}
-                            initialValue={15}
-                            rules={[{ required: true, message: '请输入首次提现接单天数' }]}
+                            name={['staffRuleEngine', 'defaultRule', 'firstWithdrawMinAcceptedOrders']}
+                            initialValue={20}
+                            rules={[{ required: true, message: '请输入首次提现接单单数' }]}
                           >
-                            <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                            <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="单" />
                           </Form.Item>
                           <Form.Item
                             label="退店冷却期"
@@ -878,11 +879,11 @@ const SystemConfigsPage: React.FC = () => {
                                     </Form.Item>
                                     <Form.Item
                                       label="首次提现接单满"
-                                      name={[field.name, 'firstWithdrawMinAcceptedDays']}
-                                      initialValue={15}
-                                      rules={[{ required: true, message: '请输入首次提现接单天数' }]}
+                                      name={[field.name, 'firstWithdrawMinAcceptedOrders']}
+                                      initialValue={20}
+                                      rules={[{ required: true, message: '请输入首次提现接单单数' }]}
                                     >
-                                      <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="天" />
+                                      <InputNumber min={0} precision={0} style={{ width: 180 }} addonAfter="单" />
                                     </Form.Item>
                                   </Space>
                                   <Space size={16} wrap>
@@ -928,7 +929,7 @@ const SystemConfigsPage: React.FC = () => {
                                 </Space>
                               </Card>
                             ))}
-                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, firstWithdrawMinAcceptedDays: 15, quitCoolingDays: 0, depositForfeitDays: 0, dormantFreezeDays: 7, settlementFreezeExperienceDays: 3, settlementFreezeRegularDays: 7 })}>
+                            <Button onClick={() => add({ enabled: true, sort: fields.length + 1, priority: 0, depositAmount: 0, firstWithdrawMinBalance: 0, firstWithdrawMinAcceptedOrders: 20, quitCoolingDays: 0, depositForfeitDays: 0, dormantFreezeDays: 7, settlementFreezeExperienceDays: 3, settlementFreezeRegularDays: 7 })}>
                               新增分组规则
                             </Button>
                           </Space>

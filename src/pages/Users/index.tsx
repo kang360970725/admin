@@ -1873,7 +1873,7 @@ export default function UsersPage() {
                             <div>保证金未缴满补扣：¥{Number(staffExitPreview?.depositTopUpForfeitAmount ?? 0)}</div>
                             <div>余额不足未补齐保证金：¥{Number(staffExitPreview?.depositTopUpUnpaidAmount ?? 0)}</div>
                             <div>退出后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
-                            <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedDays ?? 15)} 天</div>
+                            <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedOrders ?? 20)} 单</div>
                         </div>
                     </div>
                     <div className="bc-admin-form-section">
