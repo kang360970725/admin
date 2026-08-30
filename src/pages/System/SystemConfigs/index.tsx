@@ -406,7 +406,7 @@ function buildStaffRuleEngineConfigValue(values: any): StaffRuleEngineConfig {
 
 function resolveCategory(row: SystemConfigItem): CategoryKey {
   const key = String(row.key || '').trim();
-  if (key.startsWith('wechat_mini_')) return 'WECHAT';
+  if (key.startsWith('wechat_mini_') || key.startsWith('wechat_h5_')) return 'WECHAT';
   if (key === 'app_public_base_url' || key.startsWith('wechat_pay_')) return 'PAYMENT';
   if (key.startsWith('cos_')) return 'COS';
   if (key.startsWith('offline_fee_') || key.startsWith('withdraw_') || key.startsWith('wechat_transfer_')) return 'FINANCE';

@@ -231,6 +231,21 @@ const OrdersPage: React.FC = () => {
         return '******';
     };
 
+    const renderCustomerIdentifier = (row: any) => {
+        const type = String(row?.customerIdentifierType || 'GAME_ID').toUpperCase();
+        const original = String(row?.customerOriginalIdentifier || '').trim();
+        if (type === 'ALIAS') {
+            return (
+                <Space size={4} wrap>
+                    <Tag color="gold">昵称/房间号</Tag>
+                    <span>{original || '-'}</span>
+                    {row?.customerGameId ? <Tag color="green">已补ID</Tag> : <Tag color="warning">待补ID</Tag>}
+                </Space>
+            );
+        }
+        return renderCustomerGameId(row);
+    };
+
     const getCurrentPlayerNames = (row: any) => {
         return row?.currentDispatch?.participants
             ?.map((p: any) => p?.user?.name || maskPhone(p?.user?.phone))
@@ -325,7 +340,7 @@ const OrdersPage: React.FC = () => {
 
                         <Space size={6} wrap>
                             {row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : null}
-                            <Tag>客户：{renderCustomerGameId(row)}</Tag>
+                            <Tag>客户：{renderCustomerIdentifier(row)}</Tag>
                             {players.length ? players.map((name: string, idx: number) => <Tag key={`${name}-${idx}`}>{name}</Tag>) : <Tag>未派单</Tag>}
                         </Space>
 
@@ -459,11 +474,14 @@ const OrdersPage: React.FC = () => {
          * - 为了“最小改动”，仍保留该列、也保留 search 入参（你后端若禁止，会自然无结果）
          */
         {
-            title: '客户游戏ID',
+            title: '客户标识',
             dataIndex: 'customerGameId',
             ellipsis: true,
             hideInTable: isMobile,
             render: (_: any, row: any) => {
+                if (String(row?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS') {
+                    return renderCustomerIdentifier(row);
+                }
                 const value = renderCustomerGameId(row);
                 if (value !== '******') return value;
                 return (
@@ -870,8 +888,8 @@ const OrdersPage: React.FC = () => {
                         orderTime: payload?.orderTime,
                         paymentTime: payload?.paymentTime,
                         csRate: payload?.csRate,
-                        inviteRate: payload?.isRenewal ? 0 : payload?.inviteRate,
-                        inviter: payload?.isRenewal ? undefined : payload?.inviter,
+                        inviteRate: (payload?.isRenewal || payload?.isDesignated) ? 0 : payload?.inviteRate,
+                        inviter: (payload?.isRenewal || payload?.isDesignated) ? undefined : payload?.inviter,
                         customClubRate: payload?.customClubRate,
                         remark: payload?.remark,
                         isGifted: Boolean(payload?.isGifted),
@@ -880,6 +898,8 @@ const OrdersPage: React.FC = () => {
                         playerIds: payload?.playerIds,
                         isRenewal: Boolean(payload?.isRenewal),
                         renewalPlayerIds: payload?.isRenewal ? payload?.renewalPlayerIds : undefined,
+                        isDesignated: Boolean(payload?.isDesignated),
+                        designatedPlayerIds: payload?.isDesignated ? payload?.designatedPlayerIds : undefined,
 
                         // ✅ 是否已收款（不再由 paymentTime 推断）
                         isPaid: Boolean(payload?.isPaid),

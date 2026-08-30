@@ -18,6 +18,7 @@ import {
     message,
     Modal,
     Row,
+    Radio,
     Select,
     Button,
     Checkbox,
@@ -166,6 +167,8 @@ export type OrderUpsertValues = {
     orderQuantity?: number;
 
     customerGameId?: string;
+    customerIdentifierType?: string;
+    customerOriginalIdentifier?: string;
     customerUserId?: number;
     userCouponId?: number;
     manualAdjustAmount?: number;
@@ -186,6 +189,8 @@ export type OrderUpsertValues = {
     playerIds?: number[];
     isRenewal?: boolean;
     renewalPlayerIds?: number[];
+    isDesignated?: boolean;
+    designatedPlayerIds?: number[];
 
     // ---- 以下用于小票生成/展示，不建议直接传后端 ----
     projectName?: string;
@@ -501,6 +506,8 @@ export default function OrderUpsertModal(props: {
             isGifted: Boolean(initialValues?.isGifted ?? false),
             isRenewal: Boolean(initialValues?.isRenewal ?? false),
             renewalPlayerIds: Array.isArray(initialValues?.renewalPlayerIds) ? initialValues?.renewalPlayerIds : [],
+            isDesignated: Boolean(initialValues?.isDesignated ?? false),
+            designatedPlayerIds: Array.isArray(initialValues?.designatedPlayerIds) ? initialValues?.designatedPlayerIds : [],
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
             paymentChannel: initialValues?.paymentChannel || 'MANUAL',
             settlementAmount:
@@ -608,21 +615,39 @@ export default function OrderUpsertModal(props: {
                 ? form.getFieldValue('renewalPlayerIds').map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                 : [];
             const nextRenewalIds = currentRenewalIds.filter((id: number) => nextPlayerIds.includes(id));
+            const currentDesignatedIds = Array.isArray(form?.getFieldValue?.('designatedPlayerIds'))
+                ? form.getFieldValue('designatedPlayerIds').map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                : [];
+            const nextDesignatedIds = currentDesignatedIds.filter((id: number) => nextPlayerIds.includes(id));
             form?.setFieldValue?.('renewalPlayerIds' as any, nextRenewalIds);
+            form?.setFieldValue?.('designatedPlayerIds' as any, nextDesignatedIds);
             if (!nextPlayerIds.length) {
                 form?.setFieldValue?.('isRenewal' as any, false);
+                form?.setFieldValue?.('isDesignated' as any, false);
             }
         }
 
         if (showPlayers && changed?.isRenewal === false) {
             form?.setFieldValue?.('renewalPlayerIds' as any, []);
         }
+        if (showPlayers && changed?.isDesignated === false) {
+            form?.setFieldValue?.('designatedPlayerIds' as any, []);
+        }
 
         if (showPlayers && changed?.isRenewal === true) {
+            form?.setFieldsValue?.({ isDesignated: false, designatedPlayerIds: [] } as any);
             const currentPlayerIds = Array.isArray(form?.getFieldValue?.('playerIds')) ? form.getFieldValue('playerIds') : [];
             if (!currentPlayerIds.length) {
                 message.warning('请先选择派单打手，再标记续单');
                 form?.setFieldValue?.('isRenewal' as any, false);
+            }
+        }
+        if (showPlayers && changed?.isDesignated === true) {
+            form?.setFieldsValue?.({ isRenewal: false, renewalPlayerIds: [] } as any);
+            const currentPlayerIds = Array.isArray(form?.getFieldValue?.('playerIds')) ? form.getFieldValue('playerIds') : [];
+            if (!currentPlayerIds.length) {
+                message.warning('请先选择派单打手，再标记指定');
+                form?.setFieldValue?.('isDesignated' as any, false);
             }
         }
     };
@@ -681,26 +706,39 @@ export default function OrderUpsertModal(props: {
                     ? v.playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                     : []
                 : undefined;
-            const isRenewal = showPlayers ? Boolean(v?.isRenewal) : false;
+            const bonusAttributionType = String(v?.bonusAttributionType || 'NONE');
+            const isRenewal = showPlayers ? (bonusAttributionType === 'RENEWAL' || Boolean(v?.isRenewal)) : false;
+            const isDesignated = showPlayers ? (bonusAttributionType === 'DESIGNATED' || Boolean(v?.isDesignated)) : false;
             const renewalPlayerIds = isRenewal && Array.isArray(v?.renewalPlayerIds)
                 ? v.renewalPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                 : [];
+            const designatedPlayerIds = isDesignated && Array.isArray(v?.designatedPlayerIds)
+                ? v.designatedPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                : [];
 
-            if (isRenewal) {
+            if (isRenewal && isDesignated) {
+                message.error('续单和指定只能二选一');
+                return;
+            }
+            const attributionPlayerIds = isDesignated ? designatedPlayerIds : renewalPlayerIds;
+            const attributionLabel = isDesignated ? '指定' : '续单';
+            if (isRenewal || isDesignated) {
                 if (!payloadPlayerIds?.length) {
-                    message.error('续单必须先选择派单打手');
+                    message.error(`${attributionLabel}必须先选择派单打手`);
                     return;
                 }
-                if (!renewalPlayerIds.length) {
-                    message.error('请选择续单打手');
+                if (!attributionPlayerIds.length) {
+                    message.error(`请选择${attributionLabel}打手`);
                     return;
                 }
-                if (renewalPlayerIds.some((id: number) => !payloadPlayerIds.includes(id))) {
-                    message.error('续单打手必须从当前派单打手中选择');
+                if (attributionPlayerIds.some((id: number) => !payloadPlayerIds.includes(id))) {
+                    message.error(`${attributionLabel}打手必须从当前派单打手中选择`);
                     return;
                 }
             }
 
+            const customerIdentifierType = Boolean(v?.customerIdentifierIsGameId) ? 'GAME_ID' : 'ALIAS';
+            const customerIdentifier = String(v?.customerGameId || '').trim();
             const payload: OrderUpsertValues = {
                 ...(v as any),
                 id: initialValues?.id,
@@ -720,7 +758,11 @@ export default function OrderUpsertModal(props: {
                 // ✅ 下单数量：小时单=小时；其它单默认 1
                 orderQuantity: Number(v?.orderQuantity ?? 1),
 
-                customerGameId: v?.customerGameId?.trim?.() || undefined,
+                customerIdentifierType,
+                customerOriginalIdentifier: v?.customerOriginalIdentifier?.trim?.() || customerIdentifier || undefined,
+                customerGameId: customerIdentifierType === 'GAME_ID' || initialValues?.id
+                    ? (customerIdentifier || undefined)
+                    : undefined,
                 customerUserId: v?.customerUserId != null && v?.customerUserId !== '' ? Number(v?.customerUserId) : undefined,
                 userCouponId: v?.userCouponId != null && v?.userCouponId !== '' ? Number(v?.userCouponId) : undefined,
                 orderSource: v?.orderSource ? String(v.orderSource).trim() : undefined,
@@ -729,10 +771,10 @@ export default function OrderUpsertModal(props: {
                 orderTime: v?.orderTime ? dayjs(v.orderTime).toISOString() : now.toISOString(),
                 paymentTime: v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString(),
 
-                inviter: isRenewal ? undefined : (v?.inviter?.trim?.() || undefined),
+                inviter: (isRenewal || isDesignated) ? undefined : (v?.inviter?.trim?.() || undefined),
 
                 csRate: v?.csRate != null && v?.csRate !== '' ? Number(v?.csRate) : undefined,
-                inviteRate: isRenewal ? 0 : (v?.inviteRate != null && v?.inviteRate !== '' ? Number(v?.inviteRate) : undefined),
+                inviteRate: (isRenewal || isDesignated) ? 0 : (v?.inviteRate != null && v?.inviteRate !== '' ? Number(v?.inviteRate) : undefined),
 
                 customClubRate: v?.customClubRate != null && v?.customClubRate !== '' ? Number(v?.customClubRate) : undefined,
 
@@ -741,6 +783,8 @@ export default function OrderUpsertModal(props: {
                 playerIds: payloadPlayerIds,
                 isRenewal,
                 renewalPlayerIds: isRenewal ? renewalPlayerIds : undefined,
+                isDesignated,
+                designatedPlayerIds: isDesignated ? designatedPlayerIds : undefined,
 
                 isGifted: Boolean(v?.isGifted),
 
@@ -780,7 +824,11 @@ export default function OrderUpsertModal(props: {
     const canSelectPlayersWhenUnpaid =
         Boolean(watchedIsGifted) || String(watchedOrderSource || '').trim() === 'CUSTOMER_SERVICE_MANUAL';
     const watchedPlayerIds = Form.useWatch('playerIds', form) || [];
-    const watchedIsRenewal = Boolean(Form.useWatch('isRenewal', form));
+    const watchedAttributionType = String(Form.useWatch('bonusAttributionType', form) || 'NONE');
+    const watchedLegacyIsRenewal = Boolean(Form.useWatch('isRenewal', form));
+    const watchedLegacyIsDesignated = Boolean(Form.useWatch('isDesignated', form));
+    const watchedIsRenewal = watchedAttributionType === 'RENEWAL' || watchedLegacyIsRenewal;
+    const watchedIsDesignated = watchedAttributionType === 'DESIGNATED' || watchedLegacyIsDesignated;
     const watchedCustomerUserId = Number(Form.useWatch('customerUserId', form) ?? 0);
     const watchedPaymentChannel = String(Form.useWatch('paymentChannel', form) || '').trim().toUpperCase();
     const watchedReceivableAmount = Number(Form.useWatch('receivableAmount', form) || 0);
@@ -821,11 +869,16 @@ export default function OrderUpsertModal(props: {
         const currentRenewalIds = Array.isArray(form?.getFieldValue?.('renewalPlayerIds'))
             ? form.getFieldValue('renewalPlayerIds').map((id: any) => Number(id)).filter((id: number) => limitedIds.includes(id))
             : [];
+        const currentDesignatedIds = Array.isArray(form?.getFieldValue?.('designatedPlayerIds'))
+            ? form.getFieldValue('designatedPlayerIds').map((id: any) => Number(id)).filter((id: number) => limitedIds.includes(id))
+            : [];
         form?.setFieldsValue?.({
             playerIds: limitedIds,
             playerNames: names,
             renewalPlayerIds: currentRenewalIds,
+            designatedPlayerIds: currentDesignatedIds,
             isRenewal: limitedIds.length ? form?.getFieldValue?.('isRenewal') : false,
+            isDesignated: limitedIds.length ? form?.getFieldValue?.('isDesignated') : false,
         } as any);
     };
 
@@ -1034,8 +1087,40 @@ export default function OrderUpsertModal(props: {
                     </Col>
 
                     <Col {...fullColProps}>
-                        <Form.Item name="customerGameId" label="客户ID（游戏ID）">
-                            <Input placeholder="ID或昵称" />
+                        <Form.Item label="客户标识" style={{ marginBottom: 8 }}>
+                            <Input.Group compact>
+                                <Form.Item name="customerGameId" noStyle>
+                                    <Input
+                                        placeholder="客户提供的昵称 / ID / 房间号"
+                                        allowClear
+                                        style={{ width: 'calc(100% - 118px)' }}
+                                    />
+                                </Form.Item>
+                                <Form.Item
+                                    name="customerIdentifierIsGameId"
+                                    valuePropName="checked"
+                                    noStyle
+                                    initialValue={Boolean(initialValues?.customerIdentifierType === 'GAME_ID' || initialValues?.id)}
+                                >
+                                    <Checkbox
+                                        style={{
+                                            width: 118,
+                                            height: 32,
+                                            padding: '3px 8px',
+                                            border: '1px solid #d9d9d9',
+                                            borderLeft: 0,
+                                            borderRadius: '0 10px 10px 0',
+                                            background: '#fff',
+                                            lineHeight: '24px',
+                                        }}
+                                    >
+                                        准确ID
+                                    </Checkbox>
+                                </Form.Item>
+                            </Input.Group>
+                            <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                                默认按昵称/房间号处理；勾选准确ID后，服务者存单/结单时不再要求补客户游戏ID。
+                            </div>
                         </Form.Item>
                     </Col>
 
@@ -1162,15 +1247,52 @@ export default function OrderUpsertModal(props: {
                     ) : null}
                     {showPlayers ? (
                         <Col {...fullColProps}>
-                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                <Form.Item name="isRenewal" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox disabled={!Array.isArray(watchedPlayerIds) || !watchedPlayerIds.length}>标记为续单</Checkbox>
+                            <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                                <Form.Item name="bonusAttributionType" label="分红归因" initialValue="NONE" style={{ marginBottom: 0 }}>
+                                    <Radio.Group
+                                        optionType="button"
+                                        buttonStyle="solid"
+                                        onChange={(e) => {
+                                            const v = String(e?.target?.value || 'NONE');
+                                            form?.setFieldsValue?.({
+                                                isRenewal: v === 'RENEWAL',
+                                                renewalPlayerIds: v === 'RENEWAL' ? form?.getFieldValue?.('renewalPlayerIds') : [],
+                                                isDesignated: v === 'DESIGNATED',
+                                                designatedPlayerIds: v === 'DESIGNATED' ? form?.getFieldValue?.('designatedPlayerIds') : [],
+                                            } as any);
+                                        }}
+                                    >
+                                        <Radio.Button value="NONE">普通</Radio.Button>
+                                        <Radio.Button value="RENEWAL">续单</Radio.Button>
+                                        <Radio.Button value="DESIGNATED">指定</Radio.Button>
+                                    </Radio.Group>
                                 </Form.Item>
                                 {watchedIsRenewal ? (
                                     <Form.Item
                                         name="renewalPlayerIds"
                                         label="续单打手"
                                         rules={[{ required: true, message: '请选择续单打手' }]}
+                                    >
+                                        <Checkbox.Group style={{ width: '100%' }}>
+                                            <Space wrap size={[8, 8]}>
+                                                {(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => {
+                                                    const playerId = Number(id);
+                                                    return (
+                                                        <Checkbox key={playerId} value={playerId}>
+                                                            {playerMap?.[playerId] || `#${playerId}`}
+                                                        </Checkbox>
+                                                    );
+                                                })}
+                                            </Space>
+                                        </Checkbox.Group>
+                                    </Form.Item>
+                                ) : null}
+                                {watchedIsDesignated ? (
+                                    <Form.Item
+                                        name="designatedPlayerIds"
+                                        label="指定打手"
+                                        rules={[{ required: true, message: '请选择指定打手' }]}
+                                        extra="规则同续单；指定不受优秀服务者名单限制，所选成员均参与分红。"
                                     >
                                         <Checkbox.Group style={{ width: '100%' }}>
                                             <Space wrap size={[8, 8]}>

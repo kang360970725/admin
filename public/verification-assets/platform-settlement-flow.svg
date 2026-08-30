@@ -1,0 +1,177 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">平台服务收益结算流程图</title>
+  <desc id="desc">展示从用户下单、服务者提供服务、订单完成、结算入账、冻结期、提现申请、后台审核到微信商家转账的完整流程。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F5FAFF"/>
+      <stop offset="52%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F7FBF8"/>
+    </linearGradient>
+    <linearGradient id="cardBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#EFF6FF"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="cardGreen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ECFDF5"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="cardGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFBEB"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563EB"/>
+    </marker>
+    <style>
+      .title {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+        font-size: 48px;
+        font-weight: 800;
+        fill: #0F172A;
+        letter-spacing: 1px;
+      }
+      .subtitle {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+        font-size: 24px;
+        font-weight: 500;
+        fill: #475569;
+      }
+      .step-no {
+        font-family: Arial, sans-serif;
+        font-size: 28px;
+        font-weight: 800;
+        fill: #FFFFFF;
+      }
+      .step-title {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+        font-size: 29px;
+        font-weight: 800;
+        fill: #111827;
+      }
+      .step-desc {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+        font-size: 19px;
+        font-weight: 500;
+        fill: #64748B;
+      }
+      .note {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+        font-size: 22px;
+        font-weight: 600;
+        fill: #334155;
+      }
+      .footer {
+        font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+        font-size: 18px;
+        font-weight: 500;
+        fill: #64748B;
+      }
+      .arrow-line {
+        stroke: #2563EB;
+        stroke-width: 5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+        marker-end: url(#arrow);
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" rx="0" fill="url(#bg)"/>
+  <circle cx="1420" cy="120" r="170" fill="#DCFCE7" opacity="0.5"/>
+  <circle cx="160" cy="790" r="210" fill="#DBEAFE" opacity="0.55"/>
+  <circle cx="790" cy="910" r="250" fill="#FEF3C7" opacity="0.35"/>
+
+  <text x="800" y="88" text-anchor="middle" class="title">平台服务收益结算流程</text>
+  <text x="800" y="128" text-anchor="middle" class="subtitle">订单完成后，经平台结算与冻结期校验，由服务者自主申请提现，后台审核后完成转账</text>
+
+  <!-- Row 1 -->
+  <g filter="url(#shadow)">
+    <rect x="88" y="196" width="300" height="155" rx="28" fill="url(#cardBlue)" stroke="#BFDBFE" stroke-width="3"/>
+    <circle cx="138" cy="246" r="28" fill="#2563EB"/>
+    <text x="138" y="256" text-anchor="middle" class="step-no">1</text>
+    <text x="188" y="242" class="step-title">用户下单</text>
+    <text x="188" y="280" class="step-desc">或由平台登记订单</text>
+    <text x="188" y="310" class="step-desc">形成订单记录</text>
+  </g>
+  <path class="arrow-line" d="M 398 274 L 472 274"/>
+
+  <g filter="url(#shadow)">
+    <rect x="492" y="196" width="300" height="155" rx="28" fill="url(#cardGreen)" stroke="#BBF7D0" stroke-width="3"/>
+    <circle cx="542" cy="246" r="28" fill="#16A34A"/>
+    <text x="542" y="256" text-anchor="middle" class="step-no">2</text>
+    <text x="592" y="242" class="step-title">服务者提供服务</text>
+    <text x="592" y="280" class="step-desc">按订单约定完成</text>
+    <text x="592" y="310" class="step-desc">对应服务内容</text>
+  </g>
+  <path class="arrow-line" d="M 802 274 L 876 274"/>
+
+  <g filter="url(#shadow)">
+    <rect x="896" y="196" width="300" height="155" rx="28" fill="url(#cardBlue)" stroke="#BFDBFE" stroke-width="3"/>
+    <circle cx="946" cy="246" r="28" fill="#2563EB"/>
+    <text x="946" y="256" text-anchor="middle" class="step-no">3</text>
+    <text x="996" y="242" class="step-title">订单完成</text>
+    <text x="996" y="280" class="step-desc">确认服务结果</text>
+    <text x="996" y="310" class="step-desc">进入结算流程</text>
+  </g>
+  <path class="arrow-line" d="M 1206 274 L 1280 274"/>
+
+  <g filter="url(#shadow)">
+    <rect x="1300" y="196" width="212" height="155" rx="28" fill="url(#cardGold)" stroke="#FDE68A" stroke-width="3"/>
+    <circle cx="1350" cy="246" r="28" fill="#D97706"/>
+    <text x="1350" y="256" text-anchor="middle" class="step-no">4</text>
+    <text x="1400" y="242" class="step-title">结算入账</text>
+    <text x="1400" y="280" class="step-desc">平台计算</text>
+    <text x="1400" y="310" class="step-desc">服务收益</text>
+  </g>
+
+  <!-- Down connector -->
+  <path class="arrow-line" d="M 1406 361 C 1406 445 1406 445 1328 445"/>
+
+  <!-- Row 2 reverse -->
+  <g filter="url(#shadow)">
+    <rect x="1088" y="530" width="300" height="155" rx="28" fill="url(#cardGold)" stroke="#FDE68A" stroke-width="3"/>
+    <circle cx="1138" cy="580" r="28" fill="#D97706"/>
+    <text x="1138" y="590" text-anchor="middle" class="step-no">5</text>
+    <text x="1188" y="576" class="step-title">冻结期</text>
+    <text x="1188" y="614" class="step-desc">按平台规则暂缓</text>
+    <text x="1188" y="644" class="step-desc">保障订单稳定</text>
+  </g>
+  <path class="arrow-line" d="M 1078 608 L 1004 608"/>
+
+  <g filter="url(#shadow)">
+    <rect x="694" y="530" width="300" height="155" rx="28" fill="url(#cardGreen)" stroke="#BBF7D0" stroke-width="3"/>
+    <circle cx="744" cy="580" r="28" fill="#16A34A"/>
+    <text x="744" y="590" text-anchor="middle" class="step-no">6</text>
+    <text x="794" y="576" class="step-title">服务者申请提现</text>
+    <text x="794" y="614" class="step-desc">服务者自主发起</text>
+    <text x="794" y="644" class="step-desc">提交收款信息</text>
+  </g>
+  <path class="arrow-line" d="M 684 608 L 610 608"/>
+
+  <g filter="url(#shadow)">
+    <rect x="290" y="530" width="300" height="155" rx="28" fill="url(#cardBlue)" stroke="#BFDBFE" stroke-width="3"/>
+    <circle cx="340" cy="580" r="28" fill="#2563EB"/>
+    <text x="340" y="590" text-anchor="middle" class="step-no">7</text>
+    <text x="390" y="576" class="step-title">后台审核</text>
+    <text x="390" y="614" class="step-desc">核对订单、余额</text>
+    <text x="390" y="644" class="step-desc">及扣款规则</text>
+  </g>
+  <path class="arrow-line" d="M 280 608 L 206 608"/>
+
+  <g filter="url(#shadow)">
+    <rect x="88" y="530" width="172" height="155" rx="28" fill="#F0FDF4" stroke="#86EFAC" stroke-width="3"/>
+    <circle cx="138" cy="580" r="28" fill="#16A34A"/>
+    <text x="138" y="590" text-anchor="middle" class="step-no">8</text>
+    <text x="188" y="576" class="step-title">微信商家转账</text>
+    <text x="188" y="614" class="step-desc">按审核结果</text>
+    <text x="188" y="644" class="step-desc">完成转账</text>
+  </g>
+
+  <rect x="315" y="752" width="970" height="64" rx="32" fill="#FFFFFF" opacity="0.82" stroke="#E2E8F0" stroke-width="2"/>
+  <text x="800" y="793" text-anchor="middle" class="note">说明：服务者为平台招商合作服务提供方，平台依据订单完成情况、冻结期和提现审核规则进行服务收益结算。</text>
+  <text x="800" y="856" text-anchor="middle" class="footer">用于商户转账场景证明材料 · 不涉及平台雇佣关系或工资发放表述</text>
+</svg>

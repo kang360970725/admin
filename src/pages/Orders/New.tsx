@@ -1,7 +1,7 @@
 // src/pages/Orders/New.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Card, Checkbox, Form, Input, InputNumber, Select, DatePicker, Button, Row, Col, Space, message } from 'antd';
+import { Card, Checkbox, Form, Input, InputNumber, Select, DatePicker, Button, Row, Col, Space, message, Radio } from 'antd';
 import dayjs from 'dayjs';
 import { history } from '@umijs/max';
 
@@ -37,7 +37,11 @@ const NewOrderPage: React.FC = () => {
 
     const now = useMemo(() => dayjs(), []);
     const watchedPlayerIds = Form.useWatch('playerIds', form) || [];
-    const watchedIsRenewal = Boolean(Form.useWatch('isRenewal', form));
+    const watchedAttributionType = String(Form.useWatch('bonusAttributionType', form) || 'NONE');
+    const watchedLegacyIsRenewal = Boolean(Form.useWatch('isRenewal', form));
+    const watchedLegacyIsDesignated = Boolean(Form.useWatch('isDesignated', form));
+    const watchedIsRenewal = watchedAttributionType === 'RENEWAL' || watchedLegacyIsRenewal;
+    const watchedIsDesignated = watchedAttributionType === 'DESIGNATED' || watchedLegacyIsDesignated;
 
 
     useEffect(() => {
@@ -105,25 +109,38 @@ const NewOrderPage: React.FC = () => {
                 return;
             }
 
-            const isRenewal = Boolean(values.isRenewal);
+            const bonusAttributionType = String(values.bonusAttributionType || 'NONE');
+            const isRenewal = bonusAttributionType === 'RENEWAL' || Boolean(values.isRenewal);
+            const isDesignated = bonusAttributionType === 'DESIGNATED' || Boolean(values.isDesignated);
             const renewalPlayerIds: number[] = isRenewal && Array.isArray(values.renewalPlayerIds)
                 ? values.renewalPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                 : [];
-            if (isRenewal) {
+            const designatedPlayerIds: number[] = isDesignated && Array.isArray(values.designatedPlayerIds)
+                ? values.designatedPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                : [];
+            if (isRenewal && isDesignated) {
+                message.warning('续单和指定只能二选一');
+                return;
+            }
+            const attributionPlayerIds = isDesignated ? designatedPlayerIds : renewalPlayerIds;
+            const attributionLabel = isDesignated ? '指定' : '续单';
+            if (isRenewal || isDesignated) {
                 if (!playerIds.length) {
-                    message.warning('续单必须先选择派单打手');
+                    message.warning(`${attributionLabel}必须先选择派单打手`);
                     return;
                 }
-                if (!renewalPlayerIds.length) {
-                    message.warning('请选择续单打手');
+                if (!attributionPlayerIds.length) {
+                    message.warning(`请选择${attributionLabel}打手`);
                     return;
                 }
-                if (renewalPlayerIds.some((id) => !playerIds.includes(id))) {
-                    message.warning('续单打手必须从当前派单打手中选择');
+                if (attributionPlayerIds.some((id) => !playerIds.includes(id))) {
+                    message.warning(`${attributionLabel}打手必须从当前派单打手中选择`);
                     return;
                 }
             }
 
+            const customerIdentifierType = Boolean(values.customerIdentifierIsGameId) ? 'GAME_ID' : 'ALIAS';
+            const customerIdentifier = String(values.customerGameId || '').trim();
             const payload = {
                 projectId: Number(values.projectId),
                 receivableAmount: Number(values.receivableAmount),
@@ -132,7 +149,9 @@ const NewOrderPage: React.FC = () => {
                     ? Number(values.baseAmountWan)
                     : undefined,
 
-                customerGameId: values.customerGameId?.trim() || undefined,
+                customerIdentifierType,
+                customerOriginalIdentifier: customerIdentifier || undefined,
+                customerGameId: customerIdentifierType === 'GAME_ID' ? (customerIdentifier || undefined) : undefined,
 
                 // 时间：默认当前时间
                 orderTime: values.orderTime ? dayjs(values.orderTime).toISOString() : now.toISOString(),
@@ -152,6 +171,8 @@ const NewOrderPage: React.FC = () => {
                 playerIds,
                 isRenewal,
                 renewalPlayerIds: isRenewal ? renewalPlayerIds : undefined,
+                isDesignated,
+                designatedPlayerIds: isDesignated ? designatedPlayerIds : undefined,
             };
 
             // 1) 创建订单（✅ 以表单传递值为准）
@@ -232,6 +253,9 @@ const NewOrderPage: React.FC = () => {
                                                 renewalPlayerIds: Array.isArray(form.getFieldValue('renewalPlayerIds'))
                                                     ? form.getFieldValue('renewalPlayerIds').filter((id: number) => nextIds.includes(id))
                                                     : [],
+                                                designatedPlayerIds: Array.isArray(form.getFieldValue('designatedPlayerIds'))
+                                                    ? form.getFieldValue('designatedPlayerIds').filter((id: number) => nextIds.includes(id))
+                                                    : [],
                                             });
                                             return;
                                         }
@@ -240,7 +264,11 @@ const NewOrderPage: React.FC = () => {
                                             renewalPlayerIds: Array.isArray(form.getFieldValue('renewalPlayerIds'))
                                                 ? form.getFieldValue('renewalPlayerIds').filter((id: number) => nextIds.includes(id))
                                                 : [],
+                                            designatedPlayerIds: Array.isArray(form.getFieldValue('designatedPlayerIds'))
+                                                ? form.getFieldValue('designatedPlayerIds').filter((id: number) => nextIds.includes(id))
+                                                : [],
                                             isRenewal: nextIds.length ? form.getFieldValue('isRenewal') : false,
+                                            isDesignated: nextIds.length ? form.getFieldValue('isDesignated') : false,
                                         });
                                     }}
                                     allowClear
@@ -249,15 +277,53 @@ const NewOrderPage: React.FC = () => {
                         </Col>
 
                         <Col span={24}>
-                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                <Form.Item name="isRenewal" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox disabled={!Array.isArray(watchedPlayerIds) || !watchedPlayerIds.length}>标记为续单</Checkbox>
+                            <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                                <Form.Item name="bonusAttributionType" label="分红归因" initialValue="NONE" style={{ marginBottom: 0 }}>
+                                    <Radio.Group
+                                        optionType="button"
+                                        buttonStyle="solid"
+                                        onChange={(e) => {
+                                            const v = String(e?.target?.value || 'NONE');
+                                            form.setFieldsValue({
+                                                isRenewal: v === 'RENEWAL',
+                                                renewalPlayerIds: v === 'RENEWAL' ? form.getFieldValue('renewalPlayerIds') : [],
+                                                isDesignated: v === 'DESIGNATED',
+                                                designatedPlayerIds: v === 'DESIGNATED' ? form.getFieldValue('designatedPlayerIds') : [],
+                                            });
+                                        }}
+                                    >
+                                        <Radio.Button value="NONE">普通</Radio.Button>
+                                        <Radio.Button value="RENEWAL">续单</Radio.Button>
+                                        <Radio.Button value="DESIGNATED">指定</Radio.Button>
+                                    </Radio.Group>
                                 </Form.Item>
                                 {watchedIsRenewal ? (
                                     <Form.Item
                                         name="renewalPlayerIds"
                                         label="续单打手"
                                         rules={[{ required: true, message: '请选择续单打手' }]}
+                                    >
+                                        <Checkbox.Group style={{ width: '100%' }}>
+                                            <Space wrap size={[8, 8]}>
+                                                {(Array.isArray(watchedPlayerIds) ? watchedPlayerIds : []).map((id: any) => {
+                                                    const playerId = Number(id);
+                                                    const item = playerOptions.find((p) => Number(p.value) === playerId);
+                                                    return (
+                                                        <Checkbox key={playerId} value={playerId}>
+                                                            {item?.label || `#${playerId}`}
+                                                        </Checkbox>
+                                                    );
+                                                })}
+                                            </Space>
+                                        </Checkbox.Group>
+                                    </Form.Item>
+                                ) : null}
+                                {watchedIsDesignated ? (
+                                    <Form.Item
+                                        name="designatedPlayerIds"
+                                        label="指定打手"
+                                        rules={[{ required: true, message: '请选择指定打手' }]}
+                                        extra="规则同续单；指定不受优秀服务者名单限制，所选成员均参与分红。"
                                     >
                                         <Checkbox.Group style={{ width: '100%' }}>
                                             <Space wrap size={[8, 8]}>
@@ -338,9 +404,36 @@ const NewOrderPage: React.FC = () => {
                             </Form.Item>
                         </Col>
 
-                        <Col span={12}>
-                            <Form.Item name="customerGameId" label="客户游戏ID/昵称">
-                                <Input placeholder="例如：峡谷之巅-xxx" allowClear />
+                        <Col span={24}>
+                            <Form.Item label="客户标识">
+                                <Input.Group compact>
+                                    <Form.Item name="customerGameId" noStyle>
+                                        <Input
+                                            placeholder="客户提供的昵称 / ID / 房间号"
+                                            allowClear
+                                            style={{ width: 'calc(100% - 118px)' }}
+                                        />
+                                    </Form.Item>
+                                    <Form.Item name="customerIdentifierIsGameId" valuePropName="checked" noStyle initialValue={false}>
+                                        <Checkbox
+                                            style={{
+                                                width: 118,
+                                                height: 32,
+                                                padding: '3px 8px',
+                                                border: '1px solid #d9d9d9',
+                                                borderLeft: 0,
+                                                borderRadius: '0 10px 10px 0',
+                                                background: '#fff',
+                                                lineHeight: '24px',
+                                            }}
+                                        >
+                                            准确ID
+                                        </Checkbox>
+                                    </Form.Item>
+                                </Input.Group>
+                                <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                                    默认按昵称/房间号处理；勾选准确ID后，服务者存单/结单时不再要求补客户游戏ID。
+                                </div>
                             </Form.Item>
                         </Col>
 

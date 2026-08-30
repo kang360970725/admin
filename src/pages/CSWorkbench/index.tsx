@@ -21,6 +21,7 @@ import {
     Checkbox,
     List,
     Pagination,
+    Radio,
 } from 'antd';
 import {
     AppstoreOutlined,
@@ -316,7 +317,11 @@ export default function CSWorkbenchPage() {
     const debouncedFetchOnlinePlayers = useDebouncedFn(fetchOnlinePlayers, 250);
 
     const watchedCreatePlayerIds = Form.useWatch('playerIds', createForm) || [];
-    const watchedCreateIsRenewal = Boolean(Form.useWatch('isRenewal', createForm));
+    const watchedCreateAttributionType = String(Form.useWatch('bonusAttributionType', createForm) || 'NONE');
+    const watchedCreateLegacyIsRenewal = Boolean(Form.useWatch('isRenewal', createForm));
+    const watchedCreateLegacyIsDesignated = Boolean(Form.useWatch('isDesignated', createForm));
+    const watchedCreateIsRenewal = watchedCreateAttributionType === 'RENEWAL' || watchedCreateLegacyIsRenewal;
+    const watchedCreateIsDesignated = watchedCreateAttributionType === 'DESIGNATED' || watchedCreateLegacyIsDesignated;
     const watchedDispatchPlayerIds = Form.useWatch('playerIds', dispatchForm) || [];
     const visibleOnlinePlayers = useMemo(
         () => {
@@ -339,11 +344,16 @@ export default function CSWorkbenchPage() {
         const currentRenewalIds = Array.isArray(targetForm.getFieldValue?.('renewalPlayerIds'))
             ? targetForm.getFieldValue('renewalPlayerIds').map((id: any) => Number(id)).filter((id: number) => limitedIds.includes(id))
             : [];
+        const currentDesignatedIds = Array.isArray(targetForm.getFieldValue?.('designatedPlayerIds'))
+            ? targetForm.getFieldValue('designatedPlayerIds').map((id: any) => Number(id)).filter((id: number) => limitedIds.includes(id))
+            : [];
         targetForm.setFieldsValue({
             playerIds: limitedIds,
             playerNames: names,
             renewalPlayerIds: currentRenewalIds,
+            designatedPlayerIds: currentDesignatedIds,
             isRenewal: limitedIds.length ? targetForm.getFieldValue?.('isRenewal') : false,
+            isDesignated: limitedIds.length ? targetForm.getFieldValue?.('isDesignated') : false,
         });
     };
 
@@ -556,16 +566,37 @@ export default function CSWorkbenchPage() {
             const currentRenewalIds = Array.isArray(createForm.getFieldValue('renewalPlayerIds'))
                 ? createForm.getFieldValue('renewalPlayerIds').map((x: any) => Number(x)).filter((n: number) => nextPlayerIds.includes(n))
                 : [];
-            createForm.setFieldsValue({ renewalPlayerIds: currentRenewalIds, isRenewal: nextPlayerIds.length ? createForm.getFieldValue('isRenewal') : false });
+            const currentDesignatedIds = Array.isArray(createForm.getFieldValue('designatedPlayerIds'))
+                ? createForm.getFieldValue('designatedPlayerIds').map((x: any) => Number(x)).filter((n: number) => nextPlayerIds.includes(n))
+                : [];
+            createForm.setFieldsValue({
+                renewalPlayerIds: currentRenewalIds,
+                designatedPlayerIds: currentDesignatedIds,
+                isRenewal: nextPlayerIds.length ? createForm.getFieldValue('isRenewal') : false,
+                isDesignated: nextPlayerIds.length ? createForm.getFieldValue('isDesignated') : false,
+            });
         }
 
         if (changed?.isRenewal === false) {
             createForm.setFieldValue('renewalPlayerIds', []);
         }
+        if (changed?.isDesignated === false) {
+            createForm.setFieldValue('designatedPlayerIds', []);
+        }
+        if (changed?.isRenewal === true) {
+            createForm.setFieldsValue({ isDesignated: false, designatedPlayerIds: [] });
+        }
+        if (changed?.isDesignated === true) {
+            createForm.setFieldsValue({ isRenewal: false, renewalPlayerIds: [] });
+        }
 
         if (changed?.isRenewal === true && !safeArray(createForm.getFieldValue('playerIds')).length) {
             message.warning('请先选择派单打手，再标记续单');
             createForm.setFieldValue('isRenewal', false);
+        }
+        if (changed?.isDesignated === true && !safeArray(createForm.getFieldValue('playerIds')).length) {
+            message.warning('请先选择派单打手，再标记指定');
+            createForm.setFieldValue('isDesignated', false);
         }
     };
 
@@ -574,6 +605,7 @@ export default function CSWorkbenchPage() {
         try {
             const values = await createForm.validateFields();
 
+            const customerIdentifierType = Boolean(values.customerIdentifierIsGameId) ? 'GAME_ID' : 'ALIAS';
             const customerId = (values.customerGameId ?? '').trim();
             createForm.setFieldsValue({ customerGameId: customerId });
 
@@ -586,21 +618,32 @@ export default function CSWorkbenchPage() {
                 return;
             }
 
-            const isRenewal = Boolean(values.isRenewal);
+            const bonusAttributionType = String(values.bonusAttributionType || 'NONE');
+            const isRenewal = bonusAttributionType === 'RENEWAL' || Boolean(values.isRenewal);
+            const isDesignated = bonusAttributionType === 'DESIGNATED' || Boolean(values.isDesignated);
             const renewalPlayerIds: number[] = isRenewal
                 ? safeArray(values.renewalPlayerIds).map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                 : [];
-            if (isRenewal) {
+            const designatedPlayerIds: number[] = isDesignated
+                ? safeArray(values.designatedPlayerIds).map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
+                : [];
+            if (isRenewal && isDesignated) {
+                message.warning('续单和指定只能二选一');
+                return;
+            }
+            const attributionPlayerIds = isDesignated ? designatedPlayerIds : renewalPlayerIds;
+            const attributionLabel = isDesignated ? '指定' : '续单';
+            if (isRenewal || isDesignated) {
                 if (!playerIds.length) {
-                    message.warning('续单必须先选择派单打手');
+                    message.warning(`${attributionLabel}必须先选择派单打手`);
                     return;
                 }
-                if (!renewalPlayerIds.length) {
-                    message.warning('请选择续单打手');
+                if (!attributionPlayerIds.length) {
+                    message.warning(`请选择${attributionLabel}打手`);
                     return;
                 }
-                if (renewalPlayerIds.some((id) => !playerIds.includes(id))) {
-                    message.warning('续单打手必须从当前派单打手中选择');
+                if (attributionPlayerIds.some((id) => !playerIds.includes(id))) {
+                    message.warning(`${attributionLabel}打手必须从当前派单打手中选择`);
                     return;
                 }
             }
@@ -624,7 +667,9 @@ export default function CSWorkbenchPage() {
                 settlementAmount: values.settlementAmount != null && values.settlementAmount !== '' ? Number(values.settlementAmount) : Number(values.paidAmount),
                 baseAmountWan:
                     values.baseAmountWan != null && values.baseAmountWan !== '' ? Number(values.baseAmountWan) : undefined,
-                customerGameId: customerId || undefined,
+                customerIdentifierType,
+                customerOriginalIdentifier: customerId || undefined,
+                customerGameId: customerIdentifierType === 'GAME_ID' ? (customerId || undefined) : undefined,
 
                 orderTime: values.orderTime ? dayjs(values.orderTime).toISOString() : now.toISOString(),
                 paymentTime: values.paymentTime ? dayjs(values.paymentTime).toISOString() : now.toISOString(),
@@ -637,6 +682,8 @@ export default function CSWorkbenchPage() {
                 playerIds,
                 isRenewal,
                 renewalPlayerIds: isRenewal ? renewalPlayerIds : undefined,
+                isDesignated,
+                designatedPlayerIds: isDesignated ? designatedPlayerIds : undefined,
             };
 
             const created = await createOrder(payload);
@@ -944,26 +991,44 @@ export default function CSWorkbenchPage() {
                             />
                         </Form.Item>
 
-                        <Form.Item name="customerGameId" label="客户游戏ID">
-                            <Input
-                                allowClear
-                                placeholder="游戏内ID或昵称"
-                                style={{ borderRadius: 12 }}
-                                onBlur={(e) => {
-                                    const v = (e?.target?.value ?? '').trim();
-                                    createForm.setFieldsValue({ customerGameId: v });
-                                }}
-                                addonAfter={
-                                    <Button
-                                        type="link"
-                                        icon={<CopyOutlined />}
-                                        onClick={pasteCustomerGameIdFromClipboard}
-                                        style={{ padding: 0, height: 22 }}
+                        <Form.Item label="客户标识" style={{ marginBottom: 12 }}>
+                            <Input.Group compact>
+                                <Form.Item name="customerGameId" noStyle>
+                                    <Input
+                                        allowClear
+                                        placeholder="客户提供的昵称 / ID / 房间号"
+                                        style={{ width: 'calc(100% - 118px)', borderRadius: '12px 0 0 12px' }}
+                                        onBlur={(e) => {
+                                            const v = (e?.target?.value ?? '').trim();
+                                            createForm.setFieldsValue({ customerGameId: v });
+                                        }}
+                                    />
+                                </Form.Item>
+                                <Form.Item name="customerIdentifierIsGameId" valuePropName="checked" noStyle initialValue={false}>
+                                    <Checkbox
+                                        style={{
+                                            width: 118,
+                                            height: 34,
+                                            padding: '4px 8px',
+                                            border: '1px solid #d9d9d9',
+                                            borderLeft: 0,
+                                            borderRadius: '0 12px 12px 0',
+                                            background: '#fff',
+                                            lineHeight: '24px',
+                                        }}
                                     >
-                                        粘贴
-                                    </Button>
-                                }
-                            />
+                                        准确ID
+                                    </Checkbox>
+                                </Form.Item>
+                            </Input.Group>
+                            <Button
+                                type="link"
+                                icon={<CopyOutlined />}
+                                onClick={pasteCustomerGameIdFromClipboard}
+                                style={{ padding: 0, height: 22, marginTop: 4 }}
+                            >
+                                粘贴客户标识
+                            </Button>
                         </Form.Item>
 
                         <Form.Item name="userCouponId" label="优惠券（可选）">
@@ -1047,15 +1112,52 @@ export default function CSWorkbenchPage() {
                             )}
                         </Form.Item>
 
-                        <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 8 }}>
-                            <Form.Item name="isRenewal" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                <Checkbox disabled={!Array.isArray(watchedCreatePlayerIds) || !watchedCreatePlayerIds.length}>标记为续单</Checkbox>
+                        <Space direction="vertical" size={10} style={{ width: '100%', marginBottom: 8 }}>
+                            <Form.Item name="bonusAttributionType" label="分红归因" initialValue="NONE" style={{ marginBottom: 0 }}>
+                                <Radio.Group
+                                    optionType="button"
+                                    buttonStyle="solid"
+                                    onChange={(e) => {
+                                        const v = String(e?.target?.value || 'NONE');
+                                        createForm.setFieldsValue({
+                                            isRenewal: v === 'RENEWAL',
+                                            renewalPlayerIds: v === 'RENEWAL' ? createForm.getFieldValue('renewalPlayerIds') : [],
+                                            isDesignated: v === 'DESIGNATED',
+                                            designatedPlayerIds: v === 'DESIGNATED' ? createForm.getFieldValue('designatedPlayerIds') : [],
+                                        });
+                                    }}
+                                >
+                                    <Radio.Button value="NONE">普通</Radio.Button>
+                                    <Radio.Button value="RENEWAL">续单</Radio.Button>
+                                    <Radio.Button value="DESIGNATED">指定</Radio.Button>
+                                </Radio.Group>
                             </Form.Item>
                             {watchedCreateIsRenewal ? (
                                 <Form.Item
                                     name="renewalPlayerIds"
                                     label="续单打手"
                                     rules={[{ required: true, message: '请选择续单打手' }]}
+                                >
+                                    <Checkbox.Group style={{ width: '100%' }}>
+                                        <Space wrap size={[8, 8]}>
+                                            {safeArray(watchedCreatePlayerIds).map((id: any) => {
+                                                const playerId = Number(id);
+                                                return (
+                                                    <Checkbox key={playerId} value={playerId}>
+                                                        {playerMap?.[playerId] || `#${playerId}`}
+                                                    </Checkbox>
+                                                );
+                                            })}
+                                        </Space>
+                                    </Checkbox.Group>
+                                </Form.Item>
+                            ) : null}
+                            {watchedCreateIsDesignated ? (
+                                <Form.Item
+                                    name="designatedPlayerIds"
+                                    label="指定打手"
+                                    rules={[{ required: true, message: '请选择指定打手' }]}
+                                    extra="规则同续单；指定不受优秀服务者名单限制，所选成员均参与分红。"
                                 >
                                     <Checkbox.Group style={{ width: '100%' }}>
                                         <Space wrap size={[8, 8]}>
@@ -1681,8 +1783,8 @@ export default function CSWorkbenchPage() {
                         orderTime: payload?.orderTime,
                         paymentTime: payload?.paymentTime,
                         csRate: payload?.csRate,
-                        inviteRate: payload?.isRenewal ? 0 : payload?.inviteRate,
-                        inviter: payload?.isRenewal ? undefined : payload?.inviter,
+                        inviteRate: (payload?.isRenewal || payload?.isDesignated) ? 0 : payload?.inviteRate,
+                        inviter: (payload?.isRenewal || payload?.isDesignated) ? undefined : payload?.inviter,
                         customClubRate: payload?.customClubRate,
                         remark: payload?.remark,
                         // ✅ 新增：赠送单标识
@@ -1692,6 +1794,8 @@ export default function CSWorkbenchPage() {
                         playerIds: payload?.playerIds,
                         isRenewal: Boolean(payload?.isRenewal),
                         renewalPlayerIds: payload?.isRenewal ? payload?.renewalPlayerIds : undefined,
+                        isDesignated: Boolean(payload?.isDesignated),
+                        designatedPlayerIds: payload?.isDesignated ? payload?.designatedPlayerIds : undefined,
                     });
 
                     const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);

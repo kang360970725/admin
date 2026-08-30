@@ -3221,7 +3221,7 @@ export async function getWechatBindH5Url(params: { redirectUri: string }) {
 }
 
 export async function bindWechatH5(data: { code: string }) {
-    return request<{ success: boolean; appId?: string; openidMasked?: string; message?: string }>(`${API_BASE}/mini/auth/bind-wechat-h5`, {
+    return request<{ success: boolean; appId?: string; openidMasked?: string; unionidMasked?: string; hasUnionId?: boolean; message?: string }>(`${API_BASE}/mini/auth/bind-wechat-h5`, {
         method: 'POST',
         data,
     });

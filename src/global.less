@@ -277,7 +277,32 @@ body.bc-mobile-fullscreen .bc-icp-footer {
   }
 
   .bc-admin-form-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(86px, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .bc-admin-form-summary::-webkit-scrollbar {
+    display: none;
+  }
+
+  .bc-admin-form-summary-card {
+    padding: 7px 6px;
+    border-radius: 10px;
+  }
+
+  .bc-admin-form-summary-label {
+    font-size: 10px;
+    line-height: 14px;
+  }
+
+  .bc-admin-form-summary-value {
+    margin-top: 1px;
+    font-size: 13px;
+    line-height: 18px;
   }
 
   .bc-admin-form-grid {

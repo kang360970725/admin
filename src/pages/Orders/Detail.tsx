@@ -2,6 +2,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {PageContainer} from '@ant-design/pro-components';
 import {
+    Alert,
     Button,
     Card,
     Checkbox,
@@ -161,6 +162,8 @@ const OrderDetailPage: React.FC = () => {
         return groups[0] || null;
     }, [order]);
     const renewalGroupPending = String(renewalGroup?.status || '') === 'PENDING';
+    const renewalAttributionType = String(renewalGroup?.attributionType || 'RENEWAL').toUpperCase();
+    const renewalAttributionLabel = renewalAttributionType === 'DESIGNATED' ? '指定' : '续单';
     const renewalGroupMembers = useMemo(() => {
         const snapshot = Array.isArray(renewalGroup?.memberNamesSnapshot) ? renewalGroup.memberNamesSnapshot : [];
         if (snapshot.length) {
@@ -180,7 +183,7 @@ const OrderDetailPage: React.FC = () => {
                         ? renewalGroupMembers.map((name: string, idx: number) => (
                             <Tag key={`${name}-${idx}`}>{name}</Tag>
                         ))
-                        : <Typography.Text type="secondary">未记录续单服务者</Typography.Text>}
+                        : <Typography.Text type="secondary">未记录{renewalAttributionLabel}服务者</Typography.Text>}
                 </>
             ) : (
                 <Tag>否</Tag>
@@ -429,6 +432,7 @@ const OrderDetailPage: React.FC = () => {
             deductMinutesOption: undefined,
             deductMinutesCustom: undefined,
             totalProgressWan: 0,
+            customerGameId: String(order?.customerGameId || '').trim() || undefined,
             progresses: safePs.map((p: any) => ({
                 userId: Number(p.userId),
                 progressBaseWan: 0,
@@ -491,6 +495,7 @@ const OrderDetailPage: React.FC = () => {
 
                 const payload: any = {
                     remark: values.remark || undefined,
+                    customerGameId: String(values.customerGameId || '').trim() || undefined,
                     progresses: progresses || undefined,
                 };
 
@@ -1054,7 +1059,7 @@ const OrderDetailPage: React.FC = () => {
             setToolsResult(null);
 
             if (toolsInvalidateRenewal && !toolsRenewalInvalidateReason.trim()) {
-                message.warning('请填写续单置无效原因');
+                message.warning('请填写分红归因置无效原因');
                 return;
             }
 
@@ -1317,7 +1322,7 @@ const OrderDetailPage: React.FC = () => {
             }
 
             if (renewalGroupPending && confirmRenewalInvalid && !confirmRenewalInvalidReason.trim()) {
-                message.warning('请填写续单置无效原因');
+                message.warning('请填写分红归因置无效原因');
                 return;
             }
 
@@ -2636,7 +2641,7 @@ const OrderDetailPage: React.FC = () => {
         <Card style={cardStyleMobile} bodyStyle={cardBodyMobile}>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label="计费类型">{t('BillingMode', billingMode, billingMode)}</Descriptions.Item>
-                <Descriptions.Item label="是否续单">{RenewalInfo}</Descriptions.Item>
+                <Descriptions.Item label="分红归因">{RenewalInfo}</Descriptions.Item>
                 <Descriptions.Item label="订单保底（万）">{baseAmountWan ?? '-'}</Descriptions.Item>
                 <Descriptions.Item label="付款时间">
                     {order?.paymentTime ? new Date(order?.paymentTime).toLocaleString() : '-'}
@@ -2935,7 +2940,7 @@ const OrderDetailPage: React.FC = () => {
                     <Descriptions.Item
                         label="项目">{order?.project?.name || order?.projectSnapshot?.name || '-'}</Descriptions.Item>
                     <Descriptions.Item label="计费类型">{t('BillingMode', billingMode, billingMode)}</Descriptions.Item>
-                    <Descriptions.Item label="是否续单">{RenewalInfo}</Descriptions.Item>
+                    <Descriptions.Item label="分红归因">{RenewalInfo}</Descriptions.Item>
 
                     <Descriptions.Item label="应收金额">¥{order?.receivableAmount ?? '-'}</Descriptions.Item>
                     <Descriptions.Item label="实付金额">
@@ -2972,7 +2977,15 @@ const OrderDetailPage: React.FC = () => {
                     <Descriptions.Item label="收款方式">
                         {order?.paymentChannelLabel || (order?.paymentChannel ? String(order.paymentChannel) : '-')}
                     </Descriptions.Item>
-                    <Descriptions.Item label="客户游戏ID">{order?.customerGameId ?? '-'}</Descriptions.Item>
+                    <Descriptions.Item label="客户提供内容">
+                        <Space wrap>
+                            <Tag color={String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' ? 'gold' : 'green'}>
+                                {String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' ? '昵称/房间号' : '准确游戏ID'}
+                            </Tag>
+                            <span>{order?.customerOriginalIdentifier || order?.customerGameId || '-'}</span>
+                        </Space>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="客户准确游戏ID">{order?.customerGameId ?? '-'}</Descriptions.Item>
                     <Descriptions.Item label="客户联系方式">
                         {order?.orderSource === 'MINIAPP_SELF_SERVICE' && order?.status === 'WAIT_ASSIGN'
                             ? (order?.customerUser
@@ -3454,6 +3467,25 @@ const OrderDetailPage: React.FC = () => {
                 width={isMobile ? '96vw' : 720}
             >
                 <Form form={finishForm} layout="vertical">
+                    {String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !String(order?.customerGameId || '').trim() ? (
+                        <>
+                            <Alert
+                                type="warning"
+                                showIcon
+                                style={{ marginBottom: 12 }}
+                                message="该订单由昵称/房间号派单，请先补齐客户准确游戏ID"
+                                description={`客户原始标识：${String(order?.customerOriginalIdentifier || '-').trim()}`}
+                            />
+                            <Form.Item
+                                name="customerGameId"
+                                label="客户准确游戏ID"
+                                rules={[{ required: true, message: '请填写客户准确游戏ID后再存单或结单' }]}
+                            >
+                                <Input placeholder="请输入客户不可变的游戏ID" allowClear />
+                            </Form.Item>
+                        </>
+                    ) : null}
+
                     {currentDispatch && isHourly ? (
                         <>
                             <Divider style={{ marginTop: 0 }}>小时单</Divider>
@@ -3907,7 +3939,7 @@ const OrderDetailPage: React.FC = () => {
                                 <Card size="small" style={{borderRadius: 12, border: '1px solid #bae0ff', background: '#f0f5ff'}}>
                                     <Space direction="vertical" size={8} style={{width: '100%'}}>
                                         <Space wrap>
-                                            <Typography.Text strong>续单修正</Typography.Text>
+                                            <Typography.Text strong>分红归因修正</Typography.Text>
                                             {renewalGroupMembers.map((name: string, idx: number) => (
                                                 <Tag key={`${name}-${idx}`}>{name}</Tag>
                                             ))}
@@ -3922,7 +3954,7 @@ const OrderDetailPage: React.FC = () => {
                                                 setToolsStep('INIT');
                                             }}
                                         >
-                                            确认应用重算时将续单置为无效
+                                            确认应用重算时将分红归因置为无效
                                         </Checkbox>
                                         {toolsInvalidateRenewal ? (
                                             <Input.TextArea
@@ -4359,7 +4391,7 @@ const OrderDetailPage: React.FC = () => {
                         <Card size="small" style={{borderRadius: 12, borderColor: renewalGroupPending ? '#91caff' : '#d9d9d9'}}>
                             <Space direction="vertical" size={8} style={{width: '100%'}}>
                                 <Space wrap>
-                                    <Typography.Text strong>续单归因</Typography.Text>
+                                    <Typography.Text strong>分红归因</Typography.Text>
                                     <Tag color={renewalGroupPending ? 'blue' : String(renewalGroup?.status) === 'SETTLED' ? 'green' : 'default'}>
                                         {String(renewalGroup?.status || '-')}
                                     </Tag>
@@ -4370,7 +4402,7 @@ const OrderDetailPage: React.FC = () => {
                                 {renewalGroupPending ? (
                                     <>
                                         <Typography.Text type="secondary" style={{fontSize: 12}}>
-                                            确认结单时默认按后端续单分红配置结算并到账；如核对后不是续单，可在本步骤置为无效。
+                                            确认结单时默认按后端分红配置结算并到账；如核对后归因不成立，可在本步骤置为无效。
                                         </Typography.Text>
                                         {(() => {
                                             const base = getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
@@ -4390,7 +4422,7 @@ const OrderDetailPage: React.FC = () => {
                                             checked={confirmRenewalInvalid}
                                             onChange={(e) => setConfirmRenewalInvalid(e.target.checked)}
                                         >
-                                            将本单续单置为无效
+                                            将本单分红归因置为无效
                                         </Checkbox>
                                         {confirmRenewalInvalid ? (
                                             <Input.TextArea
@@ -4403,7 +4435,7 @@ const OrderDetailPage: React.FC = () => {
                                     </>
                                 ) : (
                                     <Typography.Text type="secondary" style={{fontSize: 12}}>
-                                        当前续单状态已确定，确认结单不会重复处理续单分红。
+                                        当前分红归因状态已确定，确认结单不会重复处理分红。
                                     </Typography.Text>
                                 )}
                             </Space>

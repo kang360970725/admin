@@ -480,6 +480,10 @@ const WorkbenchPage: React.FC = () => {
     const openFinish = async (row: any, mode: 'ARCHIVE' | 'COMPLETE') => {
         await loadDictsOnce();
         setFinishMode(mode);
+        const order = row?.order || {};
+        const needCustomerGameId =
+            String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' &&
+            !String(order?.customerGameId || '').trim();
 
         // ✅ 1) 优先从 row/currentDispatch 拿本轮参与者
         let ps = participantsActive(row);
@@ -515,6 +519,7 @@ const WorkbenchPage: React.FC = () => {
             deductMinutesOption: undefined,
             deductMinutesCustom: undefined, // ✅ 自定义扣时分钟
             totalProgressWan: 0,
+            customerGameId: needCustomerGameId ? undefined : String(order?.customerGameId || '').trim() || undefined,
 
             // ✅ 关键：小时单也要带 progresses（结构跟保底单一致）
             progresses: safePs.map((p: any) => ({
@@ -587,6 +592,7 @@ const WorkbenchPage: React.FC = () => {
 
                 const payload: any = {
                     remark: values.remark || undefined,
+                    customerGameId: String(values.customerGameId || '').trim() || undefined,
                     progresses: progresses || undefined,
                 };
 
@@ -920,6 +926,9 @@ const WorkbenchPage: React.FC = () => {
 
         // 进行中
         const customerId = order?.customerGameId || '-';
+        const originalIdentifier = order?.customerOriginalIdentifier || order?.customerGameId || '-';
+        const customerIdentifierType = String(order?.customerIdentifierType || 'GAME_ID').toUpperCase();
+        const isAliasIdentifier = customerIdentifierType === 'ALIAS';
         const wmText =
             `${currentUser?.name ?? ''} ${currentUser?.username || maskPhone(currentUser?.phone) || ''}`.trim() || 'BlueCat';
         const extra = buildAcceptedExtraInfo(poolDispatch);
@@ -938,17 +947,26 @@ const WorkbenchPage: React.FC = () => {
                         <Descriptions.Item label="派单时间">{assignedAt}</Descriptions.Item>
                         <Descriptions.Item label="派单客服">{dispatcherText}</Descriptions.Item>
 
-                        <Descriptions.Item label="客户ID（可复制）" span={isMobile ? 1 : 2}>
+                        <Descriptions.Item label={isAliasIdentifier ? '客户原始标识' : '客户ID（可复制）'} span={isMobile ? 1 : 2}>
                             <Space wrap>
-                                <Tag color="red">{String(customerId)}</Tag>
+                                <Tag color={isAliasIdentifier ? 'gold' : 'red'}>
+                                    {isAliasIdentifier ? '昵称/房间号' : '准确游戏ID'}
+                                </Tag>
+                                <Tag color="red">{String(isAliasIdentifier ? originalIdentifier : customerId)}</Tag>
                                 <Button
                                     size="small"
-                                    onClick={() => navigator?.clipboard?.writeText?.(String(customerId))}
+                                    onClick={() => navigator?.clipboard?.writeText?.(String(isAliasIdentifier ? originalIdentifier : customerId))}
                                 >
                                     复制
                                 </Button>
                             </Space>
                         </Descriptions.Item>
+
+                        {isAliasIdentifier && customerId !== '-' ? (
+                            <Descriptions.Item label="已补客户游戏ID" span={isMobile ? 1 : 2}>
+                                <Tag color="green">{String(customerId)}</Tag>
+                            </Descriptions.Item>
+                        ) : null}
 
                         {extra.isGuaranteed ? (
                             <>
@@ -1101,6 +1119,25 @@ const WorkbenchPage: React.FC = () => {
                         width={isMobile ? '96vw' : 720}
                     >
                         <Form form={finishForm} layout="vertical">
+                            {poolDispatch && String(poolDispatch?.order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !String(poolDispatch?.order?.customerGameId || '').trim() ? (
+                                <>
+                                    <Alert
+                                        type="warning"
+                                        showIcon
+                                        style={{ marginBottom: 12 }}
+                                        message="该订单由昵称/房间号派单，请先补齐客户准确游戏ID"
+                                        description={`客户原始标识：${String(poolDispatch?.order?.customerOriginalIdentifier || '-').trim()}`}
+                                    />
+                                    <Form.Item
+                                        name="customerGameId"
+                                        label="客户准确游戏ID"
+                                        rules={[{ required: true, message: '请填写客户准确游戏ID后再存单或结单' }]}
+                                    >
+                                        <Input placeholder="请输入客户不可变的游戏ID" allowClear />
+                                    </Form.Item>
+                                </>
+                            ) : null}
+
                             {poolDispatch && isHourly(poolDispatch) ? (
                                 <>
                                     <Divider style={{ marginTop: 0 }}>小时单</Divider>
