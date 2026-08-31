@@ -218,6 +218,7 @@ export default function OrderUpsertModal(props: {
     onSubmit: (payload: OrderUpsertValues) => Promise<void>;
 }) {
     const { open, title, initialValues, showPlayers, onCancel, onSubmit } = props;
+    const receiptLocked = Boolean(initialValues?.id && initialValues?.isPaid);
 
     const [form] = Form.useForm<OrderUpsertValues>();
     const isMobile = useIsMobile(768);
@@ -433,7 +434,7 @@ export default function OrderUpsertModal(props: {
             const total = Number(p.price) * q;
             form?.setFieldsValue?.({
                 receivableAmount: total,
-                paidAmount: calcPayableAfterCoupon(total, form?.getFieldValue?.('userCouponId' as any), id),
+                paidAmount: receiptLocked ? initialValues?.paidAmount : calcPayableAfterCoupon(total, form?.getFieldValue?.('userCouponId' as any), id),
                 settlementAmount: calcPayableAfterCoupon(total, form?.getFieldValue?.('userCouponId' as any), id),
             } as any);
         }
@@ -540,7 +541,7 @@ export default function OrderUpsertModal(props: {
         const projectId = Number(form?.getFieldValue?.('projectId' as any) || 0);
         const payable = calcPayableAfterCoupon(receivable, couponId, projectId);
         form?.setFieldsValue?.({
-            paidAmount: payable,
+            paidAmount: receiptLocked ? initialValues?.paidAmount : payable,
             settlementAmount: payable,
         } as any);
     };
@@ -746,7 +747,7 @@ export default function OrderUpsertModal(props: {
                 projectId: Number(v?.projectId),
 
                 receivableAmount: Number(v?.receivableAmount),
-                paidAmount: Number(v?.paidAmount),
+                paidAmount: Number(receiptLocked ? initialValues?.paidAmount : v?.paidAmount),
                 settlementAmount: v?.settlementAmount != null ? Number(v?.settlementAmount) : Number(v?.paidAmount),
                 manualAdjustAmount:
                     v?.userCouponId != null && v?.userCouponId !== ''
@@ -769,7 +770,7 @@ export default function OrderUpsertModal(props: {
                 paymentChannel: paymentChannel || undefined,
 
                 orderTime: v?.orderTime ? dayjs(v.orderTime).toISOString() : now.toISOString(),
-                paymentTime: v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString(),
+                paymentTime: receiptLocked ? initialValues?.paymentTime : (v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString()),
 
                 inviter: (isRenewal || isDesignated) ? undefined : (v?.inviter?.trim?.() || undefined),
 
@@ -1061,11 +1062,11 @@ export default function OrderUpsertModal(props: {
                     </Col>
 
                     <Col {...compactColProps}>
-                        <Form.Item name="paidAmount" label="实收金额" rules={[{ required: true, message: '请输入实收金额' }]}>
+                        <Form.Item name="paidAmount" label="实收金额" tooltip={receiptLocked ? '已收款金额不可直接编辑，请通过补收或退款流程处理' : undefined} rules={[{ required: true, message: '请输入实收金额' }]}>
                             <InputNumber
                                 min={0}
                                 style={{ width: '100%' }}
-                                disabled={watchedUserCouponId > 0}
+                                disabled={receiptLocked || watchedUserCouponId > 0}
                                 placeholder={showQtyForHourly ? '随小时自动计算' : '随项目自动同步'}
                             />
                         </Form.Item>
@@ -1129,7 +1130,7 @@ export default function OrderUpsertModal(props: {
                             <DatePicker
                                 showTime
                                 style={{ width: '100%' }}
-                                disabled={!watchedIsPaid}
+                                disabled={receiptLocked || !watchedIsPaid}
                                 placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
                             />
                         </Form.Item>

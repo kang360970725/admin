@@ -3784,6 +3784,7 @@ const OrderDetailPage: React.FC = () => {
                 title="编辑订单"
                 initialValues={{
                     id: order?.id,
+                    isPaid: order?.isPaid,
                     projectId: order?.projectId,
                     receivableAmount: order?.receivableAmount,
                     paidAmount: order?.paidAmount,

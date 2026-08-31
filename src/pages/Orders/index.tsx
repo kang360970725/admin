@@ -170,7 +170,7 @@ const OrdersPage: React.FC = () => {
                 return;
             }
 
-            const date = dayjs().format('YYYY-MM-DD');
+            const date = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
             const [dailyRes] = await Promise.allSettled([
                 postFinanceReconciliation({ startDate: date, endDate: date }),
             ]);
@@ -595,15 +595,15 @@ const OrdersPage: React.FC = () => {
             >
                 <Space direction="vertical" size={isMobile ? 6 : 8} style={{width: '100%'}}>
                     <Row gutter={[8, 8]}>
-                        <Col xs={12} sm={8}>
+                        <Col xs={12} sm={6}>
                             <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
                                 <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>今日订单</div>
                                 <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
-                                    {Number(todayOverview?.orderCount || 0)}
+                                    {Number(todayOverview?.allOrderCount || 0)}
                                 </div>
                             </div>
                         </Col>
-                        <Col xs={12} sm={8}>
+                        <Col xs={12} sm={6}>
                             <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
                                 <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>今日营收</div>
                                 <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
@@ -611,11 +611,19 @@ const OrdersPage: React.FC = () => {
                                 </div>
                             </div>
                         </Col>
-                        <Col xs={12} sm={8}>
+                        <Col xs={12} sm={6}>
                             <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
                                 <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>收钱吧</div>
                                 <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
                                     ¥{Number(todayOverview?.manualReceiptAmountTotal || 0).toFixed(2)}
+                                </div>
+                            </div>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                            <div style={{padding: isMobile ? '4px 8px' : '6px 10px', borderRadius: 8, background: '#fafafa', border: '1px solid #f0f0f0'}}>
+                                <div style={{fontSize: 11, color: 'rgba(0,0,0,.45)', lineHeight: 1.1}}>会员充值实收</div>
+                                <div style={{fontSize: isMobile ? 16 : 18, fontWeight: 600, lineHeight: 1.15}}>
+                                    ¥{Number(todayOverview?.rechargeAmountTotal || 0).toFixed(2)}
                                 </div>
                             </div>
                         </Col>
@@ -631,7 +639,7 @@ const OrdersPage: React.FC = () => {
                                 children: (
                                     <Space direction="vertical" size={6} style={{width: '100%'}}>
                                         <div style={{fontSize: 12, color: 'rgba(0,0,0,.45)'}}>
-                                            统计按付款时间计算。仅展示今日经营数据与收钱吧总额。
+                                            按北京时间收款当日统计，补收不回补原付款日。今日营收含会员充值实收，不含赠送余额，储值消费不重复计收入；金额为退款前收款。今日订单为当日有收款或储值消费的去重订单数。
                                         </div>
                                     </Space>
                                 ),

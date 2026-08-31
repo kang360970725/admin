@@ -237,6 +237,12 @@ export default defineConfig({
           component: '@/pages/Finance/EquipmentRentalFees',
           access: 'canViewFinanceEquipmentRentalFees',
         },
+        {
+          path: '/finance/rental-orders',
+          name: '租号订单',
+          component: '@/pages/Finance/RentalOrders',
+          access: 'canViewRentalOrders',
+        },
       ],
     },
 

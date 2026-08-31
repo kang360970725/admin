@@ -49,6 +49,10 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewWalletOverview = has('wallet:overview:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet;
 
   return {
+    canViewRentalOrders: isSuperAdmin || has('rental-orders:page'),
+    canCreateRentalOrder: isSuperAdmin || has('rental-orders:create:button'),
+    canSettleRentalOrder: isSuperAdmin || has('rental-orders:settle:button'),
+    canVoidRentalOrder: isSuperAdmin || has('rental-orders:void:button'),
     // 系统管理
     canViewRoleManagement: has('system:role:page'),
     canViewPermissionManagement: has('system:permission:page'),

@@ -14,6 +14,7 @@ import UserWalletDrawer from './components/UserWalletDrawer';
 import {useIsMobile} from '@/utils/useIsMobile';
 import {generateMemberRechargeReceiptImage} from '@/utils/receiptImage';
 import { maskPhone } from '@/utils/privacy';
+import CreateRentalOrderModal from '@/pages/Finance/RentalOrders/CreateRentalOrderModal';
 
 const formatDaysAgo = (date?: string) => {
     if (!date) return '从未';
@@ -171,6 +172,7 @@ export default function UsersPage() {
     const location = useLocation();
     const isMobile = useIsMobile(768);
     const [createModalVisible, setCreateModalVisible] = useState(false);
+    const [rentalOrderStaff, setRentalOrderStaff] = useState<any>(null);
     const [editModalVisible, setEditModalVisible] = useState(false);
     const [changeLevelModalVisible, setChangeLevelModalVisible] = useState(false);
     const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false);
@@ -1277,7 +1279,7 @@ export default function UsersPage() {
                 const deposit = Number(wallet?.depositBalance ?? 0);
                 const withdrawFrozen = Number(wallet?.withdrawFrozenBalance ?? 0);
                 const nonWithdrawFrozen = Number(wallet?.nonWithdrawFrozenBalance ?? Math.max(0, frozen - withdrawFrozen));
-                const reference = Number(wallet?.rentalRiskReferenceBalance ?? (available + nonWithdrawFrozen + deposit));
+                const reference = Number(wallet?.rentalRiskReferenceBalance ?? (available + nonWithdrawFrozen));
                 const risk = getRentalRiskLevel(reference);
                 return (
                     <Tooltip title={risk.desc}>
@@ -1300,7 +1302,7 @@ export default function UsersPage() {
                                     </span>
                                 </div>
                                 <div style={{ color: '#999', fontSize: 12 }}>
-                                    参考=可用+非提现冻结+保证金
+                                    参考=可用+非提现冻结（不含保证金）
                                 </div>
                             </div>
                         </div>
@@ -1498,12 +1500,34 @@ export default function UsersPage() {
             search: false,
             width: 200,
             fixed: 'right',
-            hideInTable: isRentalRiskScene,
-            render: (_: any, record: any) => renderActionButtons(record),
+            hideInTable: isRentalRiskScene && !access.canCreateRentalOrder,
+            render: (_: any, record: any) => isRentalRiskScene
+                ? <Button type="link" disabled={!['ACTIVE', 'FROZEN'].includes(record.staffEmploymentStatus) || record.status === 'DISABLED'} onClick={() => setRentalOrderStaff(record)}>快捷创建租号订单</Button>
+                : renderActionButtons(record),
         },
     ].filter(Boolean) as any[];
 
-    const tableColumns = isMobile && sceneConfig.key === 'STAFF'
+    const tableColumns = isMobile && isRentalRiskScene ? [
+        ...columns.filter((column) => column.search !== false && column.valueType !== 'option')
+            .map((column) => ({ ...column, hideInTable: true, fixed: undefined })),
+        { title: '服务者租号风控', key: 'rentalRiskMobile', search: false, render: (_: any, record: any) => {
+            const wallet = record.wallet || {};
+            const available = Number(wallet.availableBalance || 0);
+            const earning = Number(wallet.earningFrozenBalance ?? wallet.nonWithdrawFrozenBalance ?? Math.max(0, Number(wallet.frozenBalance || 0) - Number(wallet.withdrawFrozenBalance || 0)));
+            const reference = Number(wallet.rentalRiskReferenceBalance ?? (available + earning));
+            const risk = getRentalRiskLevel(reference);
+            return <div className="rental-mobile-record">
+                <div className="rental-record-heading"><div><strong>{record.nickname || record.name || '-'}</strong><div style={{ color: '#888', fontSize: 12 }}>ID {record.id} · {maskPhone(record.phone)}</div>{getStaffEmploymentTag(record)}</div><Tag color={risk.tagColor as any}>{risk.text}</Tag></div>
+                <Statistic title="租号参考资产" value={reference} precision={2} prefix="¥" valueStyle={{ color: risk.color, marginBottom: 16 }} />
+                <div className="rental-record-facts">
+                    <div><label>可用余额</label>¥{available.toFixed(2)}</div><div><label>收益冻结</label>¥{earning.toFixed(2)}</div>
+                    <div><label>提现冻结（不计入）</label>¥{Number(wallet.withdrawFrozenBalance || 0).toFixed(2)}</div><div><label>平台保证金（不计入）</label>¥{Number(wallet.depositBalance || 0).toFixed(2)}</div>
+                </div>
+                <div style={{ marginTop: 12, fontSize: 12, color: '#888' }}>{risk.desc}</div>
+                {access.canCreateRentalOrder && <div className="rental-record-actions"><Button type="primary" disabled={!['ACTIVE', 'FROZEN'].includes(record.staffEmploymentStatus) || record.status === 'DISABLED'} onClick={() => setRentalOrderStaff(record)}>快捷创建租号订单</Button></div>}
+            </div>;
+        } },
+    ] : isMobile && sceneConfig.key === 'STAFF'
         ? [
             ...columns
                 .filter((column) => column?.hideInTable)
@@ -1543,14 +1567,15 @@ export default function UsersPage() {
                     : access.canCreateUser;
 
     return (
-        <PageContainer title={sceneConfig.title}>
+        <PageContainer className={isRentalRiskScene ? 'rental-page' : undefined} title={sceneConfig.title}>
+            <CreateRentalOrderModal staff={rentalOrderStaff} onClose={() => setRentalOrderStaff(null)} onSuccess={() => actionRef.current?.reload()} />
             {isRentalRiskScene ? (
                 <Alert
                     type="info"
                     showIcon
                     style={{ marginBottom: 12 }}
                     message="租号放号风控参考"
-                    description="风控参考余额 = 可用余额 + 非提现冻结金额 + 保证金。提现冻结金额不纳入参考，结算冻结等未解冻收益可作为后续可释放资产参考。红色低于500，黄色500-1000，绿色1000以上。"
+                    description="租号参考资产 = 可用余额 + 非提现冻结金额，不含提现冻结及平台保证金。创建时按真实有效冻结重新校验，租金和租号押金均需覆盖。红色低于500，黄色500-1000，绿色1000以上。"
                 />
             ) : null}
 
@@ -1640,7 +1665,8 @@ export default function UsersPage() {
             ) : null}
             <ProTable
                 columns={tableColumns}
-                scroll={isMobile && sceneConfig.key === 'STAFF' ? undefined : { x: 'max-content' }}
+                scroll={isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? undefined : { x: 'max-content' }}
+                showHeader={!(isMobile && isRentalRiskScene)}
                 manualRequest={isRentalRiskScene}
                 request={async (params) => {
                     try {
@@ -1737,8 +1763,10 @@ export default function UsersPage() {
                 ]}
                 pagination={{
                     pageSize: isMobile && sceneConfig.key === 'STAFF' ? 10 : 20,
+                    simple: isMobile && isRentalRiskScene,
+                    showSizeChanger: isMobile && isRentalRiskScene ? false : undefined,
                 }}
-                options={isMobile && sceneConfig.key === 'STAFF' ? { density: false, fullScreen: false, reload: true, setting: false } : undefined}
+                options={isMobile && (sceneConfig.key === 'STAFF' || isRentalRiskScene) ? { density: false, fullScreen: false, reload: true, setting: false } : undefined}
                 actionRef={actionRef}
             />
 

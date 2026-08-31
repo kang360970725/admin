@@ -1,0 +1,61 @@
+.rental-modal {
+  top: 24px;
+  padding-bottom: 24px;
+  .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+  .ant-modal-header, .ant-modal-footer { flex-shrink: 0; }
+  .ant-modal-title { padding-right: 28px; overflow-wrap: anywhere; }
+  .ant-modal-body { overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 8px 2px; overscroll-behavior: contain; }
+  .ant-modal-footer { border-top: 1px solid rgba(128, 128, 128, .15); padding-top: 16px; margin-top: 12px; }
+  .ant-form-item { margin-bottom: 16px; }
+  .ant-input-number, .ant-input-number-group-wrapper, .ant-picker { width: 100%; }
+  .ant-statistic-content { overflow-wrap: anywhere; }
+}
+.rental-form-section {
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(128, 128, 128, .18);
+  border-radius: 12px;
+  .ant-row > .ant-col > .ant-form-item:last-child { margin-bottom: 0; }
+}
+.rental-section-heading {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px;
+  > strong { font-size: 15px; }
+  > span { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+}
+.rental-mobile-record {
+  min-width: 0; overflow-wrap: anywhere;
+  .rental-record-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .rental-record-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .rental-record-facts label { display: block; color: #888; font-size: 12px; margin-bottom: 3px; }
+  .rental-record-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .rental-record-actions .ant-btn { flex: 1; min-height: 40px; }
+}
+.rental-detail { .ant-descriptions-item-content, .ant-descriptions-item-label { overflow-wrap: anywhere; } }
+@media (max-width: 767px) {
+  body:has(.rental-page) .ant-pro-global-header-right-content { min-width: 0; }
+  body:has(.rental-page) .bm-user-name { display: none; }
+  body:has(.rental-page) .ant-pro-global-header-header-actions .ant-btn > span:not(.anticon) {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .rental-modal.ant-modal { top: 0; width: 100% !important; max-width: 100%; margin: 0; padding: 0; }
+  .rental-modal .ant-modal-content { height: 100dvh; max-height: 100dvh; border-radius: 0; padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .rental-modal .ant-modal-body { flex: 1; }
+  .rental-modal .ant-modal-footer { display: flex; gap: 8px; }
+  .rental-modal .ant-modal-footer .ant-btn { margin: 0; height: 44px; }
+  .rental-modal .ant-modal-footer .ant-btn-primary { flex: 1; }
+  .rental-modal .ant-input, .rental-modal .ant-input-number-input, .rental-modal .ant-picker input { font-size: 16px; }
+  .rental-modal .ant-input-number-input { height: 40px; }
+  .rental-modal .ant-picker { min-height: 42px; }
+  .rental-form-section { padding: 12px; }
+  .rental-page .ant-pro-page-container-children-container { margin: 12px; padding: 0; }
+  .rental-page .ant-pro-table-search { padding: 12px 12px 0; }
+  .rental-page .ant-pro-card-body { padding: 12px; }
+  .rental-page .ant-pro-table-list-toolbar-container { flex-wrap: wrap; gap: 8px; }
+  .rental-page .ant-pro-table-list-toolbar-right { flex-wrap: wrap; }
+  .rental-page .ant-table { table-layout: fixed; }
+  .rental-page .ant-table-cell { padding: 12px !important; }
+  .rental-page .ant-statistic-content { font-size: 21px; overflow-wrap: anywhere; }
+  .rental-page .ant-pagination { flex-wrap: wrap; }
+  .rental-detail .ant-drawer-body { padding: 16px; }
+  .rental-detail .ant-descriptions-item-label { width: 100px; }
+}

@@ -382,6 +382,14 @@ const WithdrawalsPage: React.FC = () => {
                                     <div className="bc-admin-form-summary-label">冻结余额</div>
                                     <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.frozenBalance || 0).toFixed(2)}</div>
                                 </div>
+                                <div className="bc-admin-form-summary-card info">
+                                    <div className="bc-admin-form-summary-label">非提现净资产（不含保证金）</div>
+                                    <div className="bc-admin-form-summary-value">¥{(Number(currentRow?.wallet?.availableBalance || 0) + Number(currentRow?.wallet?.earningFrozenBalance || 0)).toFixed(2)}</div>
+                                </div>
+                                <div className="bc-admin-form-summary-card warning">
+                                    <div className="bc-admin-form-summary-label">提现冻结 / 收益冻结</div>
+                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.withdrawFrozenBalance || 0).toFixed(2)} / ¥{Number(currentRow?.wallet?.earningFrozenBalance || 0).toFixed(2)}</div>
+                                </div>
                             </div>
 
                             <div className="bc-admin-form-section">
@@ -389,7 +397,7 @@ const WithdrawalsPage: React.FC = () => {
                                 <Alert
                                     type={reviewError.includes('钱包冻结余额存在缺口') ? 'error' : 'info'}
                                     showIcon
-                                    message={reviewError || '如遇冻结余额缺口，可直接进入单用户异常修复页排查'}
+                                    message={reviewError || '已有提现按预留资金和资产覆盖审核：可用余额可为负，但须由有效收益冻结覆盖；提现冻结须完整。展示为参考，提交时重新核验。'}
                                     action={
                                         <Button
                                             size="small"

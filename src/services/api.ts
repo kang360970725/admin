@@ -11,6 +11,12 @@ const API_BASE =
         ? (process.env.API_BASE || 'https://api.lmsdclub.cn')
         : '/api';
 
+export const listRentalOrders = (params: any) => request<any>(`${API_BASE}/admin/rental-orders`, { params });
+export const getRentalOrder = (id: number) => request<any>(`${API_BASE}/admin/rental-orders/${id}`);
+export const createRentalOrder = (data: any) => request<any>(`${API_BASE}/admin/rental-orders`, { method: 'POST', data });
+export const settleRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/settle`, { method: 'POST', data });
+export const voidRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/void`, { method: 'POST', data });
+
 export function getRealtimeStreamUrl(token: string) {
     const safeToken = encodeURIComponent(String(token || '').trim());
     return `${API_BASE}/notifications/my/realtime/stream?token=${safeToken}`;
