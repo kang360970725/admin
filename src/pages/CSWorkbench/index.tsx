@@ -1776,6 +1776,8 @@ export default function CSWorkbenchPage() {
                         paidAmount: payload?.paidAmount,
                         settlementAmount: payload?.settlementAmount,
                         baseAmountWan: payload?.baseAmountWan ?? undefined,
+                        customerIdentifierType: payload?.customerIdentifierType,
+                        customerOriginalIdentifier: payload?.customerOriginalIdentifier,
                         customerGameId: payload?.customerGameId,
                         customerUserId: payload?.customerUserId != null ? Number(payload.customerUserId) : undefined,
                         paymentChannel: payload?.paymentChannel,

@@ -203,7 +203,7 @@ const OrdersPage: React.FC = () => {
     const confirmDeleteOrder = (row: any) => {
         Modal.confirm({
             title: '删除订单',
-            content: '该操作将删除当前订单记录。已存在强外键关联的数据会按数据库规则自动处理，操作不可撤销。',
+            content: '该订单已退款，删除后相关订单记录不可恢复，请确认是否继续。',
             okText: '确认删除',
             okButtonProps: { danger: true },
             cancelText: '取消',
@@ -350,7 +350,7 @@ const OrdersPage: React.FC = () => {
                                     确认收款
                                 </Button>
                             ) : null}
-                            {hasOrderPermission('orders:list:delete:button') ? (
+                            {hasOrderPermission('orders:list:delete:button') && String(row?.status).toUpperCase() === 'REFUNDED' ? (
                                 <Button size="small" danger onClick={() => confirmDeleteOrder(row)}>
                                     删除
                                 </Button>
@@ -551,7 +551,7 @@ const OrdersPage: React.FC = () => {
                     >
                         详情
                     </a>,
-                    hasOrderPermission('orders:list:delete:button') ? (
+                    hasOrderPermission('orders:list:delete:button') && String(row?.status).toUpperCase() === 'REFUNDED' ? (
                         <a
                             key="delete"
                             style={{ color: '#ff4d4f' }}
@@ -890,6 +890,8 @@ const OrdersPage: React.FC = () => {
                         paidAmount: payload?.paidAmount,
                         settlementAmount: payload?.settlementAmount,
                         baseAmountWan: payload?.baseAmountWan ?? undefined,
+                        customerIdentifierType: payload?.customerIdentifierType,
+                        customerOriginalIdentifier: payload?.customerOriginalIdentifier,
                         customerGameId: payload?.customerGameId,
                         customerUserId: payload?.customerUserId != null ? Number(payload.customerUserId) : undefined,
                         orderSource: payload?.orderSource,

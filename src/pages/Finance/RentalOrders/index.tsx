@@ -52,7 +52,7 @@ export default function RentalOrdersPage() {
       search={{ labelWidth: 'auto', span: isMobile ? 24 : undefined, defaultCollapsed: false, collapseRender: isMobile ? false : undefined }}
       options={isMobile ? false : undefined} showHeader={!isMobile}
       headerTitle="租号订单记录" pagination={{ defaultPageSize: 20, simple: isMobile, showSizeChanger: !isMobile }}
-      toolBarRender={() => access.canViewStaffRentalRisk ? [<Button key="create" onClick={() => history.push('/users/rental-risk')}>查询服务者并创建</Button>] : []}
+      toolBarRender={() => access.canViewStaffRentalRisk ? [<Button key="create" onClick={() => history.push('/merchant-business/rental-risk')}>查询服务者并创建</Button>] : []}
       request={async ({ current, pageSize, ...params }) => {
         const result = await listRentalOrders({ page: current, limit: pageSize, ...params });
         setStats(result.stats); setServerOffset(new Date(result.serverNow).getTime() - Date.now());

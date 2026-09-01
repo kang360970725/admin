@@ -230,6 +230,7 @@ export default function UsersPage() {
         '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
         '/users/staff': { key: 'STAFF', title: '服务者管理', defaultUserType: 'STAFF', showStaffRating: true, showWorkMetrics: true },
         '/users/rental-risk': { key: 'STAFF_RENTAL_RISK', title: '租号风控查询', defaultUserType: 'STAFF', showStaffRating: false, showWorkMetrics: false, readOnly: true },
+        '/merchant-business/rental-risk': { key: 'STAFF_RENTAL_RISK', title: '租号风控查询', defaultUserType: 'STAFF', showStaffRating: false, showWorkMetrics: false, readOnly: true },
         '/users/internal': { key: 'INTERNAL', title: '后台人员管理', showStaffRating: false, showWorkMetrics: false },
         '/users/all': { key: 'ALL', title: '全部用户', showStaffRating: true, showWorkMetrics: true },
     };

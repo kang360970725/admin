@@ -246,10 +246,12 @@ export default defineConfig({
       icon: 'ShopOutlined',
       access: 'canViewMerchantBusiness',
       routes: [
-        { path: '/users/rental-risk', name: '租号风控查询', component: '@/pages/Users', access: 'canViewStaffRentalRisk' },
-        { path: '/finance/rental-orders', name: '租号订单', component: '@/pages/Finance/RentalOrders', access: 'canViewRentalOrders' },
+        { path: '/merchant-business/rental-risk', name: '租号风控查询', component: '@/pages/Users', access: 'canViewStaffRentalRisk' },
+        { path: '/merchant-business/rental-orders', name: '租号订单', component: '@/pages/Finance/RentalOrders', access: 'canViewRentalOrders' },
       ],
     },
+    { path: '/users/rental-risk', redirect: '/merchant-business/rental-risk', hideInMenu: true },
+    { path: '/finance/rental-orders', redirect: '/merchant-business/rental-orders', hideInMenu: true },
 
     {
       path: '/staff',
