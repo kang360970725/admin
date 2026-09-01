@@ -110,6 +110,7 @@ const AnnouncementsPage: React.FC = () => {
     setContentHtml(initContent);
     form.setFieldsValue({
       forceRead: false,
+      forceReadOnce: false,
       enabled: true,
       audience: 'ALL',
       content: initContent,
@@ -125,6 +126,7 @@ const AnnouncementsPage: React.FC = () => {
       content: row.content,
       audience: row.audience || 'ALL',
       forceRead: row.forceRead,
+      forceReadOnce: row.forceReadOnce,
       enabled: row.enabled,
       publishAt: row.publishAt ? dayjs(row.publishAt) : null,
       expireAt: row.expireAt ? dayjs(row.expireAt) : null,
@@ -150,7 +152,11 @@ const AnnouncementsPage: React.FC = () => {
       dataIndex: 'forceRead',
       width: 110,
       search: false,
-      render: (_, row) => (row.forceRead ? <Tag color="red">是</Tag> : <Tag>否</Tag>),
+      render: (_, row) => row.forceRead
+        ? <Tag color="red">每次</Tag>
+        : row.forceReadOnce
+          ? <Tag color="orange">首次未读</Tag>
+          : <Tag>否</Tag>,
     },
     {
       title: '状态',
@@ -241,6 +247,7 @@ const AnnouncementsPage: React.FC = () => {
               content: normalizedContent,
               audience: values.audience,
               forceRead: Boolean(values.forceRead),
+              forceReadOnce: Boolean(values.forceReadOnce),
               enabled: Boolean(values.enabled),
               publishAt: values.publishAt ? dayjs(values.publishAt).toISOString() : undefined,
               expireAt: values.expireAt ? dayjs(values.expireAt).toISOString() : undefined,
@@ -325,7 +332,11 @@ const AnnouncementsPage: React.FC = () => {
           </Form.Item>
 
           <Space style={{ width: '100%' }}>
-            <Form.Item label="强制阅读" name="forceRead" valuePropName="checked">
+            <Form.Item label="每次进入强制阅读" name="forceRead" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+
+            <Form.Item label="首次强制阅读（仅未读）" name="forceReadOnce" valuePropName="checked">
               <Switch />
             </Form.Item>
 

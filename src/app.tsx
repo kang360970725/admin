@@ -311,18 +311,16 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
     const [versionManifest, setVersionManifest] = React.useState<VersionManifest | null>(null);
     const [versionModalOpen, setVersionModalOpen] = React.useState(false);
     const [forceReadReachedBottom, setForceReadReachedBottom] = React.useState(false);
+    const [announcementReadReachedBottom, setAnnouncementReadReachedBottom] = React.useState(false);
     const realtimeEventSourceRef = React.useRef<EventSource | null>(null);
     const realtimeLeaderTimerRef = React.useRef<number | null>(null);
     const realtimeTabIdRef = React.useRef(`tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
     const [realtimeStreamDegraded, setRealtimeStreamDegraded] = React.useState(false);
     const forceReadContentRef = React.useRef<HTMLDivElement | null>(null);
+    const announcementContentRef = React.useRef<HTMLDivElement | null>(null);
     const versionPromptedRef = React.useRef<string>('');
     const [isRealtimeLeader, setIsRealtimeLeader] = React.useState(false);
     const isDevEnv = String(process.env.UMI_ENV || '') === 'development';
-    const forceQueue = React.useMemo(
-        () => forceUnread.filter((item) => !confirmedForceIds.includes(Number(item?.id))),
-        [forceUnread, confirmedForceIds],
-    );
     const currentUser = React.useMemo(() => {
         try {
             const raw = localStorage.getItem('currentUser');
@@ -332,6 +330,13 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         }
     }, []);
     const isCustomerService = String(currentUser?.userType || '') === 'CUSTOMER_SERVICE';
+    const forceQueue = React.useMemo(
+        () => forceUnread.filter((item) => (
+            !confirmedForceIds.includes(Number(item?.id))
+            && (!isCustomerService || Boolean(item?.forceReadOnce))
+        )),
+        [forceUnread, confirmedForceIds, isCustomerService],
+    );
     const isStaffUser = String(currentUser?.userType || '') === 'STAFF';
     const activePenaltyTicket = penaltyPendingTickets[0] || null;
     const penaltyForceOpen = isStaffUser && penaltyPendingTickets.length > 0;
@@ -347,6 +352,12 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         if (!el) return;
         const reached = el.scrollHeight - el.scrollTop - el.clientHeight <= 8;
         setForceReadReachedBottom(reached);
+    }, []);
+
+    const checkAnnouncementReadReachedBottom = React.useCallback(() => {
+        const el = announcementContentRef.current;
+        if (!el) return;
+        setAnnouncementReadReachedBottom(el.scrollHeight - el.scrollTop - el.clientHeight <= 8);
     }, []);
 
     const isPenaltyForceItem = React.useCallback((item?: RealtimeNotificationItem | null) => {
@@ -386,6 +397,13 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
         const timer = window.setTimeout(() => checkForceReadReachedBottom(), 0);
         return () => window.clearTimeout(timer);
     }, [currentForceAnnouncement?.id, checkForceReadReachedBottom]);
+
+    React.useEffect(() => {
+        setAnnouncementReadReachedBottom(false);
+        if (!announcementOpen || !selectedAnnouncement) return;
+        const timer = window.setTimeout(() => checkAnnouncementReadReachedBottom(), 0);
+        return () => window.clearTimeout(timer);
+    }, [announcementOpen, selectedAnnouncement?.id, checkAnnouncementReadReachedBottom]);
 
     const loadPenaltyPendingTickets = React.useCallback(async () => {
         const token = String(localStorage.getItem('token') || '').trim();
@@ -965,6 +983,7 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                                                     <Space size={6} wrap>
                                                         <Text strong={!item.isRead}>{item.title || '-'}</Text>
                                                         {item.forceRead ? <Text type="danger">强制阅读</Text> : null}
+                                                        {item.forceReadOnce ? <Text type="warning">首次强制</Text> : null}
                                                         {!item.isRead ? <Badge status="processing" text="未读" /> : null}
                                                     </Space>
                                                     <Text className="bc-announcement-summary" type="secondary">
@@ -986,12 +1005,14 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                                                 </Typography.Title>
                                                 <Space size={8} wrap style={{ marginTop: 6 }}>
                                                     {selectedAnnouncement.forceRead ? <Text type="danger">强制阅读</Text> : null}
+                                                    {selectedAnnouncement.forceReadOnce ? <Text type="warning">首次强制</Text> : null}
                                                     <Text type="secondary">{selectedAnnouncement.isRead ? '已读' : '未读'}</Text>
                                                 </Space>
                                             </div>
                                             {!selectedAnnouncement.isRead ? (
                                                 <Button
                                                     type="primary"
+                                                    disabled={Boolean(selectedAnnouncement.forceReadOnce) && !announcementReadReachedBottom}
                                                     onClick={async () => {
                                                         await readAnnouncement({ announcementId: selectedAnnouncement.id });
                                                         await loadAnnouncements();
@@ -1002,6 +1023,8 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                                             ) : null}
                                         </div>
                                         <div
+                                            ref={announcementContentRef}
+                                            onScroll={checkAnnouncementReadReachedBottom}
                                             className="bc-announcement-content"
                                             dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content || '' }}
                                         />
@@ -1016,10 +1039,9 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
                     </Modal>
 
                     <Modal
-                        title="强制阅读公告（每次进入需确认）"
-                        // 客服不自动强弹，避免在订单详情/列表频繁跳转时影响效率；
-                        // 客服仍可在“公告中心”查看并手动已读。
-                        open={!versionModalOpen && !isCustomerService && forceQueue.length > 0}
+                        title={currentForceAnnouncement?.forceReadOnce ? '首次强制阅读公告' : '强制阅读公告（每次进入需确认）'}
+                        // 客服免除“每次进入”强弹，但首次未读公告仍需强制阅读。
+                        open={!versionModalOpen && forceQueue.length > 0}
                         closable={false}
                         maskClosable={false}
                         width="min(960px, calc(100vw - 32px))"

@@ -2479,6 +2479,7 @@ export interface SystemAnnouncementItem {
     content: string;
     audience: 'ADMIN' | 'APPLET' | 'ALL';
     forceRead: boolean;
+    forceReadOnce: boolean;
     enabled: boolean;
     publishAt?: string | null;
     expireAt?: string | null;
@@ -2693,6 +2694,7 @@ export async function adminCreateAnnouncement(data: {
     content: string;
     audience?: 'ADMIN' | 'APPLET' | 'ALL';
     forceRead?: boolean;
+    forceReadOnce?: boolean;
     enabled?: boolean;
     publishAt?: string;
     expireAt?: string;
@@ -2709,6 +2711,7 @@ export async function adminUpdateAnnouncement(data: {
     content?: string;
     audience?: 'ADMIN' | 'APPLET' | 'ALL';
     forceRead?: boolean;
+    forceReadOnce?: boolean;
     enabled?: boolean;
     publishAt?: string;
     expireAt?: string;

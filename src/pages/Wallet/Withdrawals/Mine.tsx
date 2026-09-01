@@ -31,6 +31,7 @@ import {
 import dayjs from 'dayjs';
 
 const {Text} = Typography;
+const WITHDRAW_DEPOSIT_AUTO_FILL_RATE = 0.2;
 
 type Props = {
     availableBalance: number;
@@ -98,7 +99,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
 
         const depositNeed = depositLimit - depositBalance;
 
-        const depositByRate = Math.floor(amount * 0.1);
+        const depositByRate = Math.floor(amount * WITHDRAW_DEPOSIT_AUTO_FILL_RATE);
 
         if (depositNeed <= 0) return 0;
 
