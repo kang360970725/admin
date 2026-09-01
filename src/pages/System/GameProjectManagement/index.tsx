@@ -129,6 +129,8 @@ const GameProjectManagement: React.FC = () => {
     form.setFieldsValue({
       type: 'CUSTOMIZED',
       billingMode: 'GUARANTEED',
+      guaranteedSettlementMode: 'STANDARD',
+      minimumFinalProgressWan: 800,
       status: 'ACTIVE',
       showInMenuList: true,
       tagIds: [],
@@ -146,6 +148,8 @@ const GameProjectManagement: React.FC = () => {
       .filter((x) => !!x);
     form.setFieldsValue({
       ...record,
+      guaranteedSettlementMode: record.guaranteedSettlementMode || 'STANDARD',
+      minimumFinalProgressWan: record.minimumFinalProgressWan ?? null,
       showInMenuList: record.showInMenuList !== false,
       tagIds,
     });
@@ -369,6 +373,17 @@ const GameProjectManagement: React.FC = () => {
       render: (v: number | null | undefined) => {
         if (v == null || Number.isNaN(Number(v))) return '-';
         return `${Number(v)} 万`;
+      },
+    },
+    {
+      title: '末轮结算规则',
+      key: 'guaranteedSettlementPolicy',
+      width: 190,
+      render: (_: any, record: any) => {
+        if (record.billingMode !== 'GUARANTEED') return '-';
+        if (record.guaranteedSettlementMode === 'FINAL_ROUND_TAKES_ALL') return <Tag color="purple">最后一组全额结算</Tag>;
+        const minimum = Number(record.minimumFinalProgressWan || 0);
+        return minimum > 0 ? <Tag color="gold">末组最低 {minimum} 万</Tag> : <Tag>标准按进度</Tag>;
       },
     },
     {
@@ -681,6 +696,33 @@ const GameProjectManagement: React.FC = () => {
 
           <Form.Item name="baseAmount" label="保底哈夫币数额">
             <InputNumber min={0} step={1} precision={0} placeholder="留空表示无保底要求" style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.billingMode !== next.billingMode || prev.guaranteedSettlementMode !== next.guaranteedSettlementMode}>
+            {({ getFieldValue }) => getFieldValue('billingMode') === 'GUARANTEED' ? (
+              <>
+                <Form.Item
+                  name="guaranteedSettlementMode"
+                  label="最后一组结算策略"
+                  tooltip="规则绑定商品配置并写入订单快照，不依赖商品价格；调价不会改变历史订单。"
+                  rules={[{ required: true, message: '请选择最后一组结算策略' }]}
+                >
+                  <Select>
+                    <Option value="STANDARD">标准按进度结算</Option>
+                    <Option value="FINAL_ROUND_TAKES_ALL">最后一组全额结算（历史正收益为 0）</Option>
+                  </Select>
+                </Form.Item>
+                {getFieldValue('guaranteedSettlementMode') !== 'FINAL_ROUND_TAKES_ALL' ? (
+                  <Form.Item
+                    name="minimumFinalProgressWan"
+                    label="最后一组最低保底进度（万）"
+                    tooltip="不足时从倒数第二轮开始逐轮倒扣正进度；炸单负进度不受影响。留空或 0 表示不启用。"
+                  >
+                    <InputNumber min={0} step={100} precision={0} placeholder="例如：体验商品 600，其他保底商品 800" style={{ width: '100%' }} />
+                  </Form.Item>
+                ) : null}
+              </>
+            ) : null}
           </Form.Item>
 
           <Form.Item name="clubRate" label="俱乐部固定抽成比例">
