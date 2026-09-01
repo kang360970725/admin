@@ -237,12 +237,17 @@ export default defineConfig({
           component: '@/pages/Finance/EquipmentRentalFees',
           access: 'canViewFinanceEquipmentRentalFees',
         },
-        {
-          path: '/finance/rental-orders',
-          name: '租号订单',
-          component: '@/pages/Finance/RentalOrders',
-          access: 'canViewRentalOrders',
-        },
+      ],
+    },
+
+    {
+      path: '/merchant-business',
+      name: '商行业务',
+      icon: 'ShopOutlined',
+      access: 'canViewMerchantBusiness',
+      routes: [
+        { path: '/users/rental-risk', name: '租号风控查询', component: '@/pages/Users', access: 'canViewStaffRentalRisk' },
+        { path: '/finance/rental-orders', name: '租号订单', component: '@/pages/Finance/RentalOrders', access: 'canViewRentalOrders' },
       ],
     },
 
@@ -300,7 +305,6 @@ export default defineConfig({
         { path: '/users', redirect: '/users/members' },
         { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
         { path: '/users/staff', name: '服务者管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
-        { path: '/users/rental-risk', name: '租号风控查询', component: '@/pages/Users', access: 'canViewStaffRentalRisk' },
         { path: '/users/excellent-staff', name: '优秀服务者管理', component: '@/pages/Users/ExcellentStaff', access: 'canViewExcellentStaff' },
         { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
         { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers', hideInMenu: true },

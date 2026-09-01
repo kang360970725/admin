@@ -808,8 +808,9 @@ const OrdersPage: React.FC = () => {
                 search={isMobile ? { labelWidth: 72, defaultCollapsed: true } : { labelWidth: 90 }}
                 options={isMobile ? false : undefined}
                 pagination={{
-                    pageSize: isMobile ? 10 : 20,
+                    defaultPageSize: 20,
                     showSizeChanger: !isMobile,
+                    pageSizeOptions: [10, 20, 50, 100],
                     simple: isMobile,
                 }}
                 scroll={isMobile ? { x: 760 } : undefined}

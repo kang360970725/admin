@@ -26,6 +26,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewMemberUsers = isSuperAdmin || has('users:member:page');
   const canViewStaffUsers = isSuperAdmin || has('users:staff:page');
   const canViewStaffRentalRisk = isSuperAdmin || has('users:staff-rental-risk:page');
+  const canViewRentalOrders = isSuperAdmin || has('rental-orders:page');
   const canViewInternalUsers = isSuperAdmin || has('users:internal:page');
   const canViewAllUsers = false;
   const canManageStaffUsers = canViewStaffUsers;
@@ -49,7 +50,8 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewWalletOverview = has('wallet:overview:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet;
 
   return {
-    canViewRentalOrders: isSuperAdmin || has('rental-orders:page'),
+    canViewMerchantBusiness: canViewStaffRentalRisk || canViewRentalOrders,
+    canViewRentalOrders,
     canCreateRentalOrder: isSuperAdmin || has('rental-orders:create:button'),
     canSettleRentalOrder: isSuperAdmin || has('rental-orders:settle:button'),
     canVoidRentalOrder: isSuperAdmin || has('rental-orders:void:button'),
@@ -72,7 +74,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || hasLegacySystemAdmin,
 
     // 用户/评级
-    canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewStaffRentalRisk || canViewInternalUsers || canViewAllUsers,
+    canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewInternalUsers || canViewAllUsers,
     canViewMemberUsers,
     canViewStaffUsers,
     canViewStaffRentalRisk,
