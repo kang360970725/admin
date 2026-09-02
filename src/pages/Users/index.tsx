@@ -3,7 +3,7 @@ import {PageContainer, ProTable} from '@ant-design/pro-components';
 import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
-import {adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
+import {adminSetStaffActivityEnabled, adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
 import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
@@ -1140,6 +1140,24 @@ export default function UsersPage() {
                 ) : (
                     <Tag>未设置</Tag>
                 )
+            ),
+        } : null,
+        sceneConfig.showWorkMetrics ? {
+            title: '活跃度考核',
+            dataIndex: 'activityAssessmentEnabled',
+            key: 'activityAssessmentEnabled',
+            search: false,
+            width: 120,
+            render: (_: any, record: any) => (
+                <Switch
+                    checked={record?.activityAssessmentEnabled !== false}
+                    disabled={!access.canEditStaffUser || String(record?.staffEmploymentStatus || 'ACTIVE') !== 'ACTIVE'}
+                    onChange={async (enabled) => {
+                        await adminSetStaffActivityEnabled({ userId: Number(record.id), enabled });
+                        message.success(enabled ? '已开启活跃度考核，72小时后开始计算' : '已关闭活跃度考核');
+                        actionRef.current?.reload();
+                    }}
+                />
             ),
         } : null,
         sceneConfig.showWorkMetrics ? {

@@ -2856,6 +2856,31 @@ export async function myPendingForceAnnouncements() {
     );
 }
 
+export async function getMyStaffActivityOverview() {
+    return request(`${API_BASE}/staff-activity/my/overview`, { method: 'POST', data: {} });
+}
+export async function createMyStaffLeave(data: { days: number; reason?: string }) {
+    return request(`${API_BASE}/staff-activity/my/leave`, { method: 'POST', data });
+}
+export async function listMyStaffLeaves(data: { page?: number; limit?: number }) {
+    return request(`${API_BASE}/staff-activity/my/leaves`, { method: 'POST', data });
+}
+export async function listMyStaffActivityCharges(data: { page?: number; limit?: number }) {
+    return request(`${API_BASE}/staff-activity/my/charges`, { method: 'POST', data });
+}
+export async function adminListStaffLeaves(data: any) {
+    return request(`${API_BASE}/staff-activity/admin/leaves`, { method: 'POST', data });
+}
+export async function adminListStaffActivityCharges(data: any) {
+    return request(`${API_BASE}/staff-activity/admin/charges`, { method: 'POST', data });
+}
+export async function adminGetStaffActivityStats() {
+    return request(`${API_BASE}/staff-activity/admin/stats`, { method: 'POST', data: {} });
+}
+export async function adminSetStaffActivityEnabled(data: { userId: number; enabled: boolean }) {
+    return request(`${API_BASE}/staff-activity/admin/set-enabled`, { method: 'POST', data });
+}
+
 export interface RealtimeNotificationItem {
     id: string;
     type: string;

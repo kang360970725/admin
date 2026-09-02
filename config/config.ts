@@ -261,6 +261,7 @@ export default defineConfig({
         { path: '/staff/my-orders', name: '我的服务记录', component: './Staff/MyOrders',access: 'canViewMyOrders' },
         { path: '/staff/workbench', name: '服务者工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
         { path: '/staff/questionnaires', name: '信息采集', component: './Staff/Questionnaires', access: 'canViewStaffQuestionnaires' },
+        { path: '/staff/leave', name: '请假报备', component: './Staff/Activity', access: 'canViewWorkbench' },
       ],
     },
 
@@ -307,6 +308,7 @@ export default defineConfig({
         { path: '/users', redirect: '/users/members' },
         { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
         { path: '/users/staff', name: '服务者管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
+        { path: '/users/staff-leaves', name: '请假管理', component: '@/pages/Staff/Activity', access: 'canViewStaffUsers' },
         { path: '/users/excellent-staff', name: '优秀服务者管理', component: '@/pages/Users/ExcellentStaff', access: 'canViewExcellentStaff' },
         { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
         { path: '/users/all', name: '全部用户', component: '@/pages/Users', access: 'canViewAllUsers', hideInMenu: true },
