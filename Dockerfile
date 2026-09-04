@@ -9,14 +9,14 @@ ARG RELEASE_NOTES=自动发布
 # 新增接口地址入参，支持流水线动态传参切换环境
 ARG API_BASE=http://api.welax-tech.com
 
-# 优先拷贝依赖文件，最大化Docker缓存复用，加快构建速度
-COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-RUN npm install
+# 只使用仓库内的 yarn.lock，避免 npm 在每次云端构建时重新解析依赖版本。
+# package.json 已声明 Yarn 版本，Corepack 会据此启用一致的包管理器。
+COPY package.json yarn.lock ./
+RUN corepack enable && \
+  yarn install --frozen-lockfile --non-interactive --network-timeout 300000
 
 # 依赖安装完成后再拷贝全量源码
 COPY . .
-
-RUN npx --yes max setup || npx --yes umi setup || true
 
 ENV UMI_ENV=production
 ENV API_BASE=${API_BASE}
@@ -24,10 +24,10 @@ ENV APP_VERSION=${APP_VERSION}
 ENV APP_BUILD_ID=${APP_BUILD_ID}
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
-# 生成唯一buildId、清理umi缓存、更新版本清单、执行生产构建
+# max build 自身会完成 Umi prepare，无需再执行一次可能访问网络的 npx setup。
+# 生成唯一 buildId、更新版本清单、执行生产构建。
 RUN BUILD_ID="${APP_BUILD_ID}" && \
   if [ -z "$BUILD_ID" ]; then BUILD_ID="prod-$(date +%Y%m%d%H%M%S)"; fi && \
-  rm -rf /app/node_modules/.cache && \
   node scripts/update-version-manifest.mjs \
     --version="${APP_VERSION}" \
     --buildId="${BUILD_ID}" \
