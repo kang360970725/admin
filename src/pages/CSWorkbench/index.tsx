@@ -1622,7 +1622,7 @@ export default function CSWorkbenchPage() {
     );
 
     const DesktopPanel = (
-        <PageContainer title="服务者在线看板">
+        <PageContainer title="服务者在线看板" className="cs-workbench-release-20260904">
             <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 960, margin: '0 auto' }}>
                 <Card
                     title="服务者在线管理"
@@ -1814,7 +1814,11 @@ export default function CSWorkbenchPage() {
 
     return (
         isMobile ? (
-            <PageContainer title="服务者在线看板" subTitle="手机端创建订单 / 快速派单">
+            <PageContainer
+                title="服务者在线看板"
+                subTitle="手机端创建订单 / 快速派单"
+                className="cs-workbench-release-20260904"
+            >
                 <div style={{ maxWidth: 980, margin: '0 auto' }}>
                     <Tabs
                         activeKey={tab}

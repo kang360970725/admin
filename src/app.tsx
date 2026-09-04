@@ -60,6 +60,39 @@ const DEV_VERSION_ACK_STORAGE_KEY = 'DEV_VERSION_REFRESH_ACK_KEY';
 const VERSION_ACK_STORAGE_KEY = 'VERSION_REFRESH_ACK_KEY';
 const LOCAL_BUILD_PLACEHOLDER_REGEX = /^(development|test|pre|production)-0\.0\.0$/i;
 const ICP_RECORD_TEXT = '蜀ICP备2026039511号-1';
+const CHUNK_RELOAD_STORAGE_KEY = 'BC_CHUNK_LOAD_RETRY_AT';
+const CHUNK_LOAD_ERROR_REGEX = /ChunkLoadError|Loading chunk \d+ failed|Failed to fetch dynamically imported module/i;
+
+function installChunkLoadRecovery() {
+    if (typeof window === 'undefined') return;
+
+    const reloadOnce = (reason: unknown) => {
+        const text = String((reason as any)?.message || reason || '');
+        if (!CHUNK_LOAD_ERROR_REGEX.test(text)) return;
+
+        const now = Date.now();
+        const lastRetryAt = Number(sessionStorage.getItem(CHUNK_RELOAD_STORAGE_KEY) || 0);
+        // 同一故障一分钟内只恢复一次，避免资源持续异常时陷入刷新循环。
+        if (lastRetryAt > 0 && now - lastRetryAt < 60_000) return;
+
+        sessionStorage.setItem(CHUNK_RELOAD_STORAGE_KEY, String(now));
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set('__chunk_retry', String(now));
+        window.location.replace(nextUrl.toString());
+    };
+
+    window.addEventListener('error', (event) => {
+        const target = event.target as HTMLScriptElement | null;
+        if (target?.tagName === 'SCRIPT' && /\.async\.js(?:\?|$)/i.test(target.src || '')) {
+            reloadOnce(`Loading chunk 0 failed: ${target.src}`);
+            return;
+        }
+        reloadOnce(event.error || event.message);
+    }, true);
+    window.addEventListener('unhandledrejection', (event) => reloadOnce(event.reason));
+}
+
+installChunkLoadRecovery();
 
 const IcpRecordFooter: React.FC = () => (
     <div className="bc-icp-footer" aria-label="ICP备案信息">
