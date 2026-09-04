@@ -475,21 +475,6 @@ export default function CSWorkbenchPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isMobile]);
 
-    useEffect(() => {
-        const refreshOnlinePlayers = () => {
-            if (document.visibilityState === 'visible') {
-                void fetchOnlinePlayers(onlinePlayerKeyword, onlinePlayerPage);
-            }
-        };
-        const timer = window.setInterval(refreshOnlinePlayers, 10_000);
-        document.addEventListener('visibilitychange', refreshOnlinePlayers);
-        return () => {
-            window.clearInterval(timer);
-            document.removeEventListener('visibilitychange', refreshOnlinePlayers);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [onlinePlayerKeyword, onlinePlayerPage]);
-
     // ============ 列表派单 ============
     const openDispatch = (order: OrderRow) => {
         setActiveOrder(order);
