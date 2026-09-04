@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PageContainer, ProFormDigit, ProFormSwitch, ProFormText, ProTable, ModalForm } from '@ant-design/pro-components';
-import { Button, DatePicker, Form, message, Select, Space, Tag } from 'antd';
+import { Button, DatePicker, Form, InputNumber, message, Select, Space, Tag } from 'antd';
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { createMemberRechargePlan, getCouponTemplates, getMemberRechargePlans, updateMemberRechargePlan } from '@/services/api';
 
@@ -96,7 +97,12 @@ export default function RechargePlansPage() {
                             ...record,
                             effectiveFrom: record?.effectiveFrom ? dayjs(record.effectiveFrom) : null,
                             effectiveTo: record?.effectiveTo ? dayjs(record.effectiveTo) : null,
-                            couponBenefitTemplateIds: (Array.isArray(record?.couponBenefits) ? record.couponBenefits : []).map((item: any) => Number(item?.templateId)).filter((id: number) => Number.isFinite(id) && id > 0),
+                            couponBenefits: (Array.isArray(record?.couponBenefits) ? record.couponBenefits : [])
+                                .map((item: any) => ({
+                                    templateId: Number(item?.templateId),
+                                    count: Math.max(1, Math.floor(Number(item?.count || 1))),
+                                }))
+                                .filter((item: any) => Number.isFinite(item.templateId) && item.templateId > 0),
                         });
                         setOpen(true);
                     }}
@@ -125,7 +131,7 @@ export default function RechargePlansPage() {
                         onClick={() => {
                             setEditing(null);
                             form.resetFields();
-                            form.setFieldsValue({ enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0, effectiveFrom: null, effectiveTo: null, couponBenefitTemplateIds: [] });
+                            form.setFieldsValue({ enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0, effectiveFrom: null, effectiveTo: null, couponBenefits: [] });
                             setOpen(true);
                         }}
                     >
@@ -148,8 +154,11 @@ export default function RechargePlansPage() {
                             ...values,
                             effectiveFrom: values?.effectiveFrom ? values.effectiveFrom.toISOString() : null,
                             effectiveTo: values?.effectiveTo ? values.effectiveTo.toISOString() : null,
-                            couponBenefits: Array.isArray(values?.couponBenefitTemplateIds)
-                                ? values.couponBenefitTemplateIds.map((templateId: number) => ({ templateId: Number(templateId), count: 1 }))
+                            couponBenefits: Array.isArray(values?.couponBenefits)
+                                ? values.couponBenefits.map((item: any) => ({
+                                    templateId: Number(item?.templateId),
+                                    count: Math.max(1, Math.floor(Number(item?.count || 1))),
+                                }))
                                 : [],
                         };
                         if (editing?.id) {
@@ -204,13 +213,42 @@ export default function RechargePlansPage() {
                             <ProFormDigit name="giftPoints" label="赠送积分" min={0} fieldProps={{ precision: 0 }} />
                             <ProFormDigit name="giftGrowthValue" label="赠送成长值" min={0} fieldProps={{ precision: 0 }} />
                             <div className="bc-admin-form-grid-full">
-                                <Form.Item name="couponBenefitTemplateIds" label="赠送优惠券">
-                                    <Select
-                                        mode="multiple"
-                                        allowClear
-                                        placeholder="选择充值赠送的优惠券模板"
-                                        options={couponOptions}
-                                    />
+                                <Form.Item label="赠送优惠券">
+                                    <Form.List name="couponBenefits">
+                                        {(fields, { add, remove }) => (
+                                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                {fields.map((field) => (
+                                                    <div key={field.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px 32px', gap: 8, alignItems: 'start' }}>
+                                                        <Form.Item
+                                                            {...field}
+                                                            name={[field.name, 'templateId']}
+                                                            rules={[{ required: true, message: '请选择优惠券' }]}
+                                                            style={{ marginBottom: 0 }}
+                                                        >
+                                                            <Select
+                                                                showSearch
+                                                                optionFilterProp="label"
+                                                                placeholder="选择优惠券模板"
+                                                                options={couponOptions}
+                                                            />
+                                                        </Form.Item>
+                                                        <Form.Item
+                                                            {...field}
+                                                            name={[field.name, 'count']}
+                                                            rules={[{ required: true, message: '请填写张数' }]}
+                                                            style={{ width: 150, marginBottom: 0 }}
+                                                        >
+                                                            <InputNumber min={1} max={999} precision={0} addonAfter="张" style={{ width: '100%' }} />
+                                                        </Form.Item>
+                                                        <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
+                                                    </div>
+                                                ))}
+                                                <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ count: 1 })} block>
+                                                    添加优惠券权益
+                                                </Button>
+                                            </Space>
+                                        )}
+                                    </Form.List>
                                 </Form.Item>
                             </div>
                             <ProFormText name="badgeText" label="角标文案" />

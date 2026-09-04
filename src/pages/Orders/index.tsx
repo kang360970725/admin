@@ -14,6 +14,7 @@ import {PageContainer, ProTable, type ActionType} from '@ant-design/pro-componen
 import dayjs from 'dayjs';
 import { useIsMobile } from '@/utils/useIsMobile';
 import { maskPhone } from '@/utils/privacy';
+import { maskedCustomerGameId } from '@/utils/orderCustomerPrivacy';
 
 /**
  * ✅ 订单状态字典（前端兜底）
@@ -82,42 +83,12 @@ const OrdersPage: React.FC = () => {
      *
      * 若你后续告诉我“客服主管”的真实字段/枚举值，我会把这里进一步收敛到唯一判断。
      */
-    const canViewCustomerGameIdAfterCompleted = useMemo(() => {
-        if (!currentUser) return false;
-
-        // 1) 常见：userType
-        if (String(currentUser?.userType || '').trim().toUpperCase() === 'SUPER_ADMIN') return true;
-
-        // 2) 常见：role / roles
-        const roleName = String(currentUser?.role?.name || currentUser?.roleName || '').trim();
-        const roleCode = String(currentUser?.role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim();
-        if (roleName.toUpperCase() === 'SUPER_ADMIN' || roleCode.toUpperCase() === 'SUPER_ADMIN') return true;
-
-        // 你提到的是“客服主管”，这里做最小兼容：包含关键字即可（后续可再收敛）
-        if (roleName.includes('客服主管')) return true;
-
-        // 若你后端有固定 code，可在这里补齐（不影响现有逻辑）
-        const allowRoleCodes = new Set([
-            'CS_SUPERVISOR',
-            'CUSTOMER_SERVICE_SUPERVISOR',
-            'CS_MANAGER',
-            'CUSTOMER_SERVICE_MANAGER',
-        ]);
-        if (allowRoleCodes.has(roleCode)) return true;
-
-        return false;
-    }, [currentUser]);
 
     /**
      * ✅ 已结单状态判定（用于：customerGameId 脱敏）
      * - 你要求：已结单状态不允许返回/展示 customerGameId
      * - 这里覆盖：COMPLETED_PENDING_CONFIRM + COMPLETED（以及稳妥起见包含 REFUNDED）
      */
-    const isCompletedLikeStatus = (status?: any) => {
-        const s = String(status || '');
-        return s === 'COMPLETED_PENDING_CONFIRM' || s === 'COMPLETED' || s === 'REFUNDED';
-    };
-
     // ✅ 确认收款弹窗（列表页快捷操作）
     const [markPaidOpen, setMarkPaidOpen] = useState(false);
     const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false);
@@ -225,10 +196,7 @@ const OrdersPage: React.FC = () => {
 
     const renderCustomerGameId = (row: any) => {
         const raw = row?.customerGameId;
-        if (raw == null || raw === '') return '-';
-        if (!isCompletedLikeStatus(row?.status)) return String(raw);
-        if (canViewCustomerGameIdAfterCompleted) return String(raw);
-        return '******';
+        return maskedCustomerGameId(row?.status, currentUser, raw);
     };
 
     const renderCustomerIdentifier = (row: any) => {
@@ -485,7 +453,7 @@ const OrdersPage: React.FC = () => {
                 const value = renderCustomerGameId(row);
                 if (value !== '******') return value;
                 return (
-                    <Tooltip title="已结单订单：非超级管理员/客服主管不允许查看客户游戏ID">
+                    <Tooltip title="存单及之后：非授权管理人员不允许查看客户准确ID">
                         <span style={{letterSpacing: 2}}>******</span>
                     </Tooltip>
                 );

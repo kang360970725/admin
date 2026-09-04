@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {Button, message, Tag, Space, Alert, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm} from 'antd';
+import {Button, message, Tag, Space, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm, Form} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
-import { history, useModel } from '@umijs/max';
+import { useModel } from '@umijs/max';
 import {
     cancelWithdrawal,
     getPendingWithdrawals,
@@ -29,8 +29,9 @@ const WithdrawalsPage: React.FC = () => {
     }, [initialState]);
 
     const [reviewOpen, setReviewOpen] = useState(false);
+    const [reviewForm] = Form.useForm();
     const [currentRow, setCurrentRow] = useState<any>(null);
-    const [reviewError, setReviewError] = useState('');
+    const [, setReviewError] = useState('');
     const [reviewSummaryDate, setReviewSummaryDate] = useState(dayjs());
     const reviewSummaryDateRef = useRef(dayjs().format('YYYY-MM-DD'));
 
@@ -159,6 +160,11 @@ const WithdrawalsPage: React.FC = () => {
                             }
                             setReviewError('');
                             setCurrentRow(row);
+                            reviewForm.setFieldsValue({
+                                approve: true,
+                                channel: 'MANUAL',
+                                reviewRemark: '审核成功，已放款',
+                            });
                             setReviewOpen(true);
                         }}
                     >
@@ -313,9 +319,10 @@ const WithdrawalsPage: React.FC = () => {
                 reviewRemark?: string;
             }>
                 title={currentRow ? `审批提现 - ${currentRow.requestNo}` : '审批提现'}
+                form={reviewForm}
                 open={reviewOpen}
                 layout="vertical"
-                width={820}
+                width={720}
                 modalProps={{
                     destroyOnClose: true,
                     className: 'bc-admin-form-modal',
@@ -328,7 +335,7 @@ const WithdrawalsPage: React.FC = () => {
                 initialValues={{
                     approve: true,
                     channel: 'MANUAL',
-                    reviewRemark: '',
+                    reviewRemark: '审核成功，已放款',
                 }}
                 onFinish={async (values) => {
                     if (!currentRow) return false;
@@ -364,77 +371,38 @@ const WithdrawalsPage: React.FC = () => {
                 {/* ✅ 审批详情：钱包数据 + 收款码 */}
                 <div className="bc-admin-form">
                     {currentRow ? (
-                        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                            <div className="bc-admin-form-summary">
-                                <div className="bc-admin-form-summary-card info">
-                                    <div className="bc-admin-form-summary-label">申请人</div>
-                                    <div className="bc-admin-form-summary-value">{currentRow?.user?.nickname || currentRow?.user?.name || currentRow.userId}</div>
+                        <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                            <Card size="small" bodyStyle={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <span style={{ fontWeight: 600 }}>审核结论</span>
+                                    <Tag color={currentRow?.reviewEligibility?.canApprove ? 'success' : 'error'} style={{ marginInlineEnd: 0 }}>
+                                        {currentRow?.reviewEligibility?.canApprove ? '可放行' : '不可放行'}
+                                    </Tag>
                                 </div>
-                                <div className="bc-admin-form-summary-card danger">
-                                    <div className="bc-admin-form-summary-label">申请金额</div>
-                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow.amount || 0).toFixed(2)}</div>
+                                <Row gutter={[16, 10]} align="middle">
+                                    <Col xs={24} sm={8}>
+                                        <Statistic title="提现申请金额" value={Number(currentRow.amount || 0)} precision={2} prefix="¥" valueStyle={{ color: '#cf1322', fontSize: 28, fontWeight: 700 }} />
+                                    </Col>
+                                    <Col xs={12} sm={8}>
+                                        <Statistic title="账户可用余额" value={Number(currentRow?.wallet?.availableBalance || 0)} precision={2} prefix="¥" valueStyle={{ fontSize: 18 }} />
+                                    </Col>
+                                    <Col xs={12} sm={8}>
+                                        <Statistic title="提现后总余额" value={Number(currentRow?.reviewEligibility?.postWithdrawalTotalBalance ?? (Number(currentRow?.wallet?.availableBalance || 0) + Number(currentRow?.wallet?.earningFrozenBalance || 0)))} precision={2} prefix="¥" valueStyle={{ fontSize: 18 }} />
+                                    </Col>
+                                </Row>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px solid #f0f0f0', color: '#666' }}>
+                                    <span>申请人：{currentRow?.user?.nickname || currentRow?.user?.name || currentRow.userId}</span>
+                                    <span>申请时间：{formatDateTime(currentRow.createdAt)}</span>
                                 </div>
-                                <div className="bc-admin-form-summary-card info">
-                                    <div className="bc-admin-form-summary-label">可用余额</div>
-                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.availableBalance || 0).toFixed(2)}</div>
-                                </div>
-                                <div className="bc-admin-form-summary-card warning">
-                                    <div className="bc-admin-form-summary-label">冻结余额</div>
-                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.frozenBalance || 0).toFixed(2)}</div>
-                                </div>
-                                <div className="bc-admin-form-summary-card info">
-                                    <div className="bc-admin-form-summary-label">非提现净资产（不含保证金）</div>
-                                    <div className="bc-admin-form-summary-value">¥{(Number(currentRow?.wallet?.availableBalance || 0) + Number(currentRow?.wallet?.earningFrozenBalance || 0)).toFixed(2)}</div>
-                                </div>
-                                <div className="bc-admin-form-summary-card warning">
-                                    <div className="bc-admin-form-summary-label">提现冻结 / 收益冻结</div>
-                                    <div className="bc-admin-form-summary-value">¥{Number(currentRow?.wallet?.withdrawFrozenBalance || 0).toFixed(2)} / ¥{Number(currentRow?.wallet?.earningFrozenBalance || 0).toFixed(2)}</div>
-                                </div>
-                            </div>
-
-                            <div className="bc-admin-form-section">
-                                <div className="bc-admin-form-section-title">审核提示</div>
-                                <Alert
-                                    type={reviewError.includes('钱包冻结余额存在缺口') ? 'error' : 'info'}
-                                    showIcon
-                                    message={reviewError || '已有提现按预留资金和资产覆盖审核：可用余额可为负，但须由有效收益冻结覆盖；提现冻结须完整。展示为参考，提交时重新核验。'}
-                                    action={
-                                        <Button
-                                            size="small"
-                                            type="primary"
-                                            onClick={() => {
-                                                const userId = Number(currentRow?.userId || 0);
-                                                if (!Number.isFinite(userId) || userId <= 0) {
-                                                    message.error('缺少用户ID，无法跳转异常修复');
-                                                    return;
-                                                }
-                                                history.push(`/wallet/replay-preview?userId=${userId}&mode=full&autostart=1`);
-                                            }}
-                                        >
-                                            前往异常修复
-                                        </Button>
-                                    }
-                                />
-                            </div>
+                            </Card>
 
                             <div className="bc-admin-form-section">
                                 <div className="bc-admin-form-section-title">收款信息</div>
-                                <Alert
-                                    type={currentRow?.withdrawQrCodeUrl ? 'success' : 'warning'}
-                                    showIcon
-                                    message={currentRow?.withdrawQrCodeUrl ? '已获取收款二维码' : '未获取到收款二维码（请提醒用户上传）'}
-                                    description={
-                                        currentRow?.withdrawQrCodeUrl ? (
-                                            <Image
-                                                src={currentRow.withdrawQrCodeUrl}
-                                                width={180}
-                                                style={{ borderRadius: 12 }}
-                                            />
-                                        ) : (
-                                            <span>该用户未上传或二维码不可用</span>
-                                        )
-                                    }
-                                />
+                                {currentRow?.withdrawQrCodeUrl ? (
+                                    <Image src={currentRow.withdrawQrCodeUrl} width={180} style={{ borderRadius: 12 }} />
+                                ) : (
+                                    <span style={{ color: '#999' }}>未获取到收款二维码</span>
+                                )}
                             </div>
                         </Space>
                     ) : null}
@@ -449,19 +417,18 @@ const WithdrawalsPage: React.FC = () => {
                                 { label: '通过', value: true },
                                 { label: '驳回', value: false },
                             ]}
-                        />
-                        <Alert
-                            type="info"
-                            showIcon
-                            style={{ marginBottom: 12 }}
-                            message="当前仅保留人工线下打款"
-                            description="微信自动到账方案已暂时屏蔽，审批通过后按现有人工扫码打款流程处理。"
+                            fieldProps={{
+                                onChange: (event) => reviewForm.setFieldValue(
+                                    'reviewRemark',
+                                    event?.target?.value ? '审核成功，已放款' : '审批异常，放款失败',
+                                ),
+                            }}
                         />
                         <ProFormTextArea
                             name="reviewRemark"
                             label="审批备注"
                             placeholder="可选：填写审批说明（通过/驳回原因）"
-                            fieldProps={{ rows: 3, maxLength: 200 }}
+                            fieldProps={{ rows: 2, maxLength: 200 }}
                         />
                     </div>
                 </div>

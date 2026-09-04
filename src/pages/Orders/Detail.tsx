@@ -30,6 +30,7 @@ import {
     Typography,
 } from 'antd';
 import { maskPhone } from '@/utils/privacy';
+import { maskedCustomerGameId } from '@/utils/orderCustomerPrivacy';
 import {
     AppstoreOutlined,
     CheckCircleOutlined,
@@ -1395,6 +1396,15 @@ const OrderDetailPage: React.FC = () => {
     // 创建订单后、复制相关功能模块
     const {initialState} = useModel('@@initialState');
     const currentUser = initialState?.currentUser;
+    const displayCustomerGameId = (value = order?.customerGameId) =>
+        maskedCustomerGameId(order?.status, currentUser, value);
+    const displayCustomerProvidedIdentifier = () => {
+        const identifierType = String(order?.customerIdentifierType || 'GAME_ID').toUpperCase();
+        if (identifierType === 'ALIAS') {
+            return order?.customerOriginalIdentifier || '-';
+        }
+        return displayCustomerGameId(order?.customerOriginalIdentifier || order?.customerGameId);
+    };
     const hasOrderPermission = (key: string) => {
         const permissions = Array.isArray((currentUser as any)?.permissions) ? (currentUser as any).permissions : [];
         const userType = String((currentUser as any)?.userType || '').trim().toUpperCase();
@@ -1468,7 +1478,7 @@ const OrderDetailPage: React.FC = () => {
         const isHourlyLocal = billingModeLocal === 'HOURLY';
 
         const orderNo = String(o?.autoSerial ?? o?.id ?? '-');
-        const customerId = o?.customerGameId ?? '-';
+        const customerId = maskedCustomerGameId(o?.status, currentUser, o?.customerGameId);
         const csName = o?.dispatcher?.name || maskPhone(o?.dispatcher?.phone) || '客服';
 
         const formatPlayerLine = (player: any) => {
@@ -2276,7 +2286,7 @@ const OrderDetailPage: React.FC = () => {
                         项目：{order?.project?.name || order?.projectSnapshot?.name || '-'}
                     </Typography.Text>
                     <Typography.Text type="secondary" style={{fontSize: 13}}>
-                        客户游戏ID：{order?.customerGameId ?? '-'}
+                        客户游戏ID：{displayCustomerGameId()}
                     </Typography.Text>
                 </Space>
             </Space>
@@ -2982,10 +2992,10 @@ const OrderDetailPage: React.FC = () => {
                             <Tag color={String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' ? 'gold' : 'green'}>
                                 {String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' ? '昵称/房间号' : '准确游戏ID'}
                             </Tag>
-                            <span>{order?.customerOriginalIdentifier || order?.customerGameId || '-'}</span>
+                            <span>{displayCustomerProvidedIdentifier()}</span>
                         </Space>
                     </Descriptions.Item>
-                    <Descriptions.Item label="客户准确游戏ID">{order?.customerGameId ?? '-'}</Descriptions.Item>
+                    <Descriptions.Item label="客户准确游戏ID">{displayCustomerGameId()}</Descriptions.Item>
                     <Descriptions.Item label="客户联系方式">
                         {order?.orderSource === 'MINIAPP_SELF_SERVICE' && order?.status === 'WAIT_ASSIGN'
                             ? (order?.customerUser
