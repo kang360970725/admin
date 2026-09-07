@@ -453,7 +453,7 @@ const OrdersPage: React.FC = () => {
                 const value = renderCustomerGameId(row);
                 if (value !== '******') return value;
                 return (
-                    <Tooltip title="存单及之后：非授权管理人员不允许查看客户准确ID">
+                    <Tooltip title="结单及之后：非授权管理人员不允许查看客户准确ID">
                         <span style={{letterSpacing: 2}}>******</span>
                     </Tooltip>
                 );

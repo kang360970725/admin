@@ -1570,6 +1570,7 @@ const OrderDetailPage: React.FC = () => {
         }
 
         const customerText = [
+            `订单编号：${orderNo}`,
             `下单项目：${projectName}`,
             `订单${estHours != null ? '时长' : '保底'}：${
                 isHourlyLocal ? `${estHours != null ? estHours.toFixed(2) : '-'} 小时` : `${baseWan ?? '-'} 万`
