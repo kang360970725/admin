@@ -222,7 +222,13 @@ const FinanceRecordsPage: React.FC = () => {
         <div>
             <Card style={{ marginBottom: 16 }}>
                 <Space wrap>
-                    <RangePicker value={dateRange} onChange={(val) => setDateRange(val)} />
+                    <RangePicker
+                        value={dateRange}
+                        onChange={(val) => {
+                            setDateRange(val);
+                            window.setTimeout(() => actionRef.current?.reloadAndRest?.(), 0);
+                        }}
+                    />
                 </Space>
             </Card>
 
@@ -234,27 +240,27 @@ const FinanceRecordsPage: React.FC = () => {
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={4}>
                     <Card>
-                        <Statistic title="实付营收" value={money(summary.paidAmountTotal)} prefix="¥" />
+                        <Statistic title="本期实际收款" value={money(summary.paidAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={4}>
                     <Card>
-                        <Statistic title="订单总支出" value={money(summary.orderTotalCost)} prefix="¥" />
+                        <Statistic title={`会员充值 · ${summary.rechargeCount || 0}笔`} value={money(summary.rechargeAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={4}>
                     <Card>
-                        <Statistic title="毛利润" value={money(summary.grossProfitAmountTotal)} prefix="¥" />
+                        <Statistic title={`本期退款 · ${summary.refundCount || 0}笔`} value={money(summary.refundAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={4}>
                     <Card>
-                        <Statistic title="毛利率" value={money(summary.grossProfitRate)} suffix="%" />
+                        <Statistic title="本期净营收" value={money(summary.netRevenueAmountTotal ?? summary.paidAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
                 <Col xs={24} sm={12} md={8} lg={4}>
                     <Card>
-                        <Statistic title="营销成本" value={money(summary.marketingCostTotal)} prefix="¥" />
+                        <Statistic title="履约成本" value={money(summary.fulfillmentCostTotal)} prefix="¥" />
                     </Card>
                 </Col>
             </Row>

@@ -14,7 +14,9 @@ import {
   OfflineFeeContract,
   OfflineStaffOption,
   listOfflineStaffOptions,
+  manualCreateOfflineFeeBill,
   payOfflineFeeBill,
+  updateOfflineFeeBill,
   updateOfflineFeeContract,
   waiveOfflineFeeBill,
 } from '@/services/api';
@@ -52,6 +54,8 @@ const OfflineFeesPage: React.FC = () => {
   const [payingBill, setPayingBill] = useState<OfflineFeeBill | null>(null);
   const [externalBill, setExternalBill] = useState<OfflineFeeBill | null>(null);
   const [selectedBillRowKeys, setSelectedBillRowKeys] = useState<React.Key[]>([]);
+  const [billEditorOpen, setBillEditorOpen] = useState(false);
+  const [editingBill, setEditingBill] = useState<OfflineFeeBill | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<OfflineStaffOption[]>([]);
@@ -66,6 +70,7 @@ const OfflineFeesPage: React.FC = () => {
   const [generateForm] = Form.useForm();
   const [payForm] = Form.useForm();
   const [externalForm] = Form.useForm();
+  const [billForm] = Form.useForm();
 
   const fetchOfflineStaffOptions = async (keyword?: string) => {
     try {
@@ -119,6 +124,27 @@ const OfflineFeesPage: React.FC = () => {
     setExternalVisible(true);
   };
 
+  const openBillEditor = async (row?: OfflineFeeBill) => {
+    setEditingBill(row || null);
+    billForm.resetFields();
+    if (row) {
+      billForm.setFieldsValue({
+        userId: row.userId,
+        amount: Number(row.shouldPayAmount || 0),
+        period: [dayjs(row.periodStart), dayjs(row.periodEnd)],
+        dueAt: row.dueAt ? dayjs(row.dueAt) : undefined,
+        remark: row.remark || '',
+      });
+    } else {
+      billForm.setFieldsValue({
+        period: [dayjs().startOf('month'), dayjs().endOf('month')],
+        dueAt: dayjs(),
+      });
+      await fetchOfflineStaffOptions();
+    }
+    setBillEditorOpen(true);
+  };
+
   const contractColumns = useMemo<ProColumns<OfflineFeeContract>[]>(() => [
     {
       title: '服务者',
@@ -163,11 +189,18 @@ const OfflineFeesPage: React.FC = () => {
   const billColumns = useMemo<ProColumns<OfflineFeeBill>[]>(
     () => [
       {
-        title: '月份',
+        title: '账单月份',
         dataIndex: 'billMonth',
         width: 110,
         valueType: 'dateMonth',
         transform: (value: any) => ({ billMonth: value ? monthValue(value) : undefined }),
+      },
+      {
+        title: '费用周期',
+        dataIndex: 'periodStart',
+        width: 210,
+        search: false,
+        render: (_, row) => `${dateValue(row.periodStart)} 至 ${dateValue(row.periodEnd)}`,
       },
       {
         title: '服务者',
@@ -189,7 +222,7 @@ const OfflineFeesPage: React.FC = () => {
       },
       { title: '手机号', dataIndex: ['user', 'phone'], width: 120, search: false, render: (v) => maskPhone(v as any) },
       {
-        title: '扣费时间',
+        title: '账单时间',
         dataIndex: 'dueAt',
         width: 160,
         search: false,
@@ -221,6 +254,7 @@ const OfflineFeesPage: React.FC = () => {
         render: (_, row) => {
           const canSettle = Number(row.remainingAmount || 0) > 0;
           return [
+            <a key="edit" onClick={() => void openBillEditor(row)}>编辑</a>,
             canSettle ? <a key="pay" onClick={() => openPayModal(row)}>手动缴费</a> : null,
             canSettle ? <a key="external" onClick={() => openExternalModal(row)}>其他渠道已缴</a> : null,
             canSettle ? (
@@ -292,6 +326,7 @@ const OfflineFeesPage: React.FC = () => {
                   onChange: setSelectedBillRowKeys,
                 }}
                 toolBarRender={() => [
+                  <Button key="manual-create" type="primary" onClick={() => void openBillEditor()}>录入线下费用</Button>,
                   <Popconfirm
                     key="batch-delete"
                     title={`确认删除选中的 ${selectedBillRowKeys.length} 条线下费用账单？`}
@@ -352,6 +387,76 @@ const OfflineFeesPage: React.FC = () => {
           },
         ]}
       />
+
+      <Modal
+        title={editingBill ? '编辑线下费用' : '录入线下费用'}
+        open={billEditorOpen}
+        confirmLoading={submitting}
+        onCancel={() => {
+          setBillEditorOpen(false);
+          setEditingBill(null);
+          billForm.resetFields();
+        }}
+        onOk={async () => {
+          try {
+            const values = await billForm.validateFields();
+            const [periodStart, periodEnd] = values.period || [];
+            setSubmitting(true);
+            const payload = {
+              amount: Number(values.amount),
+              periodStart: dateValue(periodStart),
+              periodEnd: dateValue(periodEnd),
+              dueAt: dateValue(values.dueAt),
+              remark: String(values.remark || '').trim(),
+            };
+            if (editingBill) {
+              await updateOfflineFeeBill({ billId: editingBill.id, ...payload });
+              message.success('线下费用已更新');
+            } else {
+              await manualCreateOfflineFeeBill({
+                userId: Number(values.userId),
+                month: dayjs(values.dueAt).format('YYYY-MM'),
+                ...payload,
+              });
+              message.success('线下费用已录入');
+            }
+            setBillEditorOpen(false);
+            setEditingBill(null);
+            billForm.resetFields();
+            billActionRef.current?.reload();
+          } catch (e: any) {
+            if (!e?.errorFields) message.error(errorMessage(e, '保存线下费用失败'));
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <Form form={billForm} layout="vertical">
+          <Form.Item label="服务者" name="userId" rules={[{ required: true, message: '请选择服务者' }]}>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              loading={staffLoading}
+              disabled={Boolean(editingBill)}
+              onSearch={fetchOfflineStaffOptions}
+              options={staffSelectOptions}
+              placeholder="请选择服务者"
+            />
+          </Form.Item>
+          <Form.Item label="费用周期" name="period" rules={[{ required: true, message: '请选择费用周期' }]}>
+            <DatePicker.RangePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item label="账单时间" name="dueAt" rules={[{ required: true, message: '请选择账单时间' }]}>
+            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item label="费用金额" name="amount" rules={[{ required: true, message: '请输入费用金额' }]}>
+            <InputNumber style={{ width: '100%' }} min={0.01} precision={2} addonBefore="¥" />
+          </Form.Item>
+          <Form.Item label="费用说明" name="remark">
+            <Input.TextArea rows={3} maxLength={255} showCount />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title={editingContract ? '编辑收费配置' : '新增收费配置'}

@@ -2227,6 +2227,8 @@ export async function manualCreateOfflineFeeBill(data: {
     performanceBaseAmount?: number;
     amount?: number;
     dueAt?: string;
+    periodStart?: string;
+    periodEnd?: string;
     remark?: string;
 }) {
     return request(`${API_BASE}/offline-fees/bills/manual-entry`, {
@@ -2240,6 +2242,8 @@ export async function updateOfflineFeeBill(data: {
     performanceBaseAmount?: number;
     amount?: number;
     dueAt?: string;
+    periodStart?: string;
+    periodEnd?: string;
     remark?: string;
 }) {
     return request(`${API_BASE}/offline-fees/bills/update`, {
