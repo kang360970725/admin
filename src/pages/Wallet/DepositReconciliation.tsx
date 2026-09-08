@@ -242,7 +242,7 @@ export default function DepositReconciliationPage() {
       />
 
       <Drawer
-        title="服务者保证金逐人核对"
+        title={`${detailGroup?.operatorName || '全部人员'} · 服务者保证金逐人核对`}
         width="92vw"
         open={!!detailGroup}
         onClose={() => setDetailGroup(null)}
@@ -311,6 +311,7 @@ export default function DepositReconciliationPage() {
             }
             const res: any = await getWalletDepositReconciliation({
               staffScope,
+              operatorKey: detailGroup?.groupKey,
               search: params.search,
               page: params.current || 1,
               limit: params.pageSize || 20,
