@@ -11,6 +11,7 @@ import {
     Modal,
     InputNumber,
     Input,
+    Select,
 } from 'antd';
 import { ProTable } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -35,6 +36,7 @@ export default function UserWalletDrawer(props: any) {
     const [depositModal, setDepositModal] = React.useState(false);
     const [depositAmount, setDepositAmount] = React.useState<number>(0);
     const [depositRemark, setDepositRemark] = React.useState('');
+    const [depositManualSource, setDepositManualSource] = React.useState<string>();
 
     const [enums, setEnums] = React.useState<any>({});
 
@@ -370,11 +372,23 @@ export default function UserWalletDrawer(props: any) {
             <Modal
                 title="手动缴纳保证金"
                 open={depositModal}
-                onCancel={() => setDepositModal(false)}
+                onCancel={() => {
+                    setDepositModal(false);
+                    setDepositManualSource(undefined);
+                    setDepositRemark('');
+                }}
                 onOk={async () => {
                     try {
                         if (!depositAmount || depositAmount <= 0) {
                             message.error('请输入正确金额');
+                            return;
+                        }
+                        if (!depositManualSource) {
+                            message.error('请选择保证金录入来源');
+                            return;
+                        }
+                        if (!depositRemark.trim()) {
+                            message.error('请填写保证金录入原因');
                             return;
                         }
 
@@ -382,11 +396,14 @@ export default function UserWalletDrawer(props: any) {
                             userId: user?.id,
                             amount: depositAmount,
                             remark: depositRemark,
+                            manualSource: depositManualSource,
                         });
 
                         message.success('保证金缴纳成功');
 
                         setDepositModal(false);
+                        setDepositManualSource(undefined);
+                        setDepositRemark('');
                     } catch (e: any) {
                         message.error(e?.message || '操作失败');
                     }
@@ -403,11 +420,24 @@ export default function UserWalletDrawer(props: any) {
                 </div>
 
                 <div>
+                    <div style={{ marginBottom: 6 }}>录入来源</div>
+                    <Select
+                        style={{ width: '100%', marginBottom: 16 }}
+                        value={depositManualSource}
+                        onChange={setDepositManualSource}
+                        placeholder="请选择保证金的实际来源"
+                        options={[
+                            { label: '真实线下缴纳', value: 'OFFLINE_PAYMENT' },
+                            { label: '余额调整', value: 'BALANCE_ADJUSTMENT' },
+                            { label: '历史数据修正', value: 'HISTORICAL_CORRECTION' },
+                            { label: '其他', value: 'OTHER' },
+                        ]}
+                    />
                     <div style={{ marginBottom: 6 }}>备注</div>
                     <Input
                         value={depositRemark}
                         onChange={(e) => setDepositRemark(e.target.value)}
-                        placeholder="填写说明"
+                        placeholder="必填：填写收款方式、流水号或调整原因"
                     />
                 </div>
             </Modal>
