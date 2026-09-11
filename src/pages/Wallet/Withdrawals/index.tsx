@@ -19,6 +19,12 @@ const formatDateTime = (value?: string) => {
     if (!value) return '-';
     return dayjs(value).format('YYYY-MM-DD HH:mm');
 };
+const employmentStatusMap: Record<string, { text: string; color: string }> = {
+    ACTIVE: { text: '在店', color: 'green' },
+    FROZEN: { text: '冻结', color: 'orange' },
+    EXITED: { text: '已退店', color: 'default' },
+    BLACKLISTED: { text: '已拉黑', color: 'red' },
+};
 const WithdrawalsPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
     const { initialState } = useModel('@@initialState');
@@ -66,6 +72,17 @@ const WithdrawalsPage: React.FC = () => {
             render: (_: any, row: any) => {
                 const u = row?.user;
                 return <span>{u?.nickname || u?.name || '-'}</span>;
+            },
+        },
+        {
+            title: '在店状态',
+            dataIndex: ['user', 'staffEmploymentStatus'],
+            width: 100,
+            search: false,
+            render: (_: any, row: any) => {
+                const status = String(row?.user?.staffEmploymentStatus || '');
+                const item = employmentStatusMap[status];
+                return item ? <Tag color={item.color}>{item.text}</Tag> : '-';
             },
         },
         {

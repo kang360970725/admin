@@ -1,10 +1,11 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Button, Card, Col, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Row, Select, Space, Statistic, Tabs, Tag } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Row, Select, Space, Statistic, Table, Tabs, Tag } from 'antd';
 import dayjs from 'dayjs';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
   batchDeleteOfflineFeeBills,
+  applyOfflineFeeBillRepairs,
   confirmOfflineFeeBillPaidExternal,
   createOfflineFeeContract,
   generateOfflineFeeBills,
@@ -16,6 +17,7 @@ import {
   listOfflineStaffOptions,
   manualCreateOfflineFeeBill,
   payOfflineFeeBill,
+  previewOfflineFeeBillRepairs,
   updateOfflineFeeBill,
   updateOfflineFeeContract,
   waiveOfflineFeeBill,
@@ -56,6 +58,9 @@ const OfflineFeesPage: React.FC = () => {
   const [selectedBillRowKeys, setSelectedBillRowKeys] = useState<React.Key[]>([]);
   const [billEditorOpen, setBillEditorOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<OfflineFeeBill | null>(null);
+  const [repairOpen, setRepairOpen] = useState(false);
+  const [repairRows, setRepairRows] = useState<any[]>([]);
+  const [repairLoading, setRepairLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<OfflineStaffOption[]>([]);
@@ -228,6 +233,20 @@ const OfflineFeesPage: React.FC = () => {
         search: false,
         render: (_, row) => (row.dueAt ? dayjs(row.dueAt).format('YYYY-MM-DD') : '-'),
       },
+      {
+        title: '首次生成时间',
+        dataIndex: 'createdAt',
+        width: 170,
+        search: false,
+        render: (_, row) => row.createdAt ? dayjs(row.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-',
+      },
+      {
+        title: '最近更新时间',
+        dataIndex: 'updatedAt',
+        width: 170,
+        search: false,
+        render: (_, row) => row.updatedAt ? dayjs(row.updatedAt).format('YYYY-MM-DD HH:mm:ss') : '-',
+      },
       { title: '扣费金额', dataIndex: 'shouldPayAmount', width: 110, search: false, render: (_, row) => `¥${money(row.shouldPayAmount)}` },
       { title: '收费累计', dataIndex: 'manualPaidAmount', width: 110, search: false, render: (_, row) => `¥${money(row.manualPaidAmount || 0)}` },
       { title: '其他渠道', dataIndex: 'externalPaidAmount', width: 110, search: false, render: (_, row) => `¥${money(row.externalPaidAmount || 0)}` },
@@ -327,6 +346,24 @@ const OfflineFeesPage: React.FC = () => {
                 }}
                 toolBarRender={() => [
                   <Button key="manual-create" type="primary" onClick={() => void openBillEditor()}>录入线下费用</Button>,
+                  <Button
+                    key="repair"
+                    onClick={async () => {
+                      try {
+                        setRepairLoading(true);
+                        const res: any = await previewOfflineFeeBillRepairs();
+                        setRepairRows(Array.isArray(res?.candidates) ? res.candidates : []);
+                        setRepairOpen(true);
+                      } catch (e: any) {
+                        message.error(errorMessage(e, '历史账单检查失败'));
+                      } finally {
+                        setRepairLoading(false);
+                      }
+                    }}
+                    loading={repairLoading}
+                  >
+                    校正历史账单
+                  </Button>,
                   <Popconfirm
                     key="batch-delete"
                     title={`确认删除选中的 ${selectedBillRowKeys.length} 条线下费用账单？`}
@@ -387,6 +424,54 @@ const OfflineFeesPage: React.FC = () => {
           },
         ]}
       />
+
+      <Modal
+        title="历史线下费用账单校正"
+        open={repairOpen}
+        width={1100}
+        confirmLoading={repairLoading}
+        okText="确认校正可处理账单"
+        okButtonProps={{ disabled: !repairRows.some((row) => !row.blockedReason) }}
+        onCancel={() => setRepairOpen(false)}
+        onOk={async () => {
+          try {
+            setRepairLoading(true);
+            const res: any = await applyOfflineFeeBillRepairs({ confirmed: true });
+            message.success(`已校正 ${Number(res?.applied || 0)} 条，需人工处理 ${Number(res?.blocked || 0)} 条`);
+            setRepairOpen(false);
+            billActionRef.current?.reload();
+          } catch (e: any) {
+            message.error(errorMessage(e, '历史账单校正失败'));
+          } finally {
+            setRepairLoading(false);
+          }
+        }}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="仅校正系统自动生成且仍为未缴或部分缴纳的账单；已缴清、已减免及人工账单不会修改。已缴金额超过校正金额的账单只标记，不自动处理。"
+        />
+        <Table
+          rowKey="billId"
+          size="small"
+          pagination={{ pageSize: 10 }}
+          scroll={{ x: 1000 }}
+          dataSource={repairRows}
+          locale={{ emptyText: '未发现需要校正的历史账单' }}
+          columns={[
+            { title: '服务者', width: 130, render: (_: any, row: any) => row.user?.realName || row.user?.name || `#${row.userId}` },
+            { title: '月份', dataIndex: 'billMonth', width: 90 },
+            { title: '原费用周期', width: 190, render: (_: any, row: any) => `${row.oldPeriodStart} 至 ${row.oldPeriodEnd}` },
+            { title: '校正后周期', width: 190, render: (_: any, row: any) => `${row.periodStart} 至 ${row.periodEnd}` },
+            { title: '有效天数', width: 90, render: (_: any, row: any) => `${row.billableDays}/${row.daysInMonth}` },
+            { title: '原金额', dataIndex: 'oldAmount', width: 90, render: (v: any) => `¥${money(v)}` },
+            { title: '校正金额', dataIndex: 'amount', width: 100, render: (v: any) => `¥${money(v)}` },
+            { title: '处理结果', width: 180, render: (_: any, row: any) => row.blockedReason ? <Tag color="red">{row.blockedReason}</Tag> : <Tag color="green">可校正</Tag> },
+          ]}
+        />
+      </Modal>
 
       <Modal
         title={editingBill ? '编辑线下费用' : '录入线下费用'}

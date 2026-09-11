@@ -1560,6 +1560,13 @@ export interface WalletWithdrawalRequest {
 
     createdAt: string;
     updatedAt: string;
+    user?: {
+        id: number;
+        name?: string | null;
+        realName?: string | null;
+        nickname?: string | null;
+        staffEmploymentStatus?: 'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED' | string;
+    };
 }
 
 /**
@@ -2102,6 +2109,8 @@ export interface OfflineFeeBill {
     dueAt?: string | null;
     remark?: string | null;
     generatedAt: string;
+    createdAt: string;
+    updatedAt: string;
     user?: {
         id: number;
         name?: string;
@@ -2212,6 +2221,14 @@ export async function generateOfflineFeeBills(data: { month: string; confirmed?:
     method: 'POST',
     data,
   });
+}
+
+export async function previewOfflineFeeBillRepairs() {
+  return request(`${API_BASE}/offline-fees/bills/repair-preview`, { method: 'POST', data: {} });
+}
+
+export async function applyOfflineFeeBillRepairs(data: { confirmed: boolean }) {
+  return request(`${API_BASE}/offline-fees/bills/repair-apply`, { method: 'POST', data });
 }
 
 export async function listOfflineStaffOptions(data?: { keyword?: string }) {
