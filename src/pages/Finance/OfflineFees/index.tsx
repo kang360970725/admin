@@ -451,7 +451,7 @@ const OfflineFeesPage: React.FC = () => {
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          message="仅校正系统自动生成且仍为未缴或部分缴纳的账单；已缴清、已减免及人工账单不会修改。已缴金额超过校正金额的账单只标记，不自动处理。"
+          message="系统自动生成的未缴、部分缴纳及已缴清账单均会检查。错误生成到次月的账单将归回实际月份，已有缴费流水保持关联不变；已减免、人工录入或人工编辑过的账单不修改。存在月份冲突或需退款的记录只标记，不自动处理。"
         />
         <Table
           rowKey="billId"
@@ -462,7 +462,8 @@ const OfflineFeesPage: React.FC = () => {
           locale={{ emptyText: '未发现需要校正的历史账单' }}
           columns={[
             { title: '服务者', width: 130, render: (_: any, row: any) => row.user?.realName || row.user?.name || `#${row.userId}` },
-            { title: '月份', dataIndex: 'billMonth', width: 90 },
+            { title: '原月份', dataIndex: 'oldBillMonth', width: 90 },
+            { title: '校正月份', dataIndex: 'billMonth', width: 90 },
             { title: '原费用周期', width: 190, render: (_: any, row: any) => `${row.oldPeriodStart} 至 ${row.oldPeriodEnd}` },
             { title: '校正后周期', width: 190, render: (_: any, row: any) => `${row.periodStart} 至 ${row.periodEnd}` },
             { title: '有效天数', width: 90, render: (_: any, row: any) => `${row.billableDays}/${row.daysInMonth}` },
