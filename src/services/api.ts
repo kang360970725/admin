@@ -15,6 +15,7 @@ export const listRentalOrders = (params: any) => request<any>(`${API_BASE}/admin
 export const getRentalOrder = (id: number) => request<any>(`${API_BASE}/admin/rental-orders/${id}`);
 export const createRentalOrder = (data: any) => request<any>(`${API_BASE}/admin/rental-orders`, { method: 'POST', data });
 export const settleRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/settle`, { method: 'POST', data });
+export const reconcileRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/reconcile`, { method: 'POST', data });
 export const voidRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/void`, { method: 'POST', data });
 
 export function getRealtimeStreamUrl(token: string) {
@@ -281,6 +282,14 @@ export async function refreshMemberLevels() {
     return request(`${API_BASE}/member/levels/refresh`, {
         method: 'POST',
     });
+}
+
+export async function getStaffPublicCards(status?: string) {
+    return request(`${API_BASE}/member/engagement/staff-cards`, { method: 'GET', params: status ? { status } : {} });
+}
+
+export async function reviewStaffPublicCard(id: number, data: { status: 'APPROVED' | 'REJECTED'; reviewRemark?: string }) {
+    return request(`${API_BASE}/member/engagement/staff-cards/${id}/review`, { method: 'PATCH', data });
 }
 
 export async function createMemberRechargePlan(data: any) {
@@ -3618,4 +3627,35 @@ export async function postChestPublicPromoStatus(data: { deviceId: string; promo
 
 export async function postChestPublicPromoClaim(data: { deviceId: string; promoCode: string; phone?: string }) {
   return request(`${API_BASE}/chest/public/promo/claim`, { method: 'POST', data, skipErrorHandler: true });
+}
+
+export type MiniappWechatBindingTestUser = {
+  id: number;
+  name?: string | null;
+  phone?: string | null;
+  userType?: string;
+  status?: string;
+  profileCompleted?: boolean;
+  createdAt?: string;
+  wechatBindings: Array<{
+    id: number;
+    platform: string;
+    appId: string;
+    openId: string;
+    unionId?: string | null;
+    nickname?: string | null;
+    lastBindAt?: string | null;
+    lastLoginAt?: string | null;
+  }>;
+};
+
+export async function getMiniappWechatBindingForTest(userId: number) {
+  return request<MiniappWechatBindingTestUser>(`${API_BASE}/users/test-tools/${userId}/miniapp-wechat-binding`);
+}
+
+export async function clearMiniappWechatBindingForTest(userId: number) {
+  return request<{ success: boolean; deletedCount: number; userId: number; message: string }>(
+    `${API_BASE}/users/test-tools/${userId}/miniapp-wechat-binding`,
+    { method: 'DELETE' },
+  );
 }

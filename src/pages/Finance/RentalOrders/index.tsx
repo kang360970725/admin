@@ -2,7 +2,7 @@ import React from 'react';
 import { PageContainer, ProTable, ActionType } from '@ant-design/pro-components';
 import { Alert, Button, Card, Col, Descriptions, Drawer, Form, Input, InputNumber, message, Modal, Row, Space, Statistic, Switch, Table, Tag, theme } from 'antd';
 import { history, useAccess } from '@umijs/max';
-import { getRentalOrder, listRentalOrders, settleRentalOrder, voidRentalOrder } from '@/services/api';
+import { getRentalOrder, listRentalOrders, reconcileRentalOrder, settleRentalOrder, voidRentalOrder } from '@/services/api';
 import { apiError, yuan } from './CreateRentalOrderModal';
 import { useIsMobile } from '@/utils/useIsMobile';
 import './responsive.less';
@@ -21,9 +21,11 @@ export default function RentalOrdersPage() {
   const [detail, setDetail] = React.useState<any>();
   const [settling, setSettling] = React.useState<any>();
   const [voiding, setVoiding] = React.useState<any>();
+  const [reconciling, setReconciling] = React.useState<any>();
   const [busy, setBusy] = React.useState(false);
   const [form] = Form.useForm();
   const [voidForm] = Form.useForm();
+  const [reconcileForm] = Form.useForm();
   const [serverOffset, setServerOffset] = React.useState(0);
   const noRefund = Form.useWatch('noRefundDifference', form);
   const refund = Form.useWatch('refundDifferenceAmount', form);
@@ -37,11 +39,12 @@ export default function RentalOrdersPage() {
   const renderActions = (row: any) => <div className="rental-record-actions">
     <Button onClick={() => openDetail(row)}>详情</Button>
     {row.status === 'RUNNING' && access.canSettleRentalOrder && <Button type="primary" onClick={() => { form.resetFields(); setSettling(row); }}>结算</Button>}
+    {row.status === 'SETTLED' && !row.reconciledAt && access.canReconcileRentalOrder && <Button type="primary" onClick={() => { reconcileForm.resetFields(); setReconciling(row); }}>核销</Button>}
     {canVoid(row) && access.canVoidRentalOrder && <Button danger onClick={() => { voidForm.resetFields(); setVoiding(row); }}>废除</Button>}
   </div>;
 
   return <PageContainer className="rental-page" title="租号订单">
-    <Alert type="info" showIcon message={`今日统计 · ${stats.date || '-'}（上海时间，不随列表筛选变化）`} description="创建金额不含押金，废除订单不计出租统计；结算按实际结算日统计。强制结算日到期仅提示，需工作人员核实费用后结算。" style={{ marginBottom: 12 }} />
+    <Alert type="info" showIcon message={`今日统计 · ${stats.date || '-'}（上海时间，不随列表筛选变化）`} description="创建金额不含押金，废除订单不计出租统计；结算按实际结算日统计。订单结算后，待服务者平台余额对应资金真实转给商行，再确认核销。" style={{ marginBottom: 12 }} />
     <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
       {[
         ['当日出租数量', stats.createdCount, false], ['当日租号金额（不含押金）', stats.rentalAmount, true],
@@ -60,6 +63,7 @@ export default function RentalOrdersPage() {
       }} columns={[
         { title: '查询', dataIndex: 'search', hideInTable: true, fieldProps: { placeholder: '流水号 / 号源编号 / 服务者' } },
         { title: '仅逾期', dataIndex: 'overdue', hideInTable: true, valueType: 'select', valueEnum: { true: '是' } },
+        { title: '核销状态', dataIndex: 'reconciled', hideInTable: true, valueType: 'select', valueEnum: { false: '待核销', true: '已核销' } },
         { title: '租号流水编号', dataIndex: 'serialNo', search: false, width: 160 },
         { title: '服务者', dataIndex: 'staffNameSnapshot', search: false },
         { title: '号源编号', dataIndex: 'accountSourceNo', search: false },
@@ -68,10 +72,12 @@ export default function RentalOrdersPage() {
         { title: '开始日期', dataIndex: 'startDate', search: false, renderText: date },
         { title: '强制结算日期', dataIndex: 'forcedSettlementDate', search: false, render: (_: any, row: any) => <>{date(row.forcedSettlementDate)} {row.status === 'RUNNING' && date(row.forcedSettlementDate) < stats.date && <Tag color="red">逾期</Tag>}</> },
         { title: '实际费用', dataIndex: 'actualAmount', search: false, renderText: (v: any) => v == null ? '-' : yuan(v) },
+        { title: '核销状态', dataIndex: 'reconciledAt', search: false, render: (v: any, row: any) => row.status !== 'SETTLED' ? '-' : v ? <Tag color="green">已核销</Tag> : <Tag color="orange">待核销</Tag> },
         { title: '创建时间', dataIndex: 'createdAt', search: false, renderText: time, width: 175 },
         { title: '操作', valueType: 'option', fixed: 'right', width: 190, render: (_: any, row: any) => [
           <a key="view" onClick={() => openDetail(row)}>详情</a>,
           row.status === 'RUNNING' && access.canSettleRentalOrder && <a key="settle" onClick={() => { form.resetFields(); setSettling(row); }}>结算</a>,
+          row.status === 'SETTLED' && !row.reconciledAt && access.canReconcileRentalOrder && <a key="reconcile" onClick={() => { reconcileForm.resetFields(); setReconciling(row); }}>核销</a>,
           canVoid(row) && access.canVoidRentalOrder && <a key="void" style={{ color: '#ff4d4f' }} onClick={() => { voidForm.resetFields(); setVoiding(row); }}>废除</a>,
         ].filter(Boolean) },
       ].map((column) => isMobile ? { ...column, hideInTable: true, fixed: undefined } : column).concat(isMobile ? [{
@@ -81,6 +87,7 @@ export default function RentalOrdersPage() {
           <div className="rental-record-facts">
             <div><label>服务者</label>{row.staffNameSnapshot}</div><div><label>号源编号</label>{row.accountSourceNo}</div>
             <div><label>租金 / 押金</label>{yuan(row.prepaidAmount)} / {yuan(row.depositAmount)}</div><div><label>实际费用</label>{row.actualAmount == null ? '-' : yuan(row.actualAmount)}</div>
+            <div><label>核销状态</label>{row.status !== 'SETTLED' ? '-' : row.reconciledAt ? <Tag color="green">已核销</Tag> : <Tag color="orange">待核销</Tag>}</div>
             <div><label>开始日期</label>{date(row.startDate)}</div><div><label>强制结算日期</label>{date(row.forcedSettlementDate)} {row.status === 'RUNNING' && date(row.forcedSettlementDate) < stats.date && <Tag color="red">逾期</Tag>}</div>
             <div style={{ gridColumn: '1 / -1' }}><label>创建时间</label>{time(row.createdAt)}</div>
           </div>{renderActions(row)}
@@ -146,6 +153,19 @@ export default function RentalOrdersPage() {
       <Form form={voidForm} layout="vertical" style={{ marginTop: 16 }}><Form.Item name="reason" label="废除原因" rules={[{ required: true, whitespace: true }]}><Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} maxLength={2000} /></Form.Item></Form>
     </Modal>
 
+    <Modal className="rental-modal" title={`核销 · ${reconciling?.serialNo || ''}`} open={!!reconciling} confirmLoading={busy} okText="确认已转付并核销"
+      onCancel={() => setReconciling(undefined)} onOk={async () => {
+        if (busy) return;
+        try {
+          const values = await reconcileForm.validateFields(); setBusy(true);
+          await reconcileRentalOrder(reconciling.id, { version: reconciling.version, remark: values.remark });
+          message.success('订单已核销'); setReconciling(undefined); actionRef.current?.reload();
+        } catch (e: any) { if (!e?.errorFields) message.error(apiError(e)); } finally { setBusy(false); }
+      }}>
+      <Alert type="warning" showIcon message={`本次核销金额：${yuan(reconciling?.actualAmount)}`} description="请确认服务者平台余额对应的租号实际费用已经真实转付给商行。核销后不可重复操作。" />
+      <Form form={reconcileForm} layout="vertical" style={{ marginTop: 16 }}><Form.Item name="remark" label="核销备注"><Input.TextArea placeholder="可填写转账渠道、凭证编号等；不填将使用默认说明" autoSize={{ minRows: 3, maxRows: 6 }} maxLength={2000} /></Form.Item></Form>
+    </Modal>
+
     <Drawer className="rental-detail" open={!!detail} width={isMobile ? '100%' : 900} title={`订单详情 · ${detail?.serialNo || ''}`} onClose={() => setDetail(undefined)}>
       {detail && <><Descriptions bordered column={1} size="small">
         {[
@@ -160,6 +180,10 @@ export default function RentalOrdersPage() {
           ['净退款（负数为补扣）', detail.settlementNetRefund == null ? '-' : yuan(detail.settlementNetRefund)],
           ['创建时间 / 操作人', `${time(detail.createdAt)} / ${detail.createdByName || '-'}`],
           ['结算时间 / 操作人', `${time(detail.settledAt)} / ${detail.settledByName || '-'}`],
+          ['核销状态', detail.reconciledAt ? '已核销' : detail.status === 'SETTLED' ? '待核销' : '-'],
+          ['核销金额', detail.reconciliationAmount == null ? '-' : yuan(detail.reconciliationAmount)],
+          ['核销时间 / 操作人', `${time(detail.reconciledAt)} / ${detail.reconciledByName || '-'}`],
+          ['核销备注', detail.reconciliationRemark || '-'],
           ['废除时间 / 操作人', `${time(detail.voidedAt)} / ${detail.voidedByName || '-'}`], ['废除原因', detail.voidReason || '-'],
         ].map(([label, value]) => <Descriptions.Item key={label} label={label}>{value}</Descriptions.Item>)}
       </Descriptions>{isMobile ? <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>{(detail.transactions || []).map((r: any) => <Card size="small" key={r.id}>

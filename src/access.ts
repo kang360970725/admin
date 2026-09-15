@@ -54,6 +54,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewRentalOrders,
     canCreateRentalOrder: isSuperAdmin || has('rental-orders:create:button'),
     canSettleRentalOrder: isSuperAdmin || has('rental-orders:settle:button'),
+    canReconcileRentalOrder: isSuperAdmin || has('rental-orders:reconcile:button'),
     canVoidRentalOrder: isSuperAdmin || has('rental-orders:void:button'),
     // 系统管理
     canViewRoleManagement: has('system:role:page'),
@@ -68,6 +69,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewQuestionnairesAdmin: has('system:questionnaires:page') || hasLegacySystemAdmin,
     canViewDutyCsSchedules: has('system:duty-cs:page') || hasLegacySystemAdmin,
     canViewNotificationTestPush: has('system:notification-test-push:page') || hasLegacySystemAdmin,
+    canViewWechatBindingTest: isSuperAdmin || has('system:wechat-binding-test:page'),
     canViewUserLogs: has('system:user-logs:page') || hasLegacySystemAdmin,
     canViewChestDemo: has('ops:promotion:page') || has('chest:page') || hasLegacySystemAdmin,
     canViewCoupons: has('coupons:page') || has('coupons:user-coupons:list') || hasLegacySystemAdmin,

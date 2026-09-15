@@ -155,6 +155,7 @@ export default defineConfig({
         { path: '/system/questionnaires', name: '匿名问卷', component: '@/pages/System/Questionnaires', access: 'canViewQuestionnairesAdmin' },
         { path: '/system/duty-cs', name: '当班客服配置', component: '@/pages/System/DutyCsSchedules', access: 'canViewDutyCsSchedules' },
         { path: '/system/notification-test-push', name: '测试推送中心', component: '@/pages/System/NotificationTestPush', access: 'canViewNotificationTestPush' },
+        { path: '/system/wechat-binding-test', name: '微信绑定测试', component: '@/pages/System/WechatBindingTest', access: 'canViewWechatBindingTest' },
       ],
     },
     {
@@ -308,6 +309,7 @@ export default defineConfig({
         { path: '/users', redirect: '/users/members' },
         { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
         { path: '/users/staff', name: '服务者管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
+        { path: '/users/staff-cards', name: '服务者名片审核', component: '@/pages/Users/StaffCards', access: 'canViewStaffUsers' },
         { path: '/users/staff-leaves', name: '请假管理', component: '@/pages/Staff/Activity', access: 'canViewStaffUsers' },
         { path: '/users/excellent-staff', name: '优秀服务者管理', component: '@/pages/Users/ExcellentStaff', access: 'canViewExcellentStaff' },
         { path: '/users/internal', name: '后台人员', component: '@/pages/Users', access: 'canViewInternalUsers' },
