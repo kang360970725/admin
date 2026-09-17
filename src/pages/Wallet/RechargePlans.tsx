@@ -13,8 +13,6 @@ export default function RechargePlansPage() {
     const [form] = Form.useForm();
     const watchedAmount = Number(Form.useWatch('amount', form) || 0);
     const watchedBonusAmount = Number(Form.useWatch('bonusAmount', form) || 0);
-    const watchedGiftPoints = Math.max(0, Math.floor(Number(Form.useWatch('giftPoints', form) || 0)));
-    const watchedGiftGrowthValue = Math.max(0, Math.floor(Number(Form.useWatch('giftGrowthValue', form) || 0)));
 
     useEffect(() => {
         const loadCoupons = async () => {
@@ -46,8 +44,6 @@ export default function RechargePlansPage() {
         { title: '标题', dataIndex: 'title', width: 140, search: false },
         { title: '充值金额', dataIndex: 'amount', width: 120, search: false, render: (v: any) => `¥${Number(v ?? 0).toFixed(2)}` },
         { title: '赠送金额', dataIndex: 'bonusAmount', width: 120, search: false, render: (v: any) => `¥${Number(v ?? 0).toFixed(2)}` },
-        { title: '赠送积分', dataIndex: 'giftPoints', width: 100, search: false },
-        { title: '赠送成长值', dataIndex: 'giftGrowthValue', width: 110, search: false },
         {
             title: '赠券',
             dataIndex: 'couponBenefits',
@@ -131,7 +127,7 @@ export default function RechargePlansPage() {
                         onClick={() => {
                             setEditing(null);
                             form.resetFields();
-                            form.setFieldsValue({ enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0, effectiveFrom: null, effectiveTo: null, couponBenefits: [] });
+                            form.setFieldsValue({ enabled: true, sortOrder: 100, bonusAmount: 0, effectiveFrom: null, effectiveTo: null, couponBenefits: [] });
                             setOpen(true);
                         }}
                     >
@@ -147,7 +143,7 @@ export default function RechargePlansPage() {
                 layout="vertical"
                 width={920}
                 modalProps={{ destroyOnClose: true, onCancel: () => setOpen(false), className: 'bc-admin-form-modal' }}
-                initialValues={editing || { enabled: true, sortOrder: 100, giftPoints: 0, giftGrowthValue: 0, bonusAmount: 0 }}
+                initialValues={editing || { enabled: true, sortOrder: 100, bonusAmount: 0 }}
                 onFinish={async (values) => {
                     try {
                         const payload = {
@@ -186,14 +182,6 @@ export default function RechargePlansPage() {
                             <div className="bc-admin-form-summary-label">到账合计</div>
                             <div className="bc-admin-form-summary-value">¥{(watchedAmount + watchedBonusAmount).toFixed(2)}</div>
                         </div>
-                        <div className="bc-admin-form-summary-card warning">
-                            <div className="bc-admin-form-summary-label">赠送积分</div>
-                            <div className="bc-admin-form-summary-value">{watchedGiftPoints}</div>
-                        </div>
-                        <div className="bc-admin-form-summary-card warning">
-                            <div className="bc-admin-form-summary-label">赠送成长值</div>
-                            <div className="bc-admin-form-summary-value">{watchedGiftGrowthValue}</div>
-                        </div>
                     </div>
 
                     <div className="bc-admin-form-section">
@@ -210,8 +198,6 @@ export default function RechargePlansPage() {
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">赠送权益</div>
                         <div className="bc-admin-form-grid">
-                            <ProFormDigit name="giftPoints" label="赠送积分" min={0} fieldProps={{ precision: 0 }} />
-                            <ProFormDigit name="giftGrowthValue" label="赠送成长值" min={0} fieldProps={{ precision: 0 }} />
                             <div className="bc-admin-form-grid-full">
                                 <Form.Item label="赠送优惠券">
                                     <Form.List name="couponBenefits">

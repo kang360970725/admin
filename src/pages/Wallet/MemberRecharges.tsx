@@ -62,10 +62,6 @@ export default function MemberRechargesPage() {
         const rechargeAmount = Number(record?.amount ?? record?.payAmount ?? 0);
         const bonusAmount = Number(record?.bonusAmount ?? 0);
         const grantedAmount = Number(record?.grantedAmount ?? rechargeAmount + bonusAmount);
-        const giftPoints = Math.max(0, Math.floor(Number(record?.giftPoints ?? 0)));
-        const giftGrowthValue = Math.max(0, Math.floor(Number(record?.giftGrowthValue ?? 0)));
-        const baseGrowthValue = Math.max(0, Math.floor(rechargeAmount));
-        const totalGrowthValue = baseGrowthValue + giftGrowthValue;
         const couponText = buildCouponText(record);
         const user = record?.user || {};
         const receiptNo = record?.rechargeNo || `ID ${record?.id || '-'}`;
@@ -79,8 +75,7 @@ export default function MemberRechargesPage() {
             `本次储值：${money(rechargeAmount)}`,
             `赠送金额：${money(bonusAmount)}`,
             `到账合计：${money(grantedAmount)}`,
-            `新增成长值：${baseGrowthValue} + ${giftGrowthValue} = ${totalGrowthValue}`,
-            `新增积分：${giftPoints}`,
+            `定级依据：累计实际储值金额`,
             `赠送优惠券：${couponText}`,
             `备注：${record?.remark || '-'}`,
             `操作时间：${receiptTime}`,
@@ -96,8 +91,7 @@ export default function MemberRechargesPage() {
                 { label: '本次储值', value: money(rechargeAmount), highlight: true },
                 { label: '赠送金额', value: money(bonusAmount) },
                 { label: '到账合计', value: money(grantedAmount), highlight: true },
-                { label: '新增成长值', value: `${baseGrowthValue} + ${giftGrowthValue} = ${totalGrowthValue}` },
-                { label: '新增积分', value: `${giftPoints}` },
+                { label: '定级依据', value: '累计实际储值金额' },
                 { label: '赠送优惠券', value: couponText },
                 { label: '备注', value: record?.remark || '-' },
                 { label: '操作时间', value: receiptTime },
@@ -185,7 +179,7 @@ export default function MemberRechargesPage() {
             search: false,
             render: (_: any, record: any) => (
                 <Space direction="vertical" size={0}>
-                    <span>赠金 {money(record?.bonusAmount)} · 积分 {Number(record?.giftPoints ?? 0)} · 成长值 {Number(record?.giftGrowthValue ?? 0)}</span>
+                    <span>赠送余额 {money(record?.bonusAmount)}</span>
                     <span style={{ color: '#999', fontSize: 12 }}>{buildCouponText(record)}</span>
                 </Space>
             ),

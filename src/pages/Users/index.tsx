@@ -3,7 +3,7 @@ import {PageContainer, ProTable} from '@ant-design/pro-components';
 import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
-import {adminSetStaffActivityEnabled, adjustMemberGrowth, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
+import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
 import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
@@ -194,6 +194,7 @@ export default function UsersPage() {
     const [memberRechargeVisible, setMemberRechargeVisible] = useState(false);
     const [memberRechargeSubmitting, setMemberRechargeSubmitting] = useState(false);
     const [memberRechargePlans, setMemberRechargePlans] = useState<any[]>([]);
+    const [memberLevelOptions, setMemberLevelOptions] = useState<any[]>([]);
     const [memberCouponTemplateOptions, setMemberCouponTemplateOptions] = useState<Array<{ label: string; value: number }>>([]);
     const [memberRechargeForm] = Form.useForm();
     const [memberCouponGrantVisible, setMemberCouponGrantVisible] = useState(false);
@@ -204,10 +205,6 @@ export default function UsersPage() {
     const [memberRechargeReceiptText, setMemberRechargeReceiptText] = useState('');
     const watchedMemberRechargeAmount = Number(Form.useWatch('amount', memberRechargeForm) || 0);
     const watchedMemberBonusAmount = Number(Form.useWatch('bonusAmount', memberRechargeForm) || 0);
-    const watchedMemberGiftPoints = Math.max(0, Math.floor(Number(Form.useWatch('giftPoints', memberRechargeForm) || 0)));
-    const watchedMemberGiftGrowthValue = Math.max(0, Math.floor(Number(Form.useWatch('giftGrowthValue', memberRechargeForm) || 0)));
-    const memberRechargeBaseGrowthValue = Math.max(0, Math.floor(watchedMemberRechargeAmount));
-    const memberRechargeTotalGrowthValue = memberRechargeBaseGrowthValue + watchedMemberGiftGrowthValue;
     const [memberGrowthVisible, setMemberGrowthVisible] = useState(false);
     const [memberGrowthSubmitting, setMemberGrowthSubmitting] = useState(false);
     const [memberGrowthForm] = Form.useForm();
@@ -443,12 +440,14 @@ export default function UsersPage() {
     };
 
     const loadMemberBenefitOptions = async () => {
-        const [plansRes, couponRes]: any = await Promise.all([
+        const [plansRes, couponRes, levelsRes]: any = await Promise.all([
             getMemberRechargePlans(),
             getCouponTemplates({ page: 1, limit: 200, status: 'ACTIVE' }),
+            getMemberLevelConfigs(),
         ]);
         const plans = Array.isArray(plansRes) ? plansRes : [];
         const coupons = Array.isArray(couponRes?.data) ? couponRes.data : [];
+        setMemberLevelOptions(Array.isArray(levelsRes) ? levelsRes.filter((item: any) => item?.enabled !== false) : []);
         const now = dayjs();
         setMemberRechargePlans(plans.filter((item: any) => {
             if (item?.enabled === false) return false;
@@ -473,8 +472,6 @@ export default function UsersPage() {
                 userId: Number(memberDetail.id),
                 amount: undefined,
                 bonusAmount: 0,
-                giftPoints: 0,
-                giftGrowthValue: 0,
                 couponBenefitTemplateIds: [],
                 remark: '',
             });
@@ -527,8 +524,6 @@ export default function UsersPage() {
         memberRechargeForm.setFieldsValue({
             amount: Number(plan?.amount ?? 0),
             bonusAmount: Number(plan?.bonusAmount ?? 0),
-            giftPoints: Number(plan?.giftPoints ?? 0),
-            giftGrowthValue: Number(plan?.giftGrowthValue ?? 0),
             couponBenefitTemplateIds: (Array.isArray(plan?.couponBenefits) ? plan.couponBenefits : [])
                 .map((item: any) => Number(item?.templateId))
                 .filter((id: number) => Number.isFinite(id) && id > 0),
@@ -574,10 +569,6 @@ export default function UsersPage() {
         const rechargeAmount = Number(rechargeRecord?.amount ?? formValues?.amount ?? rechargeRecord?.payAmount ?? 0);
         const bonusAmount = Number(rechargeRecord?.bonusAmount ?? formValues?.bonusAmount ?? 0);
         const grantedAmount = Number(rechargeRecord?.grantedAmount ?? rechargeAmount + bonusAmount);
-        const giftPoints = Math.max(0, Math.floor(Number(rechargeRecord?.giftPoints ?? formValues?.giftPoints ?? 0)));
-        const giftGrowthValue = Math.max(0, Math.floor(Number(rechargeRecord?.giftGrowthValue ?? formValues?.giftGrowthValue ?? 0)));
-        const baseGrowthValue = Math.max(0, Math.floor(rechargeAmount));
-        const totalGrowthValue = baseGrowthValue + giftGrowthValue;
         const receiptNo = rechargeRecord?.rechargeNo || `ID ${rechargeRecord?.id || '-'}`;
         const receiptTime = rechargeRecord?.createdAt
             ? dayjs(rechargeRecord.createdAt).format('YYYY-MM-DD HH:mm:ss')
@@ -591,8 +582,7 @@ export default function UsersPage() {
             `本次储值：¥${rechargeAmount.toFixed(2)}`,
             `赠送金额：¥${bonusAmount.toFixed(2)}`,
             `到账合计：¥${grantedAmount.toFixed(2)}`,
-            `新增成长值：${baseGrowthValue} + ${giftGrowthValue} = ${totalGrowthValue}`,
-            `新增积分：${giftPoints}`,
+            `定级依据：累计实际储值金额`,
             `赠送优惠券：${couponNames.length ? couponNames.join('、') : '无'}`,
             `备注：${rechargeRecord?.remark || formValues?.remark || '-'}`,
             `操作时间：${receiptTime}`,
@@ -608,8 +598,7 @@ export default function UsersPage() {
                 {label: '本次储值', value: `¥${rechargeAmount.toFixed(2)}`, highlight: true},
                 {label: '赠送金额', value: `¥${bonusAmount.toFixed(2)}`},
                 {label: '到账合计', value: `¥${grantedAmount.toFixed(2)}`, highlight: true},
-                {label: '新增成长值', value: `${baseGrowthValue} + ${giftGrowthValue} = ${totalGrowthValue}`},
-                {label: '新增积分', value: `${giftPoints}`},
+                {label: '定级依据', value: '累计实际储值金额'},
                 {label: '赠送优惠券', value: couponNames.length ? couponNames.join('、') : '无'},
                 {label: '备注', value: rechargeRecord?.remark || formValues?.remark || '-'},
                 {label: '操作时间', value: receiptTime},
@@ -634,8 +623,6 @@ export default function UsersPage() {
                 planId: values?.planId ? Number(values.planId) : undefined,
                 amount: values?.amount != null ? Number(values.amount) : undefined,
                 bonusAmount: values?.bonusAmount != null ? Number(values.bonusAmount) : undefined,
-                giftPoints: values?.giftPoints != null ? Number(values.giftPoints) : undefined,
-                giftGrowthValue: values?.giftGrowthValue != null ? Number(values.giftGrowthValue) : undefined,
                 couponBenefits: Array.isArray(values?.couponBenefitTemplateIds)
                     ? values.couponBenefitTemplateIds.map((templateId: number) => ({ templateId: Number(templateId), count: 1 }))
                     : [],
@@ -660,7 +647,7 @@ export default function UsersPage() {
         if (!memberDetail?.id) return;
         memberGrowthForm.resetFields();
         memberGrowthForm.setFieldsValue({
-            growthValue: 0,
+            levelCode: memberDetail?.memberProfile?.manualLevelCode || memberDetail?.memberProfile?.levelCode || 'AUTO',
             remark: '',
         });
         setMemberGrowthVisible(true);
@@ -671,19 +658,19 @@ export default function UsersPage() {
             const values = await memberGrowthForm.validateFields();
             if (!memberDetail?.id) return;
             setMemberGrowthSubmitting(true);
-            await adjustMemberGrowth({
+            await adjustMemberLevel({
                 userId: Number(memberDetail.id),
-                growthValue: Number(values.growthValue),
+                levelCode: String(values.levelCode || 'AUTO'),
                 remark: values?.remark ? String(values.remark).trim() : undefined,
             });
-            message.success('会员成长值已更新');
+            message.success(values.levelCode === 'AUTO' ? '已恢复按储值金额自动定级' : '会员等级已更新');
             setMemberGrowthVisible(false);
             memberGrowthForm.resetFields();
             await loadMemberDetailData(Number(memberDetail.id));
             actionRef.current?.reload?.();
         } catch (error: any) {
             if (!error?.errorFields) {
-                message.error(error?.response?.data?.message || '成长值调整失败');
+                message.error(error?.response?.data?.message || '会员等级调整失败');
             }
         } finally {
             setMemberGrowthSubmitting(false);
@@ -1074,15 +1061,6 @@ export default function UsersPage() {
             width: 90,
             hideInTable: sceneConfig.key !== 'MEMBER',
             render: (_: any, record: any) => Number(record?.memberPointAccount?.availablePoints ?? 0),
-        },
-        {
-            title: '成长值',
-            dataIndex: ['memberProfile', 'annualContribution'],
-            key: 'memberGrowth',
-            search: false,
-            width: 100,
-            hideInTable: sceneConfig.key !== 'MEMBER',
-            render: (_: any, record: any) => Number(record?.memberProfile?.annualContribution ?? 0),
         },
         {
             title: '累计充值',
@@ -2004,7 +1982,7 @@ export default function UsersPage() {
             >
                 {memberDetail ? (
                     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                        {access.canManualMemberRecharge || access.canGrantMemberCoupon || access.canAdjustMemberGrowth ? (
+                        {access.canManualMemberRecharge || access.canGrantMemberCoupon || access.canAdjustMemberLevel ? (
 	                            <Space wrap>
 	                                {access.canManualMemberRecharge ? (
 	                                    <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
@@ -2012,8 +1990,8 @@ export default function UsersPage() {
 	                                {access.canGrantMemberCoupon ? (
 	                                    <Button onClick={openMemberCouponGrant}>发放优惠券</Button>
 	                                ) : null}
-	                                {access.canAdjustMemberGrowth ? (
-	                                    <Button onClick={openMemberGrowthAdjust}>调整成长值</Button>
+                                {access.canAdjustMemberLevel ? (
+	                                    <Button onClick={openMemberGrowthAdjust}>调整会员等级</Button>
 	                                ) : null}
                             </Space>
                         ) : null}
@@ -2025,7 +2003,7 @@ export default function UsersPage() {
                             <Descriptions.Item label="储值余额">¥{Number(memberDetail?.walletAccount?.availableBalance ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="冻结余额">¥{Number(memberDetail?.walletAccount?.frozenBalance ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="当前积分">{Number(memberDetail?.memberPointAccount?.availablePoints ?? 0)}</Descriptions.Item>
-                            <Descriptions.Item label="成长值">{Number(memberDetail?.memberProfile?.annualContribution ?? 0)}</Descriptions.Item>
+                            <Descriptions.Item label="定级方式">{memberDetail?.memberProfile?.manualLevelCode ? '后台人工指定' : '累计储值自动定级'}</Descriptions.Item>
                             <Descriptions.Item label="累计充值">¥{Number(memberDetail?.memberProfile?.totalRechargeAmount ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="累计消费">¥{Number(memberDetail?.memberProfile?.totalConsumeAmount ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="最近登录">{memberDetail?.lastLoginAt ? dayjs(memberDetail.lastLoginAt).format('YYYY-MM-DD HH:mm:ss') : '从未'}</Descriptions.Item>
@@ -2088,7 +2066,7 @@ export default function UsersPage() {
                                                 充值 ¥{Number(item?.payAmount ?? 0).toFixed(2)} / 到账 ¥{Number(item?.grantedAmount ?? 0).toFixed(2)} · {item?.createdAt ? dayjs(item.createdAt).format('YYYY-MM-DD HH:mm') : '-'}
                                             </div>
                                             <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                                                赠送积分 {Number(item?.giftPoints ?? 0)} · 赠送成长值 {Number(item?.giftGrowthValue ?? 0)}
+                                                赠送余额 ¥{Number(item?.bonusAmount ?? 0).toFixed(2)}
                                             </div>
                                             {item?.remark ? (
                                                 <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
@@ -2222,14 +2200,6 @@ export default function UsersPage() {
                             <div className="bc-admin-form-summary-label">到账合计</div>
                             <div className="bc-admin-form-summary-value">¥{(watchedMemberRechargeAmount + watchedMemberBonusAmount).toFixed(2)}</div>
                         </div>
-                        <div className="bc-admin-form-summary-card warning">
-                            <div className="bc-admin-form-summary-label">新增积分</div>
-                            <div className="bc-admin-form-summary-value">{watchedMemberGiftPoints}</div>
-                        </div>
-                        <div className="bc-admin-form-summary-card warning">
-                            <div className="bc-admin-form-summary-label">新增成长值</div>
-                            <div className="bc-admin-form-summary-value">{memberRechargeTotalGrowthValue}</div>
-                        </div>
                     </div>
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">充值信息</div>
@@ -2260,14 +2230,6 @@ export default function UsersPage() {
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">赠送权益</div>
                         <div className="bc-admin-form-grid">
-                            <Form.Item label="赠送积分" name="giftPoints">
-                                <InputNumber style={{ width: '100%' }} min={0} precision={0} placeholder="选填，默认取方案值" />
-                                <div className="bc-admin-form-muted">消费积分规则：订单消费每 10 元获得 1 积分；这里填写的是额外赠送积分。</div>
-                            </Form.Item>
-                            <Form.Item label="赠送成长值" name="giftGrowthValue">
-                                <InputNumber style={{ width: '100%' }} min={0} precision={0} placeholder="选填，默认取方案值" />
-                                <div className="bc-admin-form-muted">成长值规则：充值本金每 1 元获得 1 成长值；这里填写的是额外赠送成长值。</div>
-                            </Form.Item>
                             <div className="bc-admin-form-grid-full">
                                 <Form.Item label="赠送优惠券" name="couponBenefitTemplateIds">
                                     <Select
@@ -2288,7 +2250,7 @@ export default function UsersPage() {
                             <Input.TextArea rows={3} placeholder="例如：线下转账补录 / 活动赠送 / 客诉补偿" />
                         </Form.Item>
                         <div className="bc-admin-form-muted">
-                            成长值：{memberRechargeBaseGrowthValue}（充值本金） + {watchedMemberGiftGrowthValue}（额外赠送） = {memberRechargeTotalGrowthValue}；积分：{watchedMemberGiftPoints}（额外赠送）。手动充值会生成成功充值单，并同步到账储值余额、权益和小票。
+                            会员等级按累计实际储值金额自动升级；充值赠礼请直接填写“赠送本金”，将以储值余额到账。手动充值会生成成功充值单，并同步到账储值余额、权益和小票。
                         </div>
                     </div>
                 </Form>
@@ -2385,7 +2347,7 @@ export default function UsersPage() {
             </Modal>
 
             <Modal
-                title={`调整会员成长值 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
+                title={`调整会员等级 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
                 open={memberGrowthVisible}
                 onOk={submitMemberGrowthAdjust}
                 onCancel={() => {
@@ -2397,21 +2359,14 @@ export default function UsersPage() {
             >
                 <Form form={memberGrowthForm} layout="vertical">
                     <Form.Item
-                        label="成长值调整"
-                        name="growthValue"
-                        rules={[
-                            { required: true, message: '请输入成长值调整值' },
-                            {
-                                validator: async (_rule, value) => {
-                                    if (!Number(value)) throw new Error('成长值调整值不能为 0');
-                                },
-                            },
-                        ]}
+                        label="目标会员等级"
+                        name="levelCode"
+                        rules={[{ required: true, message: '请选择会员等级' }]}
                     >
-                        <InputNumber style={{ width: '100%' }} precision={0} placeholder="支持正负数，正数增加，负数扣减" />
+                        <Select options={[{ label: '恢复自动定级（按累计储值）', value: 'AUTO' }, ...memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code }))]} />
                     </Form.Item>
                     <Form.Item label="调整原因" name="remark" rules={[{ required: true, message: '请填写调整原因' }]}>
-                        <Input.TextArea rows={3} placeholder="请输入本次人工调整成长值的原因" />
+                        <Input.TextArea rows={3} placeholder="请输入本次等级调整原因" />
                     </Form.Item>
                 </Form>
             </Modal>
@@ -2449,14 +2404,14 @@ export default function UsersPage() {
                     >
                         <Input maxLength={64} placeholder="请输入游戏数字ID" />
                     </Form.Item>
-                    <Form.Item label="游戏昵称" name="gameNickname">
-                        <Input maxLength={64} placeholder="选填" />
+                    <Form.Item label="游戏昵称" name="gameNickname" rules={[{ required: true, message: '请输入游戏昵称' }]}>
+                        <Input maxLength={64} placeholder="必填，同一游戏内不可重复" />
                     </Form.Item>
                     <Form.Item name="isPrimary" valuePropName="checked">
                         <Checkbox>设为主要游戏名片</Checkbox>
                     </Form.Item>
                     <div style={{ color: '#999', fontSize: 12, lineHeight: '20px' }}>
-                        后台可新增、删除并调整主要名片。同一游戏最多 2 张，游戏数字ID在同类游戏下全局唯一。
+                        后台可新增、删除并调整主要名片。同一游戏最多 2 张，游戏数字ID与昵称在同类游戏下均全局唯一。
                     </div>
                 </Form>
             </Modal>

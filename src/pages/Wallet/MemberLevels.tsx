@@ -26,7 +26,6 @@ export default function MemberLevelsPage() {
         { title: '编码', dataIndex: 'code', width: 100, search: false },
         { title: '名称', dataIndex: 'name', width: 120, search: false },
         { title: '充值门槛', dataIndex: 'minRechargeAmount', width: 120, search: false, render: (v: any) => `¥${Number(v ?? 0).toFixed(2)}` },
-        { title: '贡献门槛', dataIndex: 'minAnnualContribution', width: 100, search: false },
         {
             title: '权益',
             dataIndex: 'benefits',
@@ -109,7 +108,7 @@ export default function MemberLevelsPage() {
                 layout="vertical"
                 width={820}
                 modalProps={{ destroyOnClose: true, onCancel: () => setOpen(false), className: 'bc-admin-form-modal' }}
-                initialValues={editing || { enabled: true, isDefault: false, sortOrder: 100, minRechargeAmount: 0, minAnnualContribution: 0, benefitsText: '' }}
+                initialValues={editing || { enabled: true, isDefault: false, sortOrder: 100, minRechargeAmount: 0, benefitsText: '' }}
                 onFinish={async (values) => {
                     const payload = {
                         ...values,
@@ -143,8 +142,7 @@ export default function MemberLevelsPage() {
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">升级门槛</div>
                         <div className="bc-admin-form-grid">
-                            <ProFormDigit name="minRechargeAmount" label="充值达标门槛" min={0} fieldProps={{ precision: 2 }} />
-                            <ProFormDigit name="minAnnualContribution" label="贡献值门槛" min={0} fieldProps={{ precision: 0 }} />
+                            <ProFormDigit name="minRechargeAmount" label="累计储值升级门槛" min={0} fieldProps={{ precision: 2 }} extra="会员累计实际储值达到该金额后自动升级" />
                         </div>
                     </div>
                     <div className="bc-admin-form-section">

@@ -320,6 +320,10 @@ export async function adjustMemberGrowth(data: { userId: number; growthValue: nu
     });
 }
 
+export async function adjustMemberLevel(data: { userId: number; levelCode: string; remark?: string }) {
+    return request(`${API_BASE}/member/level/adjust`, { method: 'POST', data });
+}
+
 export async function manualMemberRecharge(data: {
     userId: number;
     planId?: number;

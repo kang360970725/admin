@@ -113,7 +113,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canManageExcellentStaff: isSuperAdmin || has('users:excellent-staff:manage:button'),
     canManualMemberRecharge: isSuperAdmin || has('users:member:recharge:button'),
     canGrantMemberCoupon,
-    canAdjustMemberGrowth: isSuperAdmin || has('users:member:growth-adjust:button'),
+    canAdjustMemberLevel: isSuperAdmin || has('users:member:level-adjust:button'),
     canManageMemberGameCards: isSuperAdmin || has('users:member:game-card:button'),
     canCreateRating: isSuperAdmin,
     canEditRating: isSuperAdmin,
