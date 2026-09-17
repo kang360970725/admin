@@ -11,9 +11,11 @@ export const canViewProtectedCustomerGameId = (currentUser: any) => {
     const roleCode = String(currentUser?.role?.code || currentUser?.Role?.code || currentUser?.roleCode || currentUser?.roleKey || '').trim().toUpperCase();
     return userType === 'SUPER_ADMIN'
         || userType === 'ADMIN'
+        || userType === 'CUSTOMER_SERVICE'
         || roleName.toUpperCase() === 'SUPER_ADMIN'
         || roleName.includes('客服主管')
         || ['CS_SUPERVISOR', 'CUSTOMER_SERVICE_SUPERVISOR', 'CS_MANAGER', 'CUSTOMER_SERVICE_MANAGER'].includes(roleCode)
+        || permissions.includes('orders:list:page')
         || permissions.includes('orders:customer-game-id:view');
 };
 

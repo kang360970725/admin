@@ -377,7 +377,7 @@ const OrdersPage: React.FC = () => {
             renderFormItem: () => (
                 <Input
                     allowClear
-                    placeholder="订单号 / 客服 / 陪玩昵称"
+                    placeholder="订单号 / 客户昵称、房间号或ID / 客服 / 陪玩"
                 />
             ),
         },
@@ -661,7 +661,7 @@ const OrdersPage: React.FC = () => {
                         <Space direction="vertical" size={10} style={{ width: '100%' }}>
                             <Input.Search
                                 allowClear
-                                placeholder="订单号 / 客服 / 陪玩昵称"
+                                placeholder="订单号 / 客户昵称、房间号或ID / 客服 / 陪玩"
                                 enterButton="搜索"
                                 value={mobileFilters.keyword}
                                 onChange={(e) => setMobileFilters((prev) => ({ ...prev, keyword: e.target.value }))}

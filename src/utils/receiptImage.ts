@@ -22,6 +22,7 @@ export type GenerateReceiptImageOptions = {
 };
 
 type ParsedReceipt = {
+    orderNo?: string;
     project?: string;
     orderMetricLabel?: string;
     orderMetricValue?: string;
@@ -107,6 +108,9 @@ const parseReceipt = (text: string): ParsedReceipt => {
             collectingPlayers = false;
 
             switch (label) {
+                case '订单编号':
+                    model.orderNo = value;
+                    break;
                 case '下单项目':
                     model.project = value;
                     break;
@@ -204,6 +208,7 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
     };
 
     const parsed = parseReceipt(text);
+    const orderNo = parsed.orderNo || '-';
     const project = parsed.project || '-';
     const orderMetricLabel = parsed.orderMetricLabel || '订单保底';
     const orderMetricValue = parsed.orderMetricValue || '-';
@@ -226,7 +231,7 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
         '举报查实私加联系方式及私单奖 500-2000R',
     ];
 
-    const financeTop = 550;
+    const financeTop = 570;
     const financeBoxHeight = 90 + Math.max(0, financeItems.length - 2) * 30;
     const complaintGap = 20;
     const complaintTop = financeTop + financeBoxHeight + complaintGap;
@@ -315,10 +320,13 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
         C.fillStyle = COLORS.textMuted;
         C.font = '16px sans-serif';
         C.fillText('每一局游戏，都有蓝猫守护', centerX, centerY + 110);
+        C.fillStyle = COLORS.textMain;
+        C.font = 'bold 13px monospace';
+        C.fillText(`订单编号：${orderNo}`, centerX, centerY + 132);
     };
 
     const drawCoreInfo = () => {
-        const startY = 235;
+        const startY = 255;
         const margin = 30;
         const width = 390;
 
@@ -357,7 +365,7 @@ export const generateReceiptImage = async (title: string, text: string, opts: Ge
     };
 
     const drawTimeInfo = () => {
-        const timeY = 460;
+        const timeY = 480;
         C.textAlign = 'left';
         C.fillStyle = COLORS.primary;
         C.font = '14px sans-serif';
