@@ -20,6 +20,7 @@ const hiddenKeys = new Set([
   'miniapp_protocols',
   'goods_category_tree',
   'goods_tag_list',
+  'order_archive_instructions',
   // 自动到账方案经调研暂不可行，先从后台配置入口屏蔽；H5 微信授权绑定能力保留给会员 H5 复用。
   'withdraw_auto_transfer_enabled',
   'withdraw_wechat_transfer_enabled',

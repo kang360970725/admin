@@ -273,11 +273,12 @@ export default defineConfig({
       path: '/orders',
       name: '订单管理',
       icon: 'ProfileOutlined',
-      access: 'canViewOrdersList',
+      access: 'canViewOrderManagement',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
         { path: '/orders/renewal-leaderboard', name: '续单榜单', component: './Orders/RenewalLeaderboard', access: 'canViewRenewalLeaderboard' },
         { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrderComplaints' },
+        { path: '/orders/archive-instructions', name: '存单说明维护', component: './Orders/ArchiveInstructions', access: 'canManageOrderArchiveInstructions' },
         { path: '/orders/:id', name: '订单详情', component: './Orders/Detail', hideInMenu: true, access: 'canViewOrderDetail' },
       ],
     },

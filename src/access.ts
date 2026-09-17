@@ -27,6 +27,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canViewStaffUsers = isSuperAdmin || has('users:staff:page');
   const canViewStaffRentalRisk = isSuperAdmin || has('users:staff-rental-risk:page');
   const canViewRentalOrders = isSuperAdmin || has('rental-orders:page');
+  const canManageOrderArchiveInstructions = isSuperAdmin || has('orders:archive-instructions:page');
   const canViewInternalUsers = isSuperAdmin || has('users:internal:page');
   const canViewAllUsers = false;
   const canManageStaffUsers = canViewStaffUsers;
@@ -124,7 +125,9 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewStaffQuestionnaires: (has('staff:questionnaires:page') || has('staff:workbench:page')) && isDispatchEligibleStaff,
 
     // 订单/结算
+    canViewOrderManagement: has('orders:list:page') || canManageOrderArchiveInstructions,
     canViewOrdersList: has('orders:list:page'),
+    canManageOrderArchiveInstructions,
     canViewOrderDetail: has('orders:detail:page'),
     canViewOrderComplaints: has('orders:complaints:page') || has('orders:list:page'),
     canViewRenewalLeaderboard: has('orders:list:page'),

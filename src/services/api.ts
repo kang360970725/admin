@@ -1843,6 +1843,20 @@ export async function upsertSystemConfig(data: {
     });
 }
 
+export async function getOrderArchiveInstructions() {
+    return request<{ content: string }>(`${API_BASE}/system-configs/order/archive-instructions/get`, {
+        method: 'POST',
+        data: {},
+    });
+}
+
+export async function upsertOrderArchiveInstructions(content: string) {
+    return request<SystemConfigItem>(`${API_BASE}/system-configs/order/archive-instructions/upsert`, {
+        method: 'POST',
+        data: { content },
+    });
+}
+
 export type MiniappHomeConfig = {
     banners: any[];
     hotSales: any[];

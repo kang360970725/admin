@@ -3478,7 +3478,7 @@ const OrderDetailPage: React.FC = () => {
                 width={isMobile ? '96vw' : 720}
             >
                 <Form form={finishForm} layout="vertical">
-                    {String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !String(order?.customerGameId || '').trim() ? (
+                    {String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !/^\d+$/.test(String(order?.customerGameId || '').trim()) ? (
                         <>
                             <Alert
                                 type="warning"
@@ -3490,9 +3490,12 @@ const OrderDetailPage: React.FC = () => {
                             <Form.Item
                                 name="customerGameId"
                                 label="客户准确游戏ID"
-                                rules={[{ required: true, message: '请填写客户准确游戏ID后再存单或结单' }]}
+                                rules={[
+                                    { required: true, message: '请填写客户准确游戏ID后再存单或结单' },
+                                    { pattern: /^\d+$/, message: '准确游戏ID只能填写纯数字，请勿填写昵称、房间号或其他符号' },
+                                ]}
                             >
-                                <Input placeholder="请输入客户不可变的游戏ID" allowClear />
+                                <Input inputMode="numeric" maxLength={64} placeholder="请输入纯数字游戏ID" allowClear />
                             </Form.Item>
                         </>
                     ) : null}

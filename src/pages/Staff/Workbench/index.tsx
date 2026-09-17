@@ -32,6 +32,7 @@ import {
     getMyPenaltyPendingStats,
     getMyPenaltyTickets,
     getMyDispatches,
+    getOrderArchiveInstructions,
     getOrderDetail,
     ordersMyStats,
     usersWorkStatus,
@@ -39,6 +40,22 @@ import {
 import { maskPhone } from '@/utils/privacy';
 
 type DictMap = Record<string, Record<string, string>>;
+
+const sanitizeArchiveInstructions = (html: string) => {
+    if (typeof DOMParser === 'undefined') return '';
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    doc.querySelectorAll('script,style,iframe,object,embed,form').forEach((node) => node.remove());
+    doc.querySelectorAll('*').forEach((node) => {
+        Array.from(node.attributes).forEach((attr) => {
+            const name = attr.name.toLowerCase();
+            const value = String(attr.value || '').trim().toLowerCase();
+            if (name.startsWith('on') || ((name === 'href' || name === 'src') && value.startsWith('javascript:'))) {
+                node.removeAttribute(attr.name);
+            }
+        });
+    });
+    return doc.body.innerHTML;
+};
 
 const WorkbenchPage: React.FC = () => {
     const {initialState, setInitialState} = useModel('@@initialState');
@@ -95,6 +112,11 @@ const WorkbenchPage: React.FC = () => {
     const [finishMode, setFinishMode] = useState<'ARCHIVE' | 'COMPLETE'>('ARCHIVE');
     const [finishSubmitting, setFinishSubmitting] = useState(false);
     const [finishForm] = Form.useForm();
+    const [archiveInstructions, setArchiveInstructions] = useState('');
+    const safeArchiveInstructions = useMemo(
+        () => sanitizeArchiveInstructions(archiveInstructions),
+        [archiveInstructions],
+    );
     const watchedTotalProgressWan = Form.useWatch('totalProgressWan', finishForm);
     const watchedDeductMinutesOption = Form.useWatch('deductMinutesOption', finishForm);
     const watchedDeductMinutesCustom = Form.useWatch('deductMinutesCustom', finishForm);
@@ -353,6 +375,9 @@ const WorkbenchPage: React.FC = () => {
         void refreshStats();
         void refreshPool();
         void loadMyPenalties();
+        void getOrderArchiveInstructions()
+            .then((result) => setArchiveInstructions(String(result?.content || '')))
+            .catch((error) => console.error('加载存单说明失败', error));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -483,7 +508,7 @@ const WorkbenchPage: React.FC = () => {
         const order = row?.order || {};
         const needCustomerGameId =
             String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' &&
-            !String(order?.customerGameId || '').trim();
+            !/^\d+$/.test(String(order?.customerGameId || '').trim());
 
         // ✅ 1) 优先从 row/currentDispatch 拿本轮参与者
         let ps = participantsActive(row);
@@ -1119,7 +1144,17 @@ const WorkbenchPage: React.FC = () => {
                         width={isMobile ? '96vw' : 720}
                     >
                         <Form form={finishForm} layout="vertical">
-                            {poolDispatch && String(poolDispatch?.order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !String(poolDispatch?.order?.customerGameId || '').trim() ? (
+                            {finishMode === 'ARCHIVE' && safeArchiveInstructions ? (
+                                <Alert
+                                    type="info"
+                                    showIcon
+                                    style={{ marginBottom: 16 }}
+                                    message="存单说明"
+                                    description={<div className="archive-instructions-rich" style={{ lineHeight: 1.7 }} dangerouslySetInnerHTML={{ __html: safeArchiveInstructions }} />}
+                                />
+                            ) : null}
+
+                            {poolDispatch && String(poolDispatch?.order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !/^\d+$/.test(String(poolDispatch?.order?.customerGameId || '').trim()) ? (
                                 <>
                                     <Alert
                                         type="warning"
@@ -1131,9 +1166,12 @@ const WorkbenchPage: React.FC = () => {
                                     <Form.Item
                                         name="customerGameId"
                                         label="客户准确游戏ID"
-                                        rules={[{ required: true, message: '请填写客户准确游戏ID后再存单或结单' }]}
+                                        rules={[
+                                            { required: true, message: '请填写客户准确游戏ID后再存单或结单' },
+                                            { pattern: /^\d+$/, message: '准确游戏ID只能填写纯数字，请勿填写昵称、房间号或其他符号' },
+                                        ]}
                                     >
-                                        <Input placeholder="请输入客户不可变的游戏ID" allowClear />
+                                        <Input inputMode="numeric" maxLength={64} placeholder="请输入纯数字游戏ID" allowClear />
                                     </Form.Item>
                                 </>
                             ) : null}
