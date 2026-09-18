@@ -41,9 +41,16 @@ RUN BUILD_ID="${APP_BUILD_ID}" && \
   exit 1 )
 
 # ---------- Runtime stage ----------
-FROM nginx:stable-alpine
+# 固定运行时版本，避免 stable-alpine 漂移后同一份代码得到不同的容器行为。
+FROM nginx:1.28.0-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# 将静态产物和 Nginx 配置问题提前到镜像构建阶段暴露，避免部署后才表现为探针拒绝连接。
+RUN test -s /usr/share/nginx/html/index.html && nginx -t
+
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+
+# 不依赖基础镜像的 /docker-entrypoint.sh，直接以前台进程启动 Nginx。
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off; error_log /dev/stderr info;"]
