@@ -186,7 +186,7 @@ export default defineConfig({
       icon: 'AppstoreOutlined',
       routes: [
         { path: '/miniapp-config/home', name: '首页配置', component: '@/pages/System/MiniappHomeConfig', access: 'canViewMiniappHomeConfig' },
-        { path: '/miniapp-config/customer-service', name: '客服二维码配置', component: '@/pages/System/MiniappCustomerServiceConfig', access: 'canViewMiniappCustomerServiceConfig' },
+        { path: '/miniapp-config/customer-service', name: '小程序客服配置', component: '@/pages/System/MiniappCustomerServiceConfig', access: 'canViewMiniappCustomerServiceConfig' },
         { path: '/miniapp-config/protocols', name: '协议维护', component: '@/pages/System/MiniappProtocols', access: 'canViewMiniappProtocols' },
       ],
     },

@@ -14,6 +14,10 @@ const { Paragraph, Text } = Typography;
 const defaultConfig: MiniappCustomerServiceConfig = {
   consultText: '详询客服',
   qrCodeUrl: '',
+  wechatCustomerServiceEnabled: false,
+  wechatCustomerServiceCorpId: '',
+  wechatCustomerServiceUrl: '',
+  customerServiceCardImage: '',
   wechatReviewMode: false,
   remark: '',
 };
@@ -33,7 +37,7 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
       form.setFieldsValue(next);
       setQrCodeUrl(String(next.qrCodeUrl || '').trim());
     } catch (error: any) {
-      message.error(error?.message || '加载客服二维码配置失败');
+      message.error(error?.message || '加载小程序客服配置失败');
     } finally {
       setLoading(false);
     }
@@ -71,11 +75,15 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
       const config = {
         consultText: String(values.consultText || defaultConfig.consultText).trim() || defaultConfig.consultText,
         qrCodeUrl: String(values.qrCodeUrl || '').trim(),
+        wechatCustomerServiceEnabled: Boolean(values.wechatCustomerServiceEnabled),
+        wechatCustomerServiceCorpId: String(values.wechatCustomerServiceCorpId || '').trim(),
+        wechatCustomerServiceUrl: String(values.wechatCustomerServiceUrl || '').trim(),
+        customerServiceCardImage: String(values.customerServiceCardImage || '').trim(),
         wechatReviewMode: Boolean(values.wechatReviewMode),
         remark: String(values.remark || '').trim(),
       };
       await upsertMiniappCustomerServiceConfig(config);
-      message.success('客服二维码配置已保存');
+      message.success('小程序客服配置已保存');
       await reload();
     } catch (error: any) {
       message.error(error?.message || '保存失败');
@@ -85,10 +93,10 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
   };
 
   return (
-    <PageContainer title="客服二维码配置">
+    <PageContainer title="小程序客服配置">
       <Card loading={loading}>
         <Paragraph type="secondary">
-          该配置用于公开菜单页商品无图片详情时的弹窗提示，后续也可复用到小程序客服入口。
+          小程序咨询入口优先拉起微信客服会话并携带当前订单或服务卡片，调用失败时自动回退到企业微信二维码。
         </Paragraph>
         <Alert
           type="warning"
@@ -101,6 +109,38 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
         <Form form={form} layout="vertical" initialValues={defaultConfig}>
           <Form.Item name="wechatReviewMode" label="微信审核模式" valuePropName="checked">
             <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+          </Form.Item>
+
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="微信客服原生会话"
+            description="需先在小程序管理后台绑定同主体企业微信客服，再填写企业 ID（CorpID）与微信客服链接。"
+          />
+
+          <Form.Item name="wechatCustomerServiceEnabled" label="启用微信客服原生会话" valuePropName="checked">
+            <Switch checkedChildren="启用" unCheckedChildren="停用" />
+          </Form.Item>
+
+          <Form.Item name="wechatCustomerServiceCorpId" label="企业微信 CorpID">
+            <Input placeholder="例如：wwxxxxxxxxxxxxxxxx" maxLength={64} />
+          </Form.Item>
+
+          <Form.Item
+            name="wechatCustomerServiceUrl"
+            label="微信客服链接"
+            rules={[{ type: 'url', message: '请输入完整的微信客服链接' }]}
+          >
+            <Input placeholder="https://work.weixin.qq.com/kfid/kfc..." />
+          </Form.Item>
+
+          <Form.Item
+            name="customerServiceCardImage"
+            label="默认客服卡片封面"
+            rules={[{ type: 'url', message: '请输入完整的图片 URL' }]}
+          >
+            <Input placeholder="订单或商品没有封面时使用，可留空" />
           </Form.Item>
 
           <Form.Item
