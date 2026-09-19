@@ -366,7 +366,9 @@ export default function PublicMenuGalleryPage() {
   );
 
   const hasActiveFilter = selectedCategory !== 'ALL' || sortMode !== 'default' || priceRange !== 'all';
-  const isWechatReviewMode = forceWechatReviewMode || Boolean(customerServiceConfig.wechatReviewMode);
+  // H5 公开菜单暂不跟随小程序微信审核模式，避免审核期间影响正常菜单访问。
+  // 仅保留 ?wechatReview=1 作为人工预览审核说明页的入口。
+  const isWechatReviewMode = forceWechatReviewMode;
 
   const bannerItem = useMemo(() => {
     return bannerProtocols

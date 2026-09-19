@@ -103,7 +103,7 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
           showIcon
           style={{ marginBottom: 16 }}
           message="微信审核模式"
-          description="开启后，公开菜单 /menu 将展示合规说明页，不展示商品价格、客服二维码和下单咨询引导，适合微信外链申诉审核期间使用。"
+          description="开启后仅影响小程序审核展示；H5 公开菜单 /menu 暂不受该开关影响。H5 审核说明页可通过 /menu?wechatReview=1 单独预览。"
         />
 
         <Form form={form} layout="vertical" initialValues={defaultConfig}>
