@@ -36,6 +36,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const canCreateInternalUser = isSuperAdmin || has('users:internal:create:button');
   const canEditMemberUser = isSuperAdmin || has('users:member:edit:button');
   const canEditStaffUser = isSuperAdmin || has('users:staff:edit:button');
+  const canRejectStaffLeave = isSuperAdmin || userType === 'ADMIN' || ['CS_MANAGER', 'STORE_MANAGER'].includes(roleName) || has('users:staff:leave-reject:button');
   const canEditInternalUser = isSuperAdmin || has('users:internal:edit:button');
   const canDeleteMemberUser = isSuperAdmin || has('users:member:delete:button');
   const canGrantMemberCoupon = isSuperAdmin || has('users:member:coupon-grant:button');
@@ -96,6 +97,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canEditUser: canEditMemberUser || canEditStaffUser || canEditInternalUser,
     canEditMemberUser,
     canEditStaffUser,
+    canRejectStaffLeave,
     canEditInternalUser,
     canAssignUserRole: canAssignStaffRole || canAssignInternalRole,
     canAssignStaffRole,

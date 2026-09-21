@@ -278,6 +278,12 @@ export async function updateMemberLevelConfig(id: number, data: any) {
     });
 }
 
+export async function deleteMemberLevelConfig(id: number) {
+    return request(`${API_BASE}/member/levels/${id}`, {
+        method: 'DELETE',
+    });
+}
+
 export async function refreshMemberLevels() {
     return request(`${API_BASE}/member/levels/refresh`, {
         method: 'POST',
@@ -2922,6 +2928,12 @@ export async function listMyStaffActivityCharges(data: { page?: number; limit?: 
 }
 export async function adminListStaffLeaves(data: any) {
     return request(`${API_BASE}/staff-activity/admin/leaves`, { method: 'POST', data });
+}
+export async function adminPreviewStaffLeaveRejection(data: { leaveId: number }) {
+    return request(`${API_BASE}/staff-activity/admin/leaves/reject-preview`, { method: 'POST', data });
+}
+export async function adminRejectStaffLeave(data: { leaveId: number; reason: string }) {
+    return request(`${API_BASE}/staff-activity/admin/leaves/reject`, { method: 'POST', data });
 }
 export async function adminListStaffActivityCharges(data: any) {
     return request(`${API_BASE}/staff-activity/admin/charges`, { method: 'POST', data });

@@ -47,6 +47,7 @@ const moduleFields: Record<keyof MiniappHomeConfig, Array<{ key: string; label: 
     { key: 'actionText', label: '按钮文案' },
     { key: 'targetType', label: '跳转类型' },
     { key: 'targetValue', label: '跳转值' },
+    { key: 'richText', label: '富文本内容', placeholder: '仅“富文本详情”类型填写，支持 HTML' },
   ],
   hotSales: [
     { key: 'title', label: '标题' },
@@ -270,7 +271,8 @@ const MiniappHomeConfigPage: React.FC = () => {
     // 单项保存前置校验（按模块）
     if (!String(values?.name || '').trim()) fail('名称(name)必填');
     if (!String(values?.targetType || '').trim()) fail('跳转类型必填');
-    if (!String(values?.targetValue || '').trim()) fail('跳转值必填');
+    if (String(values?.targetType || '') !== 'richtext' && !String(values?.targetValue || '').trim()) fail('跳转值必填');
+    if (String(values?.targetType || '') === 'richtext' && !String(values?.richText || '').trim()) fail('富文本内容必填');
 
     if (activeKey === 'banners') {
       if (!String(values?.coverImage || '').trim()) fail('Banner封面图必填');
@@ -631,7 +633,8 @@ const MiniappHomeConfigPage: React.FC = () => {
                         { label: '页面', value: 'page' },
                         { label: '商品', value: 'product' },
                         { label: '优惠券', value: 'coupon' },
-                        { label: '通知公告', value: 'announcement' },
+                        { label: '通知公告 / 公众号内容', value: 'announcement' },
+                        { label: '富文本详情', value: 'richtext' },
                         { label: '链接', value: 'link' },
                         { label: '项目', value: 'project' },
                       ]}
@@ -666,6 +669,8 @@ const MiniappHomeConfigPage: React.FC = () => {
                     />
                   ) : activeKey === 'limitedBenefits' && f.key === 'discountOriginPrice' ? (
                     <Input type="number" disabled={currentActivityType !== 'discount'} placeholder={currentActivityType === 'discount' ? '填写划线价' : '仅折扣活动可填'} />
+                  ) : f.key === 'richText' ? (
+                    <Input.TextArea rows={7} disabled={currentTargetType !== 'richtext'} placeholder={currentTargetType === 'richtext' ? '输入会员权益、活动介绍等 HTML 富文本内容' : '跳转类型选择“富文本详情”后填写'} />
                   ) : f.key === 'targetValue' && currentTargetType === 'coupon' ? (
                     <Select
                       showSearch

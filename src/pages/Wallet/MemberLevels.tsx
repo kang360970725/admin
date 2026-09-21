@@ -8,9 +8,10 @@ import {
     ProTable,
     PageContainer,
 } from '@ant-design/pro-components';
-import { Button, message, Space, Tag } from 'antd';
+import { Button, message, Popconfirm, Space, Tag } from 'antd';
 import {
     createMemberLevelConfig,
+    deleteMemberLevelConfig,
     getMemberLevelConfigs,
     refreshMemberLevels,
     updateMemberLevelConfig,
@@ -44,7 +45,7 @@ export default function MemberLevelsPage() {
         {
             title: '操作',
             valueType: 'option',
-            width: 150,
+            width: 190,
             render: (_: any, record: any) => [
                 <Button
                     key="edit"
@@ -59,6 +60,25 @@ export default function MemberLevelsPage() {
                 >
                     编辑
                 </Button>,
+                <Popconfirm
+                    key="delete"
+                    title={`确认删除会员等级“${record.name}（${record.code}）”？`}
+                    description="有关联会员或属于默认等级时，系统会拒绝删除。"
+                    okText="确认删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={async () => {
+                        try {
+                            await deleteMemberLevelConfig(Number(record.id));
+                            message.success('会员等级已删除');
+                            actionRef.current?.reload();
+                        } catch (e: any) {
+                            message.error(e?.message || '删除失败');
+                        }
+                    }}
+                >
+                    <Button danger type="link">删除</Button>
+                </Popconfirm>,
             ],
         },
     ];
