@@ -11,6 +11,10 @@ import { uploadFileToCosBySts } from '@/utils/cosUpload';
 
 const { Paragraph, Text } = Typography;
 
+type CustomerServiceFormValues = MiniappCustomerServiceConfig & {
+  wechatReviewVersionsText?: string;
+};
+
 const defaultConfig: MiniappCustomerServiceConfig = {
   consultText: '详询客服',
   qrCodeUrl: '',
@@ -19,11 +23,12 @@ const defaultConfig: MiniappCustomerServiceConfig = {
   wechatCustomerServiceUrl: '',
   customerServiceCardImage: '',
   wechatReviewMode: false,
+  wechatReviewVersions: [],
   remark: '',
 };
 
 const MiniappCustomerServiceConfigPage: React.FC = () => {
-  const [form] = Form.useForm<MiniappCustomerServiceConfig>();
+  const [form] = Form.useForm<CustomerServiceFormValues>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -33,7 +38,11 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
     setLoading(true);
     try {
       const config = await getMiniappCustomerServiceConfig();
-      const next = { ...defaultConfig, ...(config || {}) };
+      const next = {
+        ...defaultConfig,
+        ...(config || {}),
+        wechatReviewVersionsText: (Array.isArray(config?.wechatReviewVersions) ? config.wechatReviewVersions : []).join(', '),
+      };
       form.setFieldsValue(next);
       setQrCodeUrl(String(next.qrCodeUrl || '').trim());
     } catch (error: any) {
@@ -80,6 +89,10 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
         wechatCustomerServiceUrl: String(values.wechatCustomerServiceUrl || '').trim(),
         customerServiceCardImage: String(values.customerServiceCardImage || '').trim(),
         wechatReviewMode: Boolean(values.wechatReviewMode),
+        wechatReviewVersions: String(values.wechatReviewVersionsText || '')
+          .split(/[,，\s]+/)
+          .map((item) => item.trim())
+          .filter((item, index, list) => Boolean(item) && list.indexOf(item) === index),
         remark: String(values.remark || '').trim(),
       };
       await upsertMiniappCustomerServiceConfig(config);
@@ -103,12 +116,20 @@ const MiniappCustomerServiceConfigPage: React.FC = () => {
           showIcon
           style={{ marginBottom: 16 }}
           message="微信审核模式"
-          description="开启后仅影响小程序审核展示；H5 公开菜单 /menu 暂不受该开关影响。H5 审核说明页可通过 /menu?wechatReview=1 单独预览。"
+          description="建议开启后同时填写本次提审版本号。小程序仅在指定版本的开发、体验或审核环境展示受限版，正式发布后会自动恢复常规版。H5 公开菜单 /menu 不受影响。"
         />
 
         <Form form={form} layout="vertical" initialValues={defaultConfig}>
           <Form.Item name="wechatReviewMode" label="微信审核模式" valuePropName="checked">
             <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+          </Form.Item>
+
+          <Form.Item
+            name="wechatReviewVersionsText"
+            label="审核受限版本号"
+            extra="填写本次小程序构建版本号（默认取 client-miniapp/package.json 的 version，也可用 MINIAPP_BUILD_VERSION 覆盖），多个可用逗号分隔。配置后，正式 release 环境不会进入审核模式。留空则为旧的全局审核开关，请谨慎使用。"
+          >
+            <Input placeholder="例如：1.0.3" maxLength={200} />
           </Form.Item>
 
           <Alert

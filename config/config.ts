@@ -291,6 +291,7 @@ export default defineConfig({
         { path: '/wallet', redirect: '/wallet/overview' },
         { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview', access: 'canViewWalletOverview' },
         { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels', access: 'canViewWalletMemberLevels' },
+        { path: '/wallet/member-benefits', name: '会员权益', component: '@/pages/Wallet/MemberBenefits', access: 'canViewWalletMemberLevels' },
         { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans', access: 'canViewWalletRechargePlans' },
         { path: '/wallet/member-recharges', name: '会员充值记录', component: '@/pages/Wallet/MemberRecharges', access: 'canViewWalletMemberRecharges' },
         { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions', access: 'canViewWalletTransactions' },

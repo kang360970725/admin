@@ -13,7 +13,6 @@ import {
     createMemberLevelConfig,
     deleteMemberLevelConfig,
     getMemberLevelConfigs,
-    refreshMemberLevels,
     updateMemberLevelConfig,
 } from '@/services/api';
 
@@ -96,20 +95,6 @@ export default function MemberLevelsPage() {
                 }}
                 toolBarRender={() => [
                     <Button
-                        key="refresh"
-                        onClick={async () => {
-                            try {
-                                await refreshMemberLevels();
-                                message.success('已刷新会员等级');
-                                actionRef.current?.reload();
-                            } catch (e: any) {
-                                message.error(e?.message || '刷新失败');
-                            }
-                        }}
-                    >
-                        刷新会员等级
-                    </Button>,
-                    <Button
                         key="create"
                         type="primary"
                         onClick={() => {
@@ -162,7 +147,7 @@ export default function MemberLevelsPage() {
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">升级门槛</div>
                         <div className="bc-admin-form-grid">
-                            <ProFormDigit name="minRechargeAmount" label="累计储值升级门槛" min={0} fieldProps={{ precision: 2 }} extra="会员累计实际储值达到该金额后自动升级" />
+                            <ProFormDigit name="minRechargeAmount" label="等级参考充值门槛" min={0} fieldProps={{ precision: 2 }} extra="仅用于客服参考和会员展示，不再自动调整会员等级" />
                         </div>
                     </div>
                     <div className="bc-admin-form-section">

@@ -3,7 +3,7 @@ import {PageContainer, ProTable} from '@ant-design/pro-components';
 import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
-import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, setUserMemberGameCardPrimary, updateUser} from '@/services/api';
+import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
 import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
@@ -188,6 +188,7 @@ export default function UsersPage() {
     const [memberDetail, setMemberDetail] = useState<any>(null);
     const [memberGameCardVisible, setMemberGameCardVisible] = useState(false);
     const [memberGameCards, setMemberGameCards] = useState<any[]>([]);
+    const [memberBenefits, setMemberBenefits] = useState<any[]>([]);
     const [memberGameCardCategories, setMemberGameCardCategories] = useState<any[]>([]);
     const [memberGameCardSubmitting, setMemberGameCardSubmitting] = useState(false);
     const [memberGameCardForm] = Form.useForm();
@@ -207,6 +208,7 @@ export default function UsersPage() {
     const watchedMemberBonusAmount = Number(Form.useWatch('bonusAmount', memberRechargeForm) || 0);
     const [memberGrowthVisible, setMemberGrowthVisible] = useState(false);
     const [memberGrowthSubmitting, setMemberGrowthSubmitting] = useState(false);
+    const [memberRecentRecharges, setMemberRecentRecharges] = useState<any[]>([]);
     const [memberGrowthForm] = Form.useForm();
     const [staffExitVisible, setStaffExitVisible] = useState(false);
     const [staffExitLoading, setStaffExitLoading] = useState(false);
@@ -432,11 +434,13 @@ export default function UsersPage() {
     };
 
     const loadMemberDetailData = async (userId: number) => {
-        const [detail] = await Promise.all([
+        const [detail, , benefitRows] = await Promise.all([
             getUserById(userId),
             loadMemberGameCardData(userId),
+            getUserMemberBenefits(userId, true),
         ]);
         setMemberDetail(detail);
+        setMemberBenefits(Array.isArray(benefitRows) ? benefitRows : []);
     };
 
     const loadMemberBenefitOptions = async () => {
@@ -478,6 +482,38 @@ export default function UsersPage() {
             setMemberRechargeVisible(true);
         } catch (_e) {
             message.error('加载充值方案失败');
+        }
+    };
+
+    const previewAndRepairMemberLots = async () => {
+        if (!memberDetail?.id) return;
+        try {
+            const preview: any = await previewMemberBalanceLotRepair(Number(memberDetail.id));
+            if (!Number(preview?.rechargeCount || 0)) {
+                message.success('该会员无需修复，历史充值均已有资金批次');
+                return;
+            }
+            Modal.confirm({
+                title: '历史会员资金批次预核算',
+                width: 720,
+                okText: '确认生成资金批次',
+                content: <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <Alert type={Number(preview?.unallocatedConsumption || 0) > 0 ? 'warning' : 'info'} showIcon message={preview?.warning} />
+                    <Descriptions bordered size="small" column={2}>
+                        <Descriptions.Item label="待修复充值">{preview.rechargeCount}笔</Descriptions.Item>
+                        <Descriptions.Item label="历史余额消费">¥{Number(preview.totalConsumed || 0).toFixed(2)}</Descriptions.Item>
+                        <Descriptions.Item label="无法分配消费">¥{Number(preview.unallocatedConsumption || 0).toFixed(2)}</Descriptions.Item>
+                        <Descriptions.Item label="消费顺序">本金优先，赠送金后用</Descriptions.Item>
+                    </Descriptions>
+                </Space>,
+                onOk: async () => {
+                    await repairMemberBalanceLots(Number(memberDetail.id));
+                    message.success('历史会员资金批次已生成');
+                    await loadMemberDetailData(Number(memberDetail.id));
+                },
+            });
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || e?.data?.message || e?.message || '历史资金预核算失败');
         }
     };
 
@@ -582,7 +618,7 @@ export default function UsersPage() {
             `本次储值：¥${rechargeAmount.toFixed(2)}`,
             `赠送金额：¥${bonusAmount.toFixed(2)}`,
             `到账合计：¥${grantedAmount.toFixed(2)}`,
-            `定级依据：累计实际储值金额`,
+            `会员等级：独立人工维护`,
             `赠送优惠券：${couponNames.length ? couponNames.join('、') : '无'}`,
             `备注：${rechargeRecord?.remark || formValues?.remark || '-'}`,
             `操作时间：${receiptTime}`,
@@ -598,7 +634,7 @@ export default function UsersPage() {
                 {label: '本次储值', value: `¥${rechargeAmount.toFixed(2)}`, highlight: true},
                 {label: '赠送金额', value: `¥${bonusAmount.toFixed(2)}`},
                 {label: '到账合计', value: `¥${grantedAmount.toFixed(2)}`, highlight: true},
-                {label: '定级依据', value: '累计实际储值金额'},
+                {label: '会员等级', value: '独立人工维护'},
                 {label: '赠送优惠券', value: couponNames.length ? couponNames.join('、') : '无'},
                 {label: '备注', value: rechargeRecord?.remark || formValues?.remark || '-'},
                 {label: '操作时间', value: receiptTime},
@@ -643,11 +679,15 @@ export default function UsersPage() {
         }
     };
 
-    const openMemberGrowthAdjust = () => {
+    const openMemberGrowthAdjust = async () => {
         if (!memberDetail?.id) return;
+        try {
+            const res: any = await getMemberRechargeOrders({ userId: Number(memberDetail.id), status: 'SUCCESS', page: 1, limit: 20 });
+            setMemberRecentRecharges(Array.isArray(res?.data) ? res.data : []);
+        } catch (_e) { setMemberRecentRecharges([]); }
         memberGrowthForm.resetFields();
         memberGrowthForm.setFieldsValue({
-            levelCode: memberDetail?.memberProfile?.manualLevelCode || memberDetail?.memberProfile?.levelCode || 'AUTO',
+            levelCode: memberDetail?.memberProfile?.levelCode || memberLevelOptions?.[0]?.code,
             remark: '',
         });
         setMemberGrowthVisible(true);
@@ -660,17 +700,18 @@ export default function UsersPage() {
             setMemberGrowthSubmitting(true);
             await adjustMemberLevel({
                 userId: Number(memberDetail.id),
-                levelCode: String(values.levelCode || 'AUTO'),
+                levelCode: String(values.levelCode || ''),
+                sourceRechargeOrderId: values?.sourceRechargeOrderId ? Number(values.sourceRechargeOrderId) : undefined,
                 remark: values?.remark ? String(values.remark).trim() : undefined,
             });
-            message.success(values.levelCode === 'AUTO' ? '已恢复按储值金额自动定级' : '会员等级已更新');
+            message.success('会员等级已更新');
             setMemberGrowthVisible(false);
             memberGrowthForm.resetFields();
             await loadMemberDetailData(Number(memberDetail.id));
             actionRef.current?.reload?.();
         } catch (error: any) {
             if (!error?.errorFields) {
-                message.error(error?.response?.data?.message || '会员等级调整失败');
+                message.error(error?.response?.data?.message || error?.data?.message || error?.message || '会员等级调整失败');
             }
         } finally {
             setMemberGrowthSubmitting(false);
@@ -1037,9 +1078,14 @@ export default function UsersPage() {
         },
         {
             title: '会员等级',
-            dataIndex: ['memberProfile', 'levelCode'],
+            dataIndex: 'memberLevelCode',
             key: 'memberLevel',
-            search: false,
+            valueType: 'select',
+            fieldProps: {
+                options: memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code })),
+                allowClear: true,
+                placeholder: '筛选会员等级',
+            },
             width: 100,
             hideInTable: sceneConfig.key !== 'MEMBER',
             render: (_: any, record: any) => <Tag color="gold">{record?.memberProfile?.levelCode || 'NONE'}</Tag>,
@@ -1975,6 +2021,7 @@ export default function UsersPage() {
                     setMemberDetailVisible(false);
                     setMemberDetail(null);
                     setMemberGameCards([]);
+                    setMemberBenefits([]);
                     setMemberGameCardCategories([]);
                 }}
                 destroyOnClose
@@ -1986,6 +2033,9 @@ export default function UsersPage() {
 	                            <Space wrap>
 	                                {access.canManualMemberRecharge ? (
 	                                    <Button type="primary" onClick={openMemberRecharge}>手动充值</Button>
+	                                ) : null}
+	                                {access.canManualMemberRecharge ? (
+	                                    <Button onClick={previewAndRepairMemberLots}>历史资金预核算</Button>
 	                                ) : null}
 	                                {access.canGrantMemberCoupon ? (
 	                                    <Button onClick={openMemberCouponGrant}>发放优惠券</Button>
@@ -2003,12 +2053,38 @@ export default function UsersPage() {
                             <Descriptions.Item label="储值余额">¥{Number(memberDetail?.walletAccount?.availableBalance ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="冻结余额">¥{Number(memberDetail?.walletAccount?.frozenBalance ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="当前积分">{Number(memberDetail?.memberPointAccount?.availablePoints ?? 0)}</Descriptions.Item>
-                            <Descriptions.Item label="定级方式">{memberDetail?.memberProfile?.manualLevelCode ? '后台人工指定' : '累计储值自动定级'}</Descriptions.Item>
+                            <Descriptions.Item label="定级方式">后台人工指定</Descriptions.Item>
                             <Descriptions.Item label="累计充值">¥{Number(memberDetail?.memberProfile?.totalRechargeAmount ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="累计消费">¥{Number(memberDetail?.memberProfile?.totalConsumeAmount ?? 0).toFixed(2)}</Descriptions.Item>
                             <Descriptions.Item label="最近登录">{memberDetail?.lastLoginAt ? dayjs(memberDetail.lastLoginAt).format('YYYY-MM-DD HH:mm:ss') : '从未'}</Descriptions.Item>
                             <Descriptions.Item label="最近充值">{memberDetail?.memberProfile?.lastRechargeAt ? dayjs(memberDetail.memberProfile.lastRechargeAt).format('YYYY-MM-DD HH:mm:ss') : '-'}</Descriptions.Item>
                         </Descriptions>
+
+                        <Card size="small" title="会员权益台账">
+                            <List
+                                size="small"
+                                dataSource={memberBenefits}
+                                locale={{ emptyText: '暂无已发放权益' }}
+                                renderItem={(item: any) => {
+                                    const remaining = item?.unlimited ? '不限量' : `${Number(item?.remainingQuantity || 0)}${item?.unitNameSnapshot || ''}`;
+                                    const usable = item?.status === 'ACTIVE' && (item?.unlimited || Number(item?.remainingQuantity || 0) > 0) && (!item?.expiresAt || dayjs(item.expiresAt).isAfter(dayjs()));
+                                    return <List.Item actions={usable && item?.benefit?.requiresVerification ? [
+                                        <Popconfirm key="use" title={`确认核销1${item?.unitNameSnapshot || '次'}？`} onConfirm={async () => {
+                                            try {
+                                                await useUserMemberBenefit(item.id, { quantity: 1, remark: '会员详情人工核销' });
+                                                message.success('权益核销成功');
+                                                await loadMemberDetailData(Number(memberDetail.id));
+                                            } catch (e: any) { message.error(e?.response?.data?.message || e?.message || '权益核销失败'); }
+                                        }}><Button type="link">核销</Button></Popconfirm>,
+                                    ] : undefined}>
+                                        <List.Item.Meta
+                                            title={<Space><span>{item?.benefitNameSnapshot || item?.benefit?.name}</span><Tag>{item?.levelCodeSnapshot}</Tag>{item?.benefit?.reviewRestricted ? <Tag color="red">审核隐藏</Tag> : null}</Space>}
+                                            description={`剩余 ${remaining} · 已用 ${Number(item?.usedQuantity || 0)}${item?.unitNameSnapshot || ''} · 单份价值 ¥${Number(item?.unitValueSnapshot || 0).toFixed(2)}${item?.expiresAt ? ` · ${dayjs(item.expiresAt).format('YYYY-MM-DD')}到期` : ''}`}
+                                        />
+                                    </List.Item>;
+                                }}
+                            />
+                        </Card>
 
                         <Card size="small" title="最近订单">
                             <List
@@ -2250,7 +2326,7 @@ export default function UsersPage() {
                             <Input.TextArea rows={3} placeholder="例如：线下转账补录 / 活动赠送 / 客诉补偿" />
                         </Form.Item>
                         <div className="bc-admin-form-muted">
-                            会员等级按累计实际储值金额自动升级；充值赠礼请直接填写“赠送本金”，将以储值余额到账。手动充值会生成成功充值单，并同步到账储值余额、权益和小票。
+                            充值套餐与会员等级相互独立；充值赠礼请填写“赠送本金”，将以储值余额到账。手动充值会生成成功充值单并保留操作记录，等级请在会员详情中单独调整。
                         </div>
                     </div>
                 </Form>
@@ -2363,7 +2439,13 @@ export default function UsersPage() {
                         name="levelCode"
                         rules={[{ required: true, message: '请选择会员等级' }]}
                     >
-                        <Select options={[{ label: '恢复自动定级（按累计储值）', value: 'AUTO' }, ...memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code }))]} />
+                        <Select options={memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code }))} />
+                    </Form.Item>
+                    <Form.Item label="关联充值记录（可选）" name="sourceRechargeOrderId" extra="因本次充值发生升级时请选择，便于退款准确撤销未使用权益并建议回退等级">
+                        <Select allowClear showSearch optionFilterProp="label" options={memberRecentRecharges.map((item: any) => ({
+                            value: Number(item.id),
+                            label: `${item.rechargeNo} · 实付¥${Number(item.payAmount || 0).toFixed(2)} · ${item.paidAt ? dayjs(item.paidAt).format('YYYY-MM-DD HH:mm') : '-'}`,
+                        }))} />
                     </Form.Item>
                     <Form.Item label="调整原因" name="remark" rules={[{ required: true, message: '请填写调整原因' }]}>
                         <Input.TextArea rows={3} placeholder="请输入本次等级调整原因" />

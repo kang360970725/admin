@@ -16,6 +16,8 @@ export const getRentalOrder = (id: number) => request<any>(`${API_BASE}/admin/re
 export const createRentalOrder = (data: any) => request<any>(`${API_BASE}/admin/rental-orders`, { method: 'POST', data });
 export const settleRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/settle`, { method: 'POST', data });
 export const reconcileRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/reconcile`, { method: 'POST', data });
+export const previewBatchReconcileRentalOrders = (data: any) => request<any>(`${API_BASE}/admin/rental-orders/batch-reconcile/preview`, { method: 'POST', data });
+export const batchReconcileRentalOrders = (data: any) => request<any>(`${API_BASE}/admin/rental-orders/batch-reconcile/confirm`, { method: 'POST', data });
 export const voidRentalOrder = (id: number, data: any) => request<any>(`${API_BASE}/admin/rental-orders/${id}/void`, { method: 'POST', data });
 
 export function getRealtimeStreamUrl(token: string) {
@@ -203,6 +205,7 @@ export interface GetUsersParams {
     anonymousOnly?: boolean | string;
     includeStaffMembers?: boolean | string;
     memberState?: string;
+    memberLevelCode?: string;
     loginInactiveDays?: number;
     acceptInactiveDays?: number;
 }
@@ -258,6 +261,22 @@ export async function getMemberRechargeOrders(params?: any) {
     });
 }
 
+export async function previewMemberRechargeRefund(id: number) {
+    return request(`${API_BASE}/member/recharge-orders/${id}/refund-preview`, { method: 'GET' });
+}
+
+export async function refundMemberRecharge(id: number, data: { levelAfterRefund: string; remark: string }) {
+    return request(`${API_BASE}/member/recharge-orders/${id}/refund`, { method: 'POST', data });
+}
+
+export async function previewMemberBalanceLotRepair(userId: number) {
+    return request(`${API_BASE}/member/balance-lots/users/${userId}/repair-preview`, { method: 'GET' });
+}
+
+export async function repairMemberBalanceLots(userId: number) {
+    return request(`${API_BASE}/member/balance-lots/users/${userId}/repair`, { method: 'POST' });
+}
+
 export async function getMemberLevelConfigs() {
     return request(`${API_BASE}/member/levels`, {
         method: 'GET',
@@ -288,6 +307,44 @@ export async function refreshMemberLevels() {
     return request(`${API_BASE}/member/levels/refresh`, {
         method: 'POST',
     });
+}
+
+export async function getMemberBenefits(params?: { enabledOnly?: boolean }) {
+    return request(`${API_BASE}/member/benefits`, { method: 'GET', params });
+}
+
+export async function createMemberBenefit(data: any) {
+    return request(`${API_BASE}/member/benefits`, { method: 'POST', data });
+}
+
+export async function updateMemberBenefit(id: number, data: any) {
+    return request(`${API_BASE}/member/benefits/${id}`, { method: 'PATCH', data });
+}
+
+export async function deleteMemberBenefit(id: number) {
+    return request(`${API_BASE}/member/benefits/${id}`, { method: 'DELETE' });
+}
+
+export async function getMemberLevelBenefitConfigs() {
+    return request(`${API_BASE}/member/benefits/levels/config`, { method: 'GET' });
+}
+
+export async function replaceMemberLevelBenefits(levelId: number, benefits: any[]) {
+    return request(`${API_BASE}/member/benefits/levels/${levelId}/config`, {
+        method: 'POST',
+        data: { benefits },
+    });
+}
+
+export async function getUserMemberBenefits(userId: number, includeHistory = false) {
+    return request(`${API_BASE}/member/benefits/users/${userId}`, {
+        method: 'GET',
+        params: { includeHistory },
+    });
+}
+
+export async function useUserMemberBenefit(grantId: number, data: any) {
+    return request(`${API_BASE}/member/benefits/grants/${grantId}/use`, { method: 'POST', data });
 }
 
 export async function getStaffPublicCards(status?: string) {
@@ -326,7 +383,7 @@ export async function adjustMemberGrowth(data: { userId: number; growthValue: nu
     });
 }
 
-export async function adjustMemberLevel(data: { userId: number; levelCode: string; remark?: string }) {
+export async function adjustMemberLevel(data: { userId: number; levelCode: string; sourceRechargeOrderId?: number; remark?: string }) {
     return request(`${API_BASE}/member/level/adjust`, { method: 'POST', data });
 }
 
@@ -861,6 +918,7 @@ export type MiniappCustomerServiceConfig = {
     wechatCustomerServiceUrl?: string;
     customerServiceCardImage?: string;
     wechatReviewMode?: boolean;
+    wechatReviewVersions?: string[];
     remark?: string;
 };
 

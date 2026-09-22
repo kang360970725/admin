@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
-import { Button, Card, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tabs, Typography, Upload } from 'antd';
+import { Alert, Button, Card, Form, Input, InputNumber, message, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tabs, Typography, Upload } from 'antd';
 import { DeleteOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { Editor, Toolbar } from '@wangeditor/editor-for-react';
 import type { IDomEditor, IEditorConfig, IToolbarConfig } from '@wangeditor/editor';
@@ -394,6 +394,13 @@ const MiniappProtocolsPage: React.FC = () => {
 
   return (
     <PageContainer title="协议维护" subTitle="分类可维护，协议键受控选择，支持富文本与图文封面上传">
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="登录授权协议由分组动态控制"
+        description="小程序登录页与完善资料页只展示“C 端用户协议（用户勾选）”分类中已启用的协议；移入、移出该分类或停用协议后，小程序展示会同步变化。"
+      />
       <Tabs
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key as 'categories' | 'protocols')}

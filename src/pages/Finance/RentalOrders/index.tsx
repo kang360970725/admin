@@ -2,7 +2,7 @@ import React from 'react';
 import { PageContainer, ProTable, ActionType } from '@ant-design/pro-components';
 import { Alert, Button, Card, Col, Descriptions, Drawer, Form, Input, InputNumber, message, Modal, Row, Space, Statistic, Switch, Table, Tag, theme } from 'antd';
 import { history, useAccess } from '@umijs/max';
-import { getRentalOrder, listRentalOrders, reconcileRentalOrder, settleRentalOrder, voidRentalOrder } from '@/services/api';
+import { batchReconcileRentalOrders, getRentalOrder, listRentalOrders, previewBatchReconcileRentalOrders, reconcileRentalOrder, settleRentalOrder, voidRentalOrder } from '@/services/api';
 import { apiError, yuan } from './CreateRentalOrderModal';
 import { useIsMobile } from '@/utils/useIsMobile';
 import './responsive.less';
@@ -22,10 +22,13 @@ export default function RentalOrdersPage() {
   const [settling, setSettling] = React.useState<any>();
   const [voiding, setVoiding] = React.useState<any>();
   const [reconciling, setReconciling] = React.useState<any>();
+  const [batchOpen, setBatchOpen] = React.useState(false);
+  const [batchPreview, setBatchPreview] = React.useState<any>();
   const [busy, setBusy] = React.useState(false);
   const [form] = Form.useForm();
   const [voidForm] = Form.useForm();
   const [reconcileForm] = Form.useForm();
+  const [batchForm] = Form.useForm();
   const [serverOffset, setServerOffset] = React.useState(0);
   const noRefund = Form.useWatch('noRefundDifference', form);
   const refund = Form.useWatch('refundDifferenceAmount', form);
@@ -55,7 +58,10 @@ export default function RentalOrdersPage() {
       search={{ labelWidth: 'auto', span: isMobile ? 24 : undefined, defaultCollapsed: false, collapseRender: isMobile ? false : undefined }}
       options={isMobile ? false : undefined} showHeader={!isMobile}
       headerTitle="租号订单记录" pagination={{ defaultPageSize: 20, simple: isMobile, showSizeChanger: !isMobile }}
-      toolBarRender={() => access.canViewStaffRentalRisk ? [<Button key="create" onClick={() => history.push('/merchant-business/rental-risk')}>查询服务者并创建</Button>] : []}
+      toolBarRender={() => [
+        access.canReconcileRentalOrder && <Button key="batch" onClick={() => { batchForm.resetFields(); setBatchPreview(undefined); setBatchOpen(true); }}>批量查询核销</Button>,
+        access.canViewStaffRentalRisk && <Button key="create" type="primary" onClick={() => history.push('/merchant-business/rental-risk')}>查询服务者并创建</Button>,
+      ].filter(Boolean) as React.ReactNode[]}
       request={async ({ current, pageSize, ...params }) => {
         const result = await listRentalOrders({ page: current, limit: pageSize, ...params });
         setStats(result.stats); setServerOffset(new Date(result.serverNow).getTime() - Date.now());
@@ -72,7 +78,7 @@ export default function RentalOrdersPage() {
         { title: '开始日期', dataIndex: 'startDate', search: false, renderText: date },
         { title: '强制结算日期', dataIndex: 'forcedSettlementDate', search: false, render: (_: any, row: any) => <>{date(row.forcedSettlementDate)} {row.status === 'RUNNING' && date(row.forcedSettlementDate) < stats.date && <Tag color="red">逾期</Tag>}</> },
         { title: '实际费用', dataIndex: 'actualAmount', search: false, renderText: (v: any) => v == null ? '-' : yuan(v) },
-        { title: '核销状态', dataIndex: 'reconciledAt', search: false, render: (v: any, row: any) => row.status !== 'SETTLED' ? '-' : v ? <Tag color="green">已核销</Tag> : <Tag color="orange">待核销</Tag> },
+        { title: '核销状态', dataIndex: 'reconciledAt', search: false, render: (_: any, row: any) => row.status !== 'SETTLED' ? '-' : row.reconciled === true ? <Tag color="green">已核销</Tag> : <Tag color="orange">待核销</Tag> },
         { title: '创建时间', dataIndex: 'createdAt', search: false, renderText: time, width: 175 },
         { title: '操作', valueType: 'option', fixed: 'right', width: 190, render: (_: any, row: any) => [
           <a key="view" onClick={() => openDetail(row)}>详情</a>,
@@ -87,7 +93,7 @@ export default function RentalOrdersPage() {
           <div className="rental-record-facts">
             <div><label>服务者</label>{row.staffNameSnapshot}</div><div><label>号源编号</label>{row.accountSourceNo}</div>
             <div><label>租金 / 押金</label>{yuan(row.prepaidAmount)} / {yuan(row.depositAmount)}</div><div><label>实际费用</label>{row.actualAmount == null ? '-' : yuan(row.actualAmount)}</div>
-            <div><label>核销状态</label>{row.status !== 'SETTLED' ? '-' : row.reconciledAt ? <Tag color="green">已核销</Tag> : <Tag color="orange">待核销</Tag>}</div>
+            <div><label>核销状态</label>{row.status !== 'SETTLED' ? '-' : row.reconciled === true ? <Tag color="green">已核销</Tag> : <Tag color="orange">待核销</Tag>}</div>
             <div><label>开始日期</label>{date(row.startDate)}</div><div><label>强制结算日期</label>{date(row.forcedSettlementDate)} {row.status === 'RUNNING' && date(row.forcedSettlementDate) < stats.date && <Tag color="red">逾期</Tag>}</div>
             <div style={{ gridColumn: '1 / -1' }}><label>创建时间</label>{time(row.createdAt)}</div>
           </div>{renderActions(row)}
@@ -164,6 +170,42 @@ export default function RentalOrdersPage() {
       }}>
       <Alert type="warning" showIcon message={`本次核销金额：${yuan(reconciling?.actualAmount)}`} description="请确认服务者平台余额对应的租号实际费用已经真实转付给商行。核销后不可重复操作。" />
       <Form form={reconcileForm} layout="vertical" style={{ marginTop: 16 }}><Form.Item name="remark" label="核销备注"><Input.TextArea placeholder="可填写转账渠道、凭证编号等；不填将使用默认说明" autoSize={{ minRows: 3, maxRows: 6 }} maxLength={2000} /></Form.Item></Form>
+    </Modal>
+
+    <Modal className="rental-modal" title="批量查询核销" open={batchOpen} width={900} confirmLoading={busy}
+      okText={batchPreview ? `确认核销 ${batchPreview.matchedCount || 0} 笔` : '查询匹配结果'}
+      okButtonProps={{ disabled: Boolean(batchPreview && batchPreview.matchedCount !== batchPreview.totalCount) }}
+      onCancel={() => setBatchOpen(false)} onOk={async () => {
+        if (busy) return;
+        try {
+          const values = await batchForm.validateFields(); setBusy(true);
+          if (!batchPreview) {
+            const result = await previewBatchReconcileRentalOrders(values);
+            setBatchPreview(result);
+            if (!result.matchedCount) message.warning('没有可核销的匹配订单');
+          } else {
+            const result = await batchReconcileRentalOrders(values);
+            message.success(`已批量核销 ${result.reconciledCount} 笔订单`);
+            setBatchOpen(false); setBatchPreview(undefined); actionRef.current?.reload();
+          }
+        } catch (e: any) { if (!e?.errorFields) message.error(apiError(e)); } finally { setBusy(false); }
+      }}>
+      <Alert type="info" showIcon message="每行一笔，格式：LM0131 金额：558.6" description="先查询并校验号源编号、订单状态和实际费用；全部匹配后才允许批量核销。修改内容后请重新查询。" />
+      <Form form={batchForm} layout="vertical" style={{ marginTop: 16 }} onValuesChange={() => setBatchPreview(undefined)}>
+        <Form.Item name="text" label="号源及金额" rules={[{ required: true, whitespace: true, message: '请粘贴批量数据' }]}>
+          <Input.TextArea placeholder={'LM0131 金额：558.6\nLM0133 金额：345.9'} autoSize={{ minRows: 8, maxRows: 14 }} />
+        </Form.Item>
+        <Form.Item name="remark" label="核销备注"><Input placeholder="可填写转账批次或凭证号" maxLength={2000} /></Form.Item>
+      </Form>
+      {batchPreview && <Table size="small" rowKey="lineNo" pagination={false} scroll={{ x: 720, y: 320 }} dataSource={batchPreview.rows} columns={[
+        { title: '行', dataIndex: 'lineNo', width: 55 },
+        { title: '号源编号', dataIndex: 'accountSourceNo', width: 110, render: (v: any) => v || '-' },
+        { title: '输入金额', dataIndex: 'amount', width: 110, render: (v: any) => v == null ? '-' : yuan(v) },
+        { title: '租号流水', dataIndex: 'serialNo', width: 150, render: (v: any) => v || '-' },
+        { title: '订单金额', dataIndex: 'orderAmount', width: 110, render: (v: any) => v == null ? '-' : yuan(v) },
+        { title: '校验结果', dataIndex: 'status', width: 110, render: (v: any) => <Tag color={v === 'MATCHED' ? 'green' : 'red'}>{v === 'MATCHED' ? '可核销' : '异常'}</Tag> },
+        { title: '说明', dataIndex: 'message' },
+      ]} />}
     </Modal>
 
     <Drawer className="rental-detail" open={!!detail} width={isMobile ? '100%' : 900} title={`订单详情 · ${detail?.serialNo || ''}`} onClose={() => setDetail(undefined)}>
