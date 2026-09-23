@@ -835,7 +835,7 @@ const OrderDetailPage: React.FC = () => {
                 participantNames: names,
                 income: 0, // 默认 0，need=false 时会被均分覆盖
             };
-        });
+        }).filter((row: any) => row.participantCount > 0);
     };
 
     const buildConfirmPlayerEvalRowsFromOrder = (detail: any): PlayerEvalRow[] => {
@@ -876,10 +876,12 @@ const OrderDetailPage: React.FC = () => {
 
     const getSettlementParticipants = (d: any) => {
         const parts = Array.isArray(d?.participants) ? d.participants : [];
+        const finalized = ['COMPLETED', 'ARCHIVED'].includes(String(d?.status));
         return parts.filter((p: any) => {
             const userId = Number(p?.userId ?? 0);
             if (!Number.isFinite(userId) || userId <= 0) return false;
-            return p?.rejectedAt ? false : true;
+            if (p?.rejectedAt) return false;
+            return finalized ? Boolean(p?.acceptedAt) : Boolean(p?.isActive);
         });
     };
 
@@ -1143,7 +1145,7 @@ const OrderDetailPage: React.FC = () => {
         // 只取“确实有参与者”的轮次（避免空轮影响判断）
         const used = dispatches
             .map((d: any, idx: number) => {
-                const parts = Array.isArray(d?.participants) ? d.participants : [];
+                const parts = getSettlementParticipants(d);
 
                 const pids = parts
                     .map((p: any) => Number(p?.userId))

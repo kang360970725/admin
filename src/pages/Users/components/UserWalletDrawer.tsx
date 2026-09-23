@@ -20,6 +20,7 @@ import {
     getWalletTransactions,
     getWalletDepositTransactions,
     manualDeposit,
+    manualDepositRefund,
 } from '@/services/api';
 import { maskPhone } from '@/utils/privacy';
 
@@ -37,6 +38,9 @@ export default function UserWalletDrawer(props: any) {
     const [depositAmount, setDepositAmount] = React.useState<number>(0);
     const [depositRemark, setDepositRemark] = React.useState('');
     const [depositManualSource, setDepositManualSource] = React.useState<string>();
+    const [refundModal, setRefundModal] = React.useState(false);
+    const [refundAmount, setRefundAmount] = React.useState<number>(0);
+    const [refundRemark, setRefundRemark] = React.useState('');
 
     const [enums, setEnums] = React.useState<any>({});
 
@@ -305,6 +309,18 @@ export default function UserWalletDrawer(props: any) {
                                     >
                                         手动缴纳押金
                                     </Button>
+                                    <Button
+                                        danger
+                                        style={{ marginLeft: 12 }}
+                                        disabled={deposit <= 0}
+                                        onClick={() => {
+                                            setRefundAmount(0);
+                                            setRefundRemark('');
+                                            setRefundModal(true);
+                                        }}
+                                    >
+                                        手动退还保证金
+                                    </Button>
                                 </Row>
                             </>
                         ),
@@ -440,6 +456,35 @@ export default function UserWalletDrawer(props: any) {
                         placeholder="必填：填写收款方式、流水号或调整原因"
                     />
                 </div>
+            </Modal>
+
+            <Modal
+                title="手动退还保证金"
+                open={refundModal}
+                okButtonProps={{ danger: true }}
+                okText="确认退还至可用余额"
+                onCancel={() => { setRefundModal(false); setRefundAmount(0); setRefundRemark(''); }}
+                onOk={async () => {
+                    try {
+                        if (!(refundAmount > 0)) return void message.error('请输入正确的退还金额');
+                        if (refundAmount > deposit) return void message.error('退还金额不能超过当前保证金余额');
+                        if (!refundRemark.trim()) return void message.error('请填写保证金退还原因');
+                        await manualDepositRefund({ userId: user?.id, amount: refundAmount, remark: refundRemark });
+                        message.success('保证金已退还至服务者可用余额');
+                        setRefundModal(false);
+                        setRefundAmount(0);
+                        setRefundRemark('');
+                        onClose?.();
+                    } catch (e: any) {
+                        message.error(e?.response?.data?.message || e?.message || '退还失败');
+                    }
+                }}
+            >
+                <div style={{ marginBottom: 12, color: '#666' }}>当前保证金：¥{deposit.toFixed(2)}。退还后金额进入服务者可用余额，并生成保证金及钱包流水。</div>
+                <div style={{ marginBottom: 6 }}>退还金额</div>
+                <InputNumber style={{ width: '100%', marginBottom: 16 }} min={0.01} max={deposit} precision={2} value={refundAmount} onChange={(v) => setRefundAmount(Number(v || 0))} />
+                <div style={{ marginBottom: 6 }}>退还原因</div>
+                <Input.TextArea value={refundRemark} onChange={(e) => setRefundRemark(e.target.value)} maxLength={255} showCount rows={3} placeholder="必填：填写线下退款、录入纠错或其他退押原因" />
             </Modal>
         </Drawer>
     );
