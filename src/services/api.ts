@@ -204,6 +204,7 @@ export interface GetUsersParams {
     scene?: string;
     anonymousOnly?: boolean | string;
     includeStaffMembers?: boolean | string;
+    wechatBoundOnly?: boolean | string;
     memberState?: string;
     memberLevelCode?: string;
     memberLevel?: string;

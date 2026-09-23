@@ -362,6 +362,8 @@ export default function OrderUpsertModal(props: {
                 limit: 20,
                 search: keyword || '',
                 scene: 'MEMBER',
+                includeStaffMembers: true,
+                wechatBoundOnly: true,
             });
             const list = Array.isArray(res?.data) ? res.data : [];
             const nextMeta: Record<number, { name: string; phone: string; balance: number; gameCards: MemberGameCardOption[] }> = {};
