@@ -196,6 +196,7 @@ export default function UsersPage() {
     const [memberRechargeSubmitting, setMemberRechargeSubmitting] = useState(false);
     const [memberRechargePlans, setMemberRechargePlans] = useState<any[]>([]);
     const [memberLevelOptions, setMemberLevelOptions] = useState<any[]>([]);
+    const [memberLevelOptionsLoading, setMemberLevelOptionsLoading] = useState(false);
     const [memberCouponTemplateOptions, setMemberCouponTemplateOptions] = useState<Array<{ label: string; value: number }>>([]);
     const [memberRechargeForm] = Form.useForm();
     const [memberCouponGrantVisible, setMemberCouponGrantVisible] = useState(false);
@@ -248,6 +249,28 @@ export default function UsersPage() {
         if (sceneConfig.key === 'MEMBER') {
             setMemberStateTab('ALL');
         }
+    }, [sceneConfig.key]);
+
+    const loadMemberLevelOptions = async () => {
+        setMemberLevelOptionsLoading(true);
+        try {
+            const levelsRes: any = await getMemberLevelConfigs();
+            const levels = Array.isArray(levelsRes)
+                ? levelsRes.filter((item: any) => item?.enabled !== false)
+                : [];
+            setMemberLevelOptions(levels);
+            return levels;
+        } finally {
+            setMemberLevelOptionsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (sceneConfig.key !== 'MEMBER') return;
+        loadMemberLevelOptions().catch((error: any) => {
+            setMemberLevelOptions([]);
+            message.error(error?.response?.data?.message || error?.data?.message || '加载会员等级列表失败');
+        });
     }, [sceneConfig.key]);
 
     // 加载可用的服务者评级
@@ -447,7 +470,7 @@ export default function UsersPage() {
         const [plansRes, couponRes, levelsRes]: any = await Promise.all([
             getMemberRechargePlans(),
             getCouponTemplates({ page: 1, limit: 200, status: 'ACTIVE' }),
-            getMemberLevelConfigs(),
+            memberLevelOptions.length ? Promise.resolve(memberLevelOptions) : loadMemberLevelOptions(),
         ]);
         const plans = Array.isArray(plansRes) ? plansRes : [];
         const coupons = Array.isArray(couponRes?.data) ? couponRes.data : [];
@@ -682,15 +705,21 @@ export default function UsersPage() {
     const openMemberGrowthAdjust = async () => {
         if (!memberDetail?.id) return;
         try {
-            const res: any = await getMemberRechargeOrders({ userId: Number(memberDetail.id), status: 'SUCCESS', page: 1, limit: 20 });
+            const [res, levels] = await Promise.all([
+                getMemberRechargeOrders({ userId: Number(memberDetail.id), status: 'SUCCESS', page: 1, limit: 20 }),
+                memberLevelOptions.length ? Promise.resolve(memberLevelOptions) : loadMemberLevelOptions(),
+            ]);
             setMemberRecentRecharges(Array.isArray(res?.data) ? res.data : []);
-        } catch (_e) { setMemberRecentRecharges([]); }
-        memberGrowthForm.resetFields();
-        memberGrowthForm.setFieldsValue({
-            levelCode: memberDetail?.memberProfile?.levelCode || memberLevelOptions?.[0]?.code,
-            remark: '',
-        });
-        setMemberGrowthVisible(true);
+            memberGrowthForm.resetFields();
+            memberGrowthForm.setFieldsValue({
+                levelCode: memberDetail?.memberProfile?.levelCode || levels?.[0]?.code,
+                remark: '',
+            });
+            setMemberGrowthVisible(true);
+        } catch (error: any) {
+            setMemberRecentRecharges([]);
+            message.error(error?.response?.data?.message || error?.data?.message || '加载会员等级列表失败');
+        }
     };
 
     const submitMemberGrowthAdjust = async () => {
@@ -1084,6 +1113,7 @@ export default function UsersPage() {
             fieldProps: {
                 options: memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code })),
                 allowClear: true,
+                loading: memberLevelOptionsLoading,
                 placeholder: '筛选会员等级',
             },
             width: 100,
@@ -1724,7 +1754,7 @@ export default function UsersPage() {
                             }
                         }
                         const { current, pageSize, ...rest } = params;
-                        const { staffEmploymentStatus: _ignoredStaffEmploymentStatus, status: _ignoredStatus, ...queryRest } = rest as any;
+                        const { staffEmploymentStatus: _ignoredStaffEmploymentStatus, status: _ignoredStatus, memberLevelCode, ...queryRest } = rest as any;
                         const query = {
                             page: current ?? 1,
                             limit: pageSize ?? 10,
@@ -1732,6 +1762,7 @@ export default function UsersPage() {
                             includeStaffMembers: sceneConfig.key === 'MEMBER' ? 'true' : undefined,
                             ...(sceneConfig.key === 'MEMBER' ? { memberState: memberStateTab } : {}),
                             ...(sceneConfig.key === 'STAFF' ? { staffEmploymentStatus: staffStatusTab } : {}),
+                            ...(sceneConfig.key === 'MEMBER' && memberLevelCode ? { memberLevelCode: String(memberLevelCode).trim().toUpperCase() } : {}),
                             ...(sceneConfig.key !== 'STAFF' && sceneConfig.key !== 'STAFF_RENTAL_RISK' && _ignoredStatus ? { status: _ignoredStatus } : {}),
                             ...queryRest, // search 表单字段会在这里（例如 search/userType/status）
                         };
@@ -2439,7 +2470,7 @@ export default function UsersPage() {
                         name="levelCode"
                         rules={[{ required: true, message: '请选择会员等级' }]}
                     >
-                        <Select options={memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code }))} />
+                        <Select loading={memberLevelOptionsLoading} options={memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code }))} />
                     </Form.Item>
                     <Form.Item label="关联充值记录（可选）" name="sourceRechargeOrderId" extra="因本次充值发生升级时请选择，便于退款准确撤销未使用权益并建议回退等级">
                         <Select allowClear showSearch optionFilterProp="label" options={memberRecentRecharges.map((item: any) => ({
