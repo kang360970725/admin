@@ -230,7 +230,7 @@ export default function UsersPage() {
     const [hasRentalRiskSearched, setHasRentalRiskSearched] = useState(false);
 
     const sceneMap: Record<string, { key: string; title: string; defaultUserType?: string; showStaffRating?: boolean; showWorkMetrics?: boolean; readOnly?: boolean }> = {
-        '/users/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
+        '/membership/members': { key: 'MEMBER', title: '会员管理', defaultUserType: 'REGISTERED_USER', showStaffRating: false, showWorkMetrics: false },
         '/users/staff': { key: 'STAFF', title: '服务者管理', defaultUserType: 'STAFF', showStaffRating: true, showWorkMetrics: true },
         '/users/rental-risk': { key: 'STAFF_RENTAL_RISK', title: '租号风控查询', defaultUserType: 'STAFF', showStaffRating: false, showWorkMetrics: false, readOnly: true },
         '/merchant-business/rental-risk': { key: 'STAFF_RENTAL_RISK', title: '租号风控查询', defaultUserType: 'STAFF', showStaffRating: false, showWorkMetrics: false, readOnly: true },
@@ -238,7 +238,7 @@ export default function UsersPage() {
         '/users/all': { key: 'ALL', title: '全部用户', showStaffRating: true, showWorkMetrics: true },
     };
 
-    const sceneConfig = sceneMap[location.pathname] || sceneMap['/users/members'];
+    const sceneConfig = sceneMap[location.pathname] || sceneMap['/membership/members'];
     const isRentalRiskScene = sceneConfig.key === 'STAFF_RENTAL_RISK';
 
     useEffect(() => {
