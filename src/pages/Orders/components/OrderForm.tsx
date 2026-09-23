@@ -7,7 +7,7 @@
 // - 兼容：链式 ?. 防止空对象导致报错
 // - 额外：提供小票生成所需展示字段（projectName/billingMode/unitPrice/playerNames），不建议传后端
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Col,
     Collapse,
@@ -26,9 +26,10 @@ import {
     List,
     Tag,
     Space,
+    AutoComplete,
 } from 'antd';
 import dayjs from 'dayjs';
-import { getGameProjectOptions, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
+import { getGameProjectOptions, getMemberOrderContext, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import { maskPhone } from '@/utils/privacy';
 
@@ -39,6 +40,15 @@ type ProjectItem = {
     baseAmount?: number | null; // 保底（万）
     billingMode?: 'HOURLY' | 'GUARANTEED' | string | null; // 计费方式：用于判断小时单
     category?: string | null;
+    gameType?: string | null;
+};
+
+type MemberGameCardOption = {
+    id: number;
+    gameUniqueId: string;
+    gameNickname?: string | null;
+    gameCategoryName?: string | null;
+    isPrimary?: boolean;
 };
 
 type OptionItem = { label: string; value: number };
@@ -236,7 +246,11 @@ export default function OrderUpsertModal(props: {
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
     const [memberLoading, setMemberLoading] = useState(false);
     const [memberOptions, setMemberOptions] = useState<Array<{ label: string; value: number }>>([]);
-    const [memberMetaMap, setMemberMetaMap] = useState<Record<number, { name: string; phone: string; balance: number }>>({});
+    const [memberMetaMap, setMemberMetaMap] = useState<Record<number, { name: string; phone: string; balance: number; gameCards: MemberGameCardOption[] }>>({});
+    const [memberOrderContext, setMemberOrderContext] = useState<any>(null);
+    const [memberOrderContextLoading, setMemberOrderContextLoading] = useState(false);
+    const memberContextRequestRef = useRef(0);
+    const autoSelectedCardRef = useRef('');
     const [couponLoading, setCouponLoading] = useState(false);
     const [couponOptions, setCouponOptions] = useState<Array<{ label: string; value: number; disabled?: boolean }>>([]);
     const [couponMetaMap, setCouponMetaMap] = useState<Record<number, UserCouponOption>>({});
@@ -267,6 +281,7 @@ export default function OrderUpsertModal(props: {
                     baseAmount: p?.baseAmount ?? null,
                     billingMode: p?.billingMode ?? null,
                     category: p?.category ?? null,
+                    gameType: p?.gameType ?? null,
                 };
 
                 const priceText = p?.price != null ? `（¥${p.price}）` : '';
@@ -349,14 +364,14 @@ export default function OrderUpsertModal(props: {
                 scene: 'MEMBER',
             });
             const list = Array.isArray(res?.data) ? res.data : [];
-            const nextMeta: Record<number, { name: string; phone: string; balance: number }> = {};
+            const nextMeta: Record<number, { name: string; phone: string; balance: number; gameCards: MemberGameCardOption[] }> = {};
             const nextOptions = list.map((item: any) => {
                 const id = Number(item?.id || 0);
                 const name = String(item?.name || '未命名会员').trim();
                 const phone = String(item?.phone || '').trim();
                 const memberCode = String(item?.memberProfile?.memberCode || '').trim();
                 const balance = Number(item?.wallet?.availableBalance ?? 0);
-                nextMeta[id] = { name, phone, balance };
+                nextMeta[id] = { name, phone, balance, gameCards: Array.isArray(item?.memberGameCards) ? item.memberGameCards : [] };
                 return {
                     value: id,
                     label: `${name}${phone ? `（${maskPhone(phone)}）` : ''}${memberCode ? ` · 编码${memberCode}` : ''} · 储值¥${balance.toFixed(2)}`,
@@ -370,6 +385,45 @@ export default function OrderUpsertModal(props: {
             setMemberOptions([]);
         } finally {
             setMemberLoading(false);
+        }
+    };
+
+    const refreshMemberOrderContext = async (userIdInput?: number, projectIdInput?: number, amountInput?: number) => {
+        const userId = Number(userIdInput ?? form?.getFieldValue?.('customerUserId') ?? 0);
+        const projectId = Number(projectIdInput ?? form?.getFieldValue?.('projectId') ?? 0);
+        const originalAmount = toMoney(amountInput ?? form?.getFieldValue?.('receivableAmount') ?? 0);
+        if (!(userId > 0) || !(projectId > 0) || !(originalAmount > 0)) {
+            setMemberOrderContext(null);
+            return null;
+        }
+        setMemberOrderContextLoading(true);
+        const requestId = ++memberContextRequestRef.current;
+        try {
+            const context: any = await getMemberOrderContext({ userId, projectId, originalAmount });
+            if (requestId !== memberContextRequestRef.current) return null;
+            setMemberOrderContext(context || null);
+            const discount = context?.memberDiscount;
+            if (discount?.applied) {
+                const couponId = Number(form?.getFieldValue?.('userCouponId') || 0);
+                const coupon = couponId > 0 ? couponMetaMap?.[couponId] : null;
+                const couponDiscount = calcCouponPreviewDiscount(coupon, toMoney(discount.payableAmount), projectId);
+                const payable = toMoney(Math.max(0, toMoney(discount.payableAmount) - couponDiscount));
+                form?.setFieldsValue?.({ paidAmount: payable, settlementAmount: payable, manualAdjustAmount: 0 } as any);
+            }
+            const primary = context?.primaryGameCard;
+            const currentIdentifier = String(form?.getFieldValue?.('customerGameId') || '').trim();
+            if (primary?.gameUniqueId && !currentIdentifier) {
+                autoSelectedCardRef.current = String(primary.gameUniqueId);
+                form?.setFieldsValue?.({ customerGameId: String(primary.gameUniqueId), customerIdentifierIsGameId: true } as any);
+            }
+            return context;
+        } catch (error) {
+            console.error(error);
+            setMemberOrderContext(null);
+            message.error(getErrorMessage(error, '加载会员折扣及游戏名片失败'));
+            return null;
+        } finally {
+            setMemberOrderContextLoading(false);
         }
     };
 
@@ -495,6 +549,9 @@ export default function OrderUpsertModal(props: {
         if (!open) return;
 
         form?.resetFields?.();
+        setMemberOrderContext(null);
+        memberContextRequestRef.current += 1;
+        autoSelectedCardRef.current = '';
 
         form?.setFieldsValue?.({
             ...initialValues,
@@ -550,6 +607,11 @@ export default function OrderUpsertModal(props: {
     const onValuesChange = (changed: any) => {
         if (Object.prototype.hasOwnProperty.call(changed || {}, 'projectId')) {
             form?.setFieldValue?.('userCouponId' as any, undefined);
+            const currentIdentifier = String(form?.getFieldValue?.('customerGameId') || '').trim();
+            if (autoSelectedCardRef.current && currentIdentifier === autoSelectedCardRef.current) {
+                form?.setFieldsValue?.({ customerGameId: undefined, customerIdentifierIsGameId: false } as any);
+                autoSelectedCardRef.current = '';
+            }
             syncByProject(changed.projectId);
         }
 
@@ -591,12 +653,17 @@ export default function OrderUpsertModal(props: {
                 paymentChannel: 'BALANCE',
                 isPaid: true,
                 userCouponId: undefined,
+                customerGameId: undefined,
+                customerIdentifierIsGameId: false,
             } as any);
+            autoSelectedCardRef.current = '';
             void fetchMemberCoupons(Number(changed.customerUserId));
         } else if (changed?.customerUserId !== undefined) {
             form?.setFieldsValue?.({ userCouponId: undefined } as any);
             setCouponOptions([]);
             setCouponMetaMap({});
+            setMemberOrderContext(null);
+            autoSelectedCardRef.current = '';
         }
 
         if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'BALANCE') {
@@ -855,11 +922,40 @@ export default function OrderUpsertModal(props: {
     const isBalancePayment = watchedPaymentChannel === 'BALANCE';
     const selectedMemberBalance = Number(selectedMember?.balance ?? 0);
     const balanceInsufficient = isBalancePayment && watchedCustomerUserId > 0 && selectedMemberBalance < watchedPaidAmount;
+    const memberDiscountActive = Boolean(memberOrderContext?.memberDiscount?.applied);
+    const memberDiscountAmount = Number(memberOrderContext?.memberDiscount?.amount || 0);
+    const totalDiscountPreview = toMoney(Math.max(0, watchedReceivableAmount - watchedPaidAmount));
+    const memberGameCards: MemberGameCardOption[] = Array.isArray(memberOrderContext?.gameCards)
+        ? memberOrderContext.gameCards
+        : (selectedMember?.gameCards || []);
+    const memberGameCardOptions = memberGameCards.map((card) => ({
+        value: String(card.gameUniqueId),
+        label: `${card.gameNickname ? `${card.gameNickname} · ` : ''}${card.gameUniqueId}${card.isPrimary ? '（优先）' : ''}`,
+    }));
+
+    useEffect(() => {
+        if (!open || initialValues?.id) return;
+        if (!(watchedCustomerUserId > 0) || !(curProjectId > 0) || !(watchedReceivableAmount > 0)) {
+            memberContextRequestRef.current += 1;
+            setMemberOrderContext(null);
+            return;
+        }
+        const timer = window.setTimeout(() => {
+            void refreshMemberOrderContext(watchedCustomerUserId, curProjectId, watchedReceivableAmount);
+        }, 180);
+        return () => window.clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, initialValues?.id, watchedCustomerUserId, curProjectId, watchedReceivableAmount]);
 
     function calcPayableAfterCoupon(receivable: number, couponId?: number | null, projectId?: number) {
         const coupon = Number(couponId || 0) > 0 ? couponMetaMap?.[Number(couponId)] : null;
-        const discount = calcCouponPreviewDiscount(coupon, toMoney(receivable), Number(projectId || 0));
-        return toMoney(Math.max(0, toMoney(receivable) - discount));
+        const original = toMoney(receivable);
+        const contextDiscount = memberOrderContext?.memberDiscount;
+        const memberPayable = contextDiscount?.applied && toMoney(contextDiscount.originalAmount) === original
+            ? toMoney(contextDiscount.payableAmount)
+            : original;
+        const discount = calcCouponPreviewDiscount(coupon, memberPayable, Number(projectId || 0));
+        return toMoney(Math.max(0, memberPayable - discount));
     }
 
     const updatePlayerSelection = (nextIds: number[]) => {
@@ -945,7 +1041,7 @@ export default function OrderUpsertModal(props: {
                     </div>
                     <div className="bc-admin-form-summary-card warning">
                         <div className="bc-admin-form-summary-label">优惠抵扣</div>
-                        <div className="bc-admin-form-summary-value">¥{watchedDiscountAmount.toFixed(2)}</div>
+                        <div className="bc-admin-form-summary-value">¥{totalDiscountPreview.toFixed(2)}</div>
                     </div>
                     <div className="bc-admin-form-summary-card info">
                         <div className="bc-admin-form-summary-label">结算金额</div>
@@ -1056,6 +1152,7 @@ export default function OrderUpsertModal(props: {
                             <InputNumber
                                 min={0}
                                 style={{ width: '100%' }}
+                                disabled={memberDiscountActive}
                                 placeholder={showQtyForHourly ? '随小时自动计算' : '随项目自动同步'}
                             />
                         </Form.Item>
@@ -1066,7 +1163,7 @@ export default function OrderUpsertModal(props: {
                             <InputNumber
                                 min={0}
                                 style={{ width: '100%' }}
-                                disabled={receiptLocked || watchedUserCouponId > 0}
+                                disabled={receiptLocked || watchedUserCouponId > 0 || memberDiscountActive}
                                 placeholder={showQtyForHourly ? '随小时自动计算' : '随项目自动同步'}
                             />
                         </Form.Item>
@@ -1082,18 +1179,30 @@ export default function OrderUpsertModal(props: {
                             <InputNumber
                                 min={0}
                                 style={{ width: '100%' }}
+                                disabled={memberDiscountActive}
                                 placeholder="默认跟实收金额一致"
                             />
                         </Form.Item>
                     </Col>
 
+                    {memberDiscountActive ? <Col {...fullColProps}>
+                        <div style={{ marginTop: -4, marginBottom: 8, padding: '8px 12px', borderRadius: 8, background: '#fff7e6', color: '#ad6800' }}>
+                            {memberOrderContextLoading ? '正在计算会员折扣…' : `${memberOrderContext?.memberDiscount?.levelCode || '会员'} 折扣已应用：减免 ¥${memberDiscountAmount.toFixed(2)}，应收、实收和结算金额由系统计算并锁定。`}
+                        </div>
+                    </Col> : null}
+
                     <Col {...fullColProps}>
                         <Form.Item label="客户标识" style={{ marginBottom: 8 }}>
                             <Input.Group compact>
                                 <Form.Item name="customerGameId" noStyle>
-                                    <Input
+                                    <AutoComplete
                                         placeholder="客户提供的昵称 / ID / 房间号"
+                                        options={memberGameCardOptions}
                                         allowClear
+                                        onSelect={(value) => {
+                                            autoSelectedCardRef.current = String(value);
+                                            form?.setFieldValue?.('customerIdentifierIsGameId' as any, true);
+                                        }}
                                         style={{ width: 'calc(100% - 118px)' }}
                                     />
                                 </Form.Item>

@@ -1108,7 +1108,7 @@ export default function UsersPage() {
         {
             title: '会员等级',
             dataIndex: 'memberLevelCode',
-            key: 'memberLevel',
+            key: 'memberLevelCode',
             valueType: 'select',
             fieldProps: {
                 options: memberLevelOptions.map((item: any) => ({ label: `${item.code} · ${item.name}`, value: item.code })),
@@ -1754,7 +1754,8 @@ export default function UsersPage() {
                             }
                         }
                         const { current, pageSize, ...rest } = params;
-                        const { staffEmploymentStatus: _ignoredStaffEmploymentStatus, status: _ignoredStatus, memberLevelCode, ...queryRest } = rest as any;
+                        const { staffEmploymentStatus: _ignoredStaffEmploymentStatus, status: _ignoredStatus, memberLevelCode, memberLevel, ...queryRest } = rest as any;
+                        const selectedMemberLevel = memberLevelCode || memberLevel;
                         const query = {
                             page: current ?? 1,
                             limit: pageSize ?? 10,
@@ -1762,7 +1763,7 @@ export default function UsersPage() {
                             includeStaffMembers: sceneConfig.key === 'MEMBER' ? 'true' : undefined,
                             ...(sceneConfig.key === 'MEMBER' ? { memberState: memberStateTab } : {}),
                             ...(sceneConfig.key === 'STAFF' ? { staffEmploymentStatus: staffStatusTab } : {}),
-                            ...(sceneConfig.key === 'MEMBER' && memberLevelCode ? { memberLevelCode: String(memberLevelCode).trim().toUpperCase() } : {}),
+                            ...(sceneConfig.key === 'MEMBER' && selectedMemberLevel ? { memberLevelCode: String(selectedMemberLevel).trim().toUpperCase() } : {}),
                             ...(sceneConfig.key !== 'STAFF' && sceneConfig.key !== 'STAFF_RENTAL_RISK' && _ignoredStatus ? { status: _ignoredStatus } : {}),
                             ...queryRest, // search 表单字段会在这里（例如 search/userType/status）
                         };

@@ -206,6 +206,7 @@ export interface GetUsersParams {
     includeStaffMembers?: boolean | string;
     memberState?: string;
     memberLevelCode?: string;
+    memberLevel?: string;
     loginInactiveDays?: number;
     acceptInactiveDays?: number;
 }
@@ -819,6 +820,13 @@ export async function assignDispatch(orderId: number, data: { playerIds: number[
 export async function getOrderSourceOptions() {
     return request(`${API_BASE}/orders/source-options`, {
         method: 'POST',
+    });
+}
+
+export async function getMemberOrderContext(data: { userId: number; projectId: number; originalAmount: number }) {
+    return request(`${API_BASE}/orders/member-order-context`, {
+        method: 'POST',
+        data,
     });
 }
 

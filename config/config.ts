@@ -255,6 +255,21 @@ export default defineConfig({
     { path: '/finance/rental-orders', redirect: '/merchant-business/rental-orders', hideInMenu: true },
 
     {
+      path: '/membership',
+      name: '会员体系',
+      icon: 'CrownOutlined',
+      access: 'canViewMembership',
+      routes: [
+        { path: '/membership', redirect: '/users/members' },
+        { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
+        { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels', access: 'canViewWalletMemberLevels' },
+        { path: '/wallet/member-benefits', name: '会员权益', component: '@/pages/Wallet/MemberBenefits', access: 'canViewWalletMemberBenefits' },
+        { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans', access: 'canViewWalletRechargePlans' },
+        { path: '/wallet/member-recharges', name: '会员充值记录', component: '@/pages/Wallet/MemberRecharges', access: 'canViewWalletMemberRecharges' },
+      ],
+    },
+
+    {
       path: '/staff',
       name: '服务者中心',
       icon: 'TeamOutlined',
@@ -290,10 +305,6 @@ export default defineConfig({
       routes: [
         { path: '/wallet', redirect: '/wallet/overview' },
         { path: '/wallet/overview', name: '账户概览', component: '@/pages/Wallet/Overview', access: 'canViewWalletOverview' },
-        { path: '/wallet/member-levels', name: '会员等级', component: '@/pages/Wallet/MemberLevels', access: 'canViewWalletMemberLevels' },
-        { path: '/wallet/member-benefits', name: '会员权益', component: '@/pages/Wallet/MemberBenefits', access: 'canViewWalletMemberLevels' },
-        { path: '/wallet/recharge-plans', name: '充值方案', component: '@/pages/Wallet/RechargePlans', access: 'canViewWalletRechargePlans' },
-        { path: '/wallet/member-recharges', name: '会员充值记录', component: '@/pages/Wallet/MemberRecharges', access: 'canViewWalletMemberRecharges' },
         { path: '/wallet/transactions', name: '流水明细', component: '@/pages/Wallet/Transactions', access: 'canViewWalletTransactions' },
         { path: '/wallet/deposit-reconciliation', name: '保证金对账', component: '@/pages/Wallet/DepositReconciliation', access: 'canViewWalletDepositReconciliation' },
         { path: '/wallet/replay-preview', name: '单用户预核算', component: '@/pages/Wallet/ReplayPreview', access: 'canViewWalletReplayPreview' },
@@ -308,8 +319,7 @@ export default defineConfig({
       icon: 'user',
       access: 'canViewUsers',
       routes: [
-        { path: '/users', redirect: '/users/members' },
-        { path: '/users/members', name: '会员管理', component: '@/pages/Users', access: 'canViewMemberUsers' },
+        { path: '/users', redirect: '/users/staff' },
         { path: '/users/staff', name: '服务者管理', component: '@/pages/Users', access: 'canViewStaffUsers' },
         { path: '/users/staff-cards', name: '服务者名片审核', component: '@/pages/Users/StaffCards', access: 'canViewStaffUsers' },
         { path: '/users/staff-leaves', name: '请假管理', component: '@/pages/Staff/Activity', access: 'canViewStaffUsers' },

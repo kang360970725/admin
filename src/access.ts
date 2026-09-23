@@ -50,8 +50,13 @@ export default function access(initialState: { currentUser?: any } | undefined) 
   const hasFinanceRecords = has('finance:records:list');
   const canUseOwnStaffWallet = userType === 'STAFF' && isDispatchEligibleStaff;
   const canViewWalletOverview = has('wallet:overview:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet;
+  const canViewWalletMemberLevels = has('wallet:member-levels:page') || has('wallet:withdrawals:page');
+  const canViewWalletMemberBenefits = has('wallet:member-benefits:page') || canViewWalletMemberLevels;
+  const canViewWalletRechargePlans = has('wallet:recharge-plans:page') || has('wallet:withdrawals:page');
+  const canViewWalletMemberRecharges = has('wallet:member-recharges:page') || has('wallet:withdrawals:page');
 
   return {
+    canViewMembership: canViewMemberUsers || canViewWalletMemberLevels || canViewWalletMemberBenefits || canViewWalletRechargePlans || canViewWalletMemberRecharges,
     canViewMerchantBusiness: canViewStaffRentalRisk || canViewRentalOrders,
     canViewRentalOrders,
     canCreateRentalOrder: isSuperAdmin || has('rental-orders:create:button'),
@@ -78,7 +83,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewPenalties: has('penalties:page') || has('penalties:ticket:create') || hasLegacySystemAdmin,
 
     // 用户/评级
-    canViewUsers: canViewMemberUsers || canViewStaffUsers || canViewInternalUsers || canViewAllUsers,
+    canViewUsers: canViewStaffUsers || canViewInternalUsers || canViewAllUsers,
     canViewMemberUsers,
     canViewStaffUsers,
     canViewStaffRentalRisk,
@@ -140,9 +145,10 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewServiceOnlineBoard: has('service:online-board:page') || has('orders:workbench:page'),
 
     canViewWalletOverview,
-    canViewWalletMemberLevels: has('wallet:member-levels:page') || has('wallet:withdrawals:page'),
-    canViewWalletRechargePlans: has('wallet:recharge-plans:page') || has('wallet:withdrawals:page'),
-    canViewWalletMemberRecharges: has('wallet:member-recharges:page') || has('wallet:withdrawals:page'),
+    canViewWalletMemberLevels,
+    canViewWalletMemberBenefits,
+    canViewWalletRechargePlans,
+    canViewWalletMemberRecharges,
     canViewWalletTransactions: has('wallet:transactions:page') || has('wallet:withdrawals:page') || canUseOwnStaffWallet,
     canViewWalletReplayPreview: has('wallet:replay-preview:page') || has('wallet:withdrawals:page'),
     canViewWithdrawals: has('wallet:withdrawals:page'),
