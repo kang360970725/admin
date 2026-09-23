@@ -1043,8 +1043,8 @@ export default function UsersPage() {
                 </Space>
             ),
         },
-        sceneConfig.key === 'ALL' ? {
-            title: '用户类型',
+        sceneConfig.key === 'ALL' || sceneConfig.key === 'MEMBER' ? {
+            title: sceneConfig.key === 'MEMBER' ? '账号身份' : '用户类型',
             dataIndex: 'userType',
             key: 'userType',
             width: 100,
@@ -1059,8 +1059,8 @@ export default function UsersPage() {
                 ADMIN: { text: '管理员' },
             },
 
-            // ✅ 默认筛选“服务者”
-            initialValue: 'STAFF',
+            // 全部用户页保留原有默认筛选；会员页需展示所有拥有会员档案的账号。
+            initialValue: sceneConfig.key === 'ALL' ? 'STAFF' : undefined,
             render: (_: any, record: any) => (
                 <Tag color={userTypeMap[record.userType as keyof typeof userTypeMap]?.color}>
                     {userTypeMap[record.userType as keyof typeof userTypeMap]?.text}
