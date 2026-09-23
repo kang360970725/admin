@@ -189,6 +189,9 @@ export default function UsersPage() {
     const [memberGameCardVisible, setMemberGameCardVisible] = useState(false);
     const [memberGameCards, setMemberGameCards] = useState<any[]>([]);
     const [memberBenefits, setMemberBenefits] = useState<any[]>([]);
+    const [memberBenefitUseGrant, setMemberBenefitUseGrant] = useState<any>(null);
+    const [memberBenefitUseSubmitting, setMemberBenefitUseSubmitting] = useState(false);
+    const [memberBenefitUseForm] = Form.useForm();
     const [memberGameCardCategories, setMemberGameCardCategories] = useState<any[]>([]);
     const [memberGameCardSubmitting, setMemberGameCardSubmitting] = useState(false);
     const [memberGameCardForm] = Form.useForm();
@@ -2045,6 +2048,44 @@ export default function UsersPage() {
                 </Form>
             </Modal>
 
+            <Modal
+                title={`核销权益 · ${memberBenefitUseGrant?.benefitNameSnapshot || ''}`}
+                open={!!memberBenefitUseGrant}
+                confirmLoading={memberBenefitUseSubmitting}
+                onCancel={() => { setMemberBenefitUseGrant(null); memberBenefitUseForm.resetFields(); }}
+                onOk={async () => {
+                    try {
+                        const values = await memberBenefitUseForm.validateFields();
+                        setMemberBenefitUseSubmitting(true);
+                        await useUserMemberBenefit(memberBenefitUseGrant.id, values);
+                        message.success('权益核销成功，核销记录已存档');
+                        setMemberBenefitUseGrant(null);
+                        memberBenefitUseForm.resetFields();
+                        await loadMemberDetailData(Number(memberDetail?.id));
+                    } catch (e: any) {
+                        if (!e?.errorFields) message.error(e?.response?.data?.message || e?.message || '权益核销失败');
+                    } finally {
+                        setMemberBenefitUseSubmitting(false);
+                    }
+                }}
+                destroyOnClose
+            >
+                <Form form={memberBenefitUseForm} layout="vertical" initialValues={{ quantity: 1 }}>
+                    <Form.Item label="核销数量" name="quantity" rules={[{ required: true, message: '请输入核销数量' }]}>
+                        <InputNumber
+                            min={0.01}
+                            max={memberBenefitUseGrant?.unlimited ? undefined : Number(memberBenefitUseGrant?.remainingQuantity || 0)}
+                            precision={2}
+                            style={{ width: '100%' }}
+                            addonAfter={memberBenefitUseGrant?.unitNameSnapshot || '次'}
+                        />
+                    </Form.Item>
+                    <Form.Item label="核销说明" name="remark" rules={[{ required: true, whitespace: true, message: '请填写本次核销说明，便于后续复核' }]}>
+                        <Input.TextArea rows={3} maxLength={255} showCount placeholder="例如：9月会员福利，客服现场核销" />
+                    </Form.Item>
+                </Form>
+            </Modal>
+
             <Drawer
                 title={`会员详情 - ${memberDetail?.name || maskPhone(memberDetail?.phone) || ''}`}
                 width={760}
@@ -2101,13 +2142,10 @@ export default function UsersPage() {
                                     const remaining = item?.unlimited ? '不限量' : `${Number(item?.remainingQuantity || 0)}${item?.unitNameSnapshot || ''}`;
                                     const usable = item?.status === 'ACTIVE' && (item?.unlimited || Number(item?.remainingQuantity || 0) > 0) && (!item?.expiresAt || dayjs(item.expiresAt).isAfter(dayjs()));
                                     return <List.Item actions={usable && item?.benefit?.requiresVerification ? [
-                                        <Popconfirm key="use" title={`确认核销1${item?.unitNameSnapshot || '次'}？`} onConfirm={async () => {
-                                            try {
-                                                await useUserMemberBenefit(item.id, { quantity: 1, remark: '会员详情人工核销' });
-                                                message.success('权益核销成功');
-                                                await loadMemberDetailData(Number(memberDetail.id));
-                                            } catch (e: any) { message.error(e?.response?.data?.message || e?.message || '权益核销失败'); }
-                                        }}><Button type="link">核销</Button></Popconfirm>,
+                                        <Button key="use" type="link" onClick={() => {
+                                            setMemberBenefitUseGrant(item);
+                                            memberBenefitUseForm.setFieldsValue({ quantity: 1, remark: '' });
+                                        }}>核销</Button>,
                                     ] : undefined}>
                                         <List.Item.Meta
                                             title={<Space><span>{item?.benefitNameSnapshot || item?.benefit?.name}</span><Tag>{item?.levelCodeSnapshot}</Tag>{item?.benefit?.reviewRestricted ? <Tag color="red">审核隐藏</Tag> : null}</Space>}
@@ -2115,6 +2153,28 @@ export default function UsersPage() {
                                         />
                                     </List.Item>;
                                 }}
+                            />
+                        </Card>
+
+                        <Card size="small" title="权益核销记录">
+                            <List
+                                size="small"
+                                dataSource={memberBenefits.flatMap((grant: any) => (grant?.usages || []).map((usage: any) => ({ ...usage, grant })))}
+                                locale={{ emptyText: '暂无核销记录' }}
+                                renderItem={(item: any) => (
+                                    <List.Item>
+                                        <div style={{ width: '100%' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                                                <span>{item?.grant?.benefitNameSnapshot || '-'}</span>
+                                                <span>核销 {Number(item?.quantity || 0)}{item?.grant?.unitNameSnapshot || ''}</span>
+                                                <Tag color={item?.status === 'CONFIRMED' ? 'green' : 'default'}>{item?.status === 'CONFIRMED' ? '已核销' : '已冲销'}</Tag>
+                                            </div>
+                                            <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                                {item?.usedAt ? dayjs(item.usedAt).format('YYYY-MM-DD HH:mm:ss') : '-'} · 操作人 {item?.operatorName || '系统'} · 抵扣价值 ¥{Number(item?.deductedValue || 0).toFixed(2)} · {item?.remark || '无说明'}
+                                            </div>
+                                        </div>
+                                    </List.Item>
+                                )}
                             />
                         </Card>
 

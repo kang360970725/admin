@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import dayjs from 'dayjs';
 import { ModalForm, PageContainer, ProFormDigit, ProFormSelect, ProFormSwitch, ProFormText, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { Button, Card, Form, InputNumber, message, Popconfirm, Select, Space, Switch, Tabs, Tag } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
@@ -6,6 +7,7 @@ import {
   createMemberBenefit,
   deleteMemberBenefit,
   getMemberBenefits,
+  getMemberBenefitUsageRecords,
   getMemberLevelBenefitConfigs,
   replaceMemberLevelBenefits,
   updateMemberBenefit,
@@ -181,5 +183,34 @@ export default function MemberBenefitsPage() {
     </Space>
   </Card>;
 
-  return <PageContainer><Tabs items={[{ key: 'benefits', label: '权益项目库', children: benefitTab }, { key: 'levels', label: '等级权益关联', children: levelTab }]} /></PageContainer>;
+  const usageTab = <ProTable
+    rowKey="id"
+    columns={[
+      { title: '会员/权益/备注', dataIndex: 'keyword', hideInTable: true },
+      { title: '核销时间', dataIndex: 'usedAt', valueType: 'dateTime', width: 170, search: false, render: (_: any, row: any) => row.usedAt ? dayjs(row.usedAt).format('YYYY-MM-DD HH:mm:ss') : '-' },
+      { title: '会员', dataIndex: ['user', 'name'], width: 150, search: false, render: (_: any, row: any) => row?.user?.realName || row?.user?.name || `#${row?.userId}` },
+      { title: '会员编号', dataIndex: ['user', 'memberProfile', 'memberCode'], width: 130, search: false, render: (_: any, row: any) => row?.user?.memberProfile?.memberCode || '-' },
+      { title: '权益', dataIndex: ['grant', 'benefitNameSnapshot'], width: 180, search: false, render: (_: any, row: any) => row?.grant?.benefitNameSnapshot || '-' },
+      { title: '核销数量', dataIndex: 'quantity', width: 110, search: false, render: (_: any, row: any) => `${Number(row.quantity || 0)}${row?.grant?.unitNameSnapshot || ''}` },
+      { title: '抵扣价值', dataIndex: 'deductedValue', width: 110, search: false, render: (value: any) => `¥${Number(value || 0).toFixed(2)}` },
+      { title: '关联业务', dataIndex: 'sourceType', width: 150, search: false, render: (_: any, row: any) => row.sourceType ? `${row.sourceType}${row.sourceId ? ` #${row.sourceId}` : ''}` : '-' },
+      { title: '操作人', dataIndex: 'operatorName', width: 130, search: false },
+      { title: '核销说明', dataIndex: 'remark', ellipsis: true, search: false, render: (value: any) => value || '-' },
+      { title: '状态', dataIndex: 'status', width: 100, valueType: 'select', valueEnum: { CONFIRMED: { text: '已核销', status: 'Success' }, REVERSED: { text: '已冲销', status: 'Default' } } },
+    ]}
+    request={async (params: any) => {
+      const result: any = await getMemberBenefitUsageRecords({
+        page: params.current,
+        limit: params.pageSize,
+        keyword: params.keyword,
+        status: params.status,
+      });
+      return { data: Array.isArray(result?.data) ? result.data : [], total: Number(result?.total || 0), success: true };
+    }}
+    search={{ labelWidth: 'auto' }}
+    pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+    scroll={{ x: 1250 }}
+  />;
+
+  return <PageContainer><Tabs items={[{ key: 'benefits', label: '权益项目库', children: benefitTab }, { key: 'levels', label: '等级权益关联', children: levelTab }, { key: 'usages', label: '权益核销记录', children: usageTab }]} /></PageContainer>;
 }

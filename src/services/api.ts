@@ -344,6 +344,10 @@ export async function getUserMemberBenefits(userId: number, includeHistory = fal
     });
 }
 
+export async function getMemberBenefitUsageRecords(params?: Record<string, any>) {
+    return request(`${API_BASE}/member/benefits/usages`, { method: 'GET', params });
+}
+
 export async function useUserMemberBenefit(grantId: number, data: any) {
     return request(`${API_BASE}/member/benefits/grants/${grantId}/use`, { method: 'POST', data });
 }
