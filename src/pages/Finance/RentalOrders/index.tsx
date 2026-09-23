@@ -185,7 +185,7 @@ export default function RentalOrdersPage() {
             if (!result.matchedCount) message.warning('没有可核销的匹配订单');
           } else {
             const result = await batchReconcileRentalOrders(values);
-            message.success(`已批量核销 ${result.reconciledCount} 笔订单`);
+            message.success(`已批量核销 ${result.reconciledCount} 笔，合计 ${yuan(result.reconciledAmountTotal)}`);
             setBatchOpen(false); setBatchPreview(undefined); actionRef.current?.reload();
           }
         } catch (e: any) { if (!e?.errorFields) message.error(apiError(e)); } finally { setBusy(false); }
@@ -197,7 +197,13 @@ export default function RentalOrdersPage() {
         </Form.Item>
         <Form.Item name="remark" label="核销备注"><Input placeholder="可填写转账批次或凭证号" maxLength={2000} /></Form.Item>
       </Form>
-      {batchPreview && <Table size="small" rowKey="lineNo" pagination={false} scroll={{ x: 720, y: 320 }} dataSource={batchPreview.rows} columns={[
+      {batchPreview && <>
+        <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+          <Col xs={24} sm={8}><Card size="small"><Statistic title="输入笔数" value={batchPreview.totalCount || 0} suffix="笔" /></Card></Col>
+          <Col xs={24} sm={8}><Card size="small"><Statistic title="输入总额" value={Number(batchPreview.inputAmountTotal || 0)} precision={2} prefix="¥" /></Card></Col>
+          <Col xs={24} sm={8}><Card size="small"><Statistic title="可核销总额" value={Number(batchPreview.matchedAmountTotal || 0)} precision={2} prefix="¥" valueStyle={{ color: batchPreview.matchedCount === batchPreview.totalCount ? token.colorSuccess : token.colorWarning }} /></Card></Col>
+        </Row>
+        <Table size="small" rowKey="lineNo" pagination={false} scroll={{ x: 720, y: 320 }} dataSource={batchPreview.rows} columns={[
         { title: '行', dataIndex: 'lineNo', width: 55 },
         { title: '号源编号', dataIndex: 'accountSourceNo', width: 110, render: (v: any) => v || '-' },
         { title: '输入金额', dataIndex: 'amount', width: 110, render: (v: any) => v == null ? '-' : yuan(v) },
@@ -205,7 +211,8 @@ export default function RentalOrdersPage() {
         { title: '订单金额', dataIndex: 'orderAmount', width: 110, render: (v: any) => v == null ? '-' : yuan(v) },
         { title: '校验结果', dataIndex: 'status', width: 110, render: (v: any) => <Tag color={v === 'MATCHED' ? 'green' : 'red'}>{v === 'MATCHED' ? '可核销' : '异常'}</Tag> },
         { title: '说明', dataIndex: 'message' },
-      ]} />}
+        ]} />
+      </>}
     </Modal>
 
     <Drawer className="rental-detail" open={!!detail} width={isMobile ? '100%' : 900} title={`订单详情 · ${detail?.serialNo || ''}`} onClose={() => setDetail(undefined)}>
