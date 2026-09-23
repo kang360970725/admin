@@ -363,7 +363,6 @@ export default function OrderUpsertModal(props: {
                 search: keyword || '',
                 scene: 'MEMBER',
                 includeStaffMembers: true,
-                wechatBoundOnly: true,
             });
             const list = Array.isArray(res?.data) ? res.data : [];
             const nextMeta: Record<number, { name: string; phone: string; balance: number; gameCards: MemberGameCardOption[] }> = {};
@@ -570,6 +569,9 @@ export default function OrderUpsertModal(props: {
             designatedPlayerIds: Array.isArray(initialValues?.designatedPlayerIds) ? initialValues?.designatedPlayerIds : [],
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
             paymentChannel: initialValues?.paymentChannel || 'MANUAL',
+            isPaid: String(initialValues?.paymentChannel || '').trim().toUpperCase() === 'BALANCE'
+                ? true
+                : Boolean(initialValues?.isPaid ?? true),
             settlementAmount:
                 initialValues?.settlementAmount != null
                     ? Number(initialValues.settlementAmount)
@@ -1252,9 +1254,9 @@ export default function OrderUpsertModal(props: {
                             valuePropName="checked"
                             label="收款状态"
                             initialValue={true}
-                            tooltip="先打后付：把这里取消勾选，订单会被标记为未收款"
+                            tooltip={isBalancePayment ? '会员储值支付会立即扣减余额，固定为已付款状态' : '先打后付：把这里取消勾选，订单会被标记为未收款'}
                         >
-                            <Checkbox>已付款</Checkbox>
+                            <Checkbox disabled={isBalancePayment}>已付款</Checkbox>
                         </Form.Item>
                     </Col>
                     {watchedIsPaid && watchedPaymentChannel === 'BALANCE' ? (
