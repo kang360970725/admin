@@ -388,7 +388,7 @@ export async function adjustMemberGrowth(data: { userId: number; growthValue: nu
     });
 }
 
-export async function adjustMemberLevel(data: { userId: number; levelCode: string; sourceRechargeOrderId?: number; remark?: string }) {
+export async function adjustMemberLevel(data: { userId: number; levelCode: string; sourceRechargeOrderId?: number; remark?: string; confirmBenefitReset?: boolean }) {
     return request(`${API_BASE}/member/level/adjust`, { method: 'POST', data });
 }
 
@@ -1017,6 +1017,13 @@ export async function getCouponTemplates(data: {
 
 export async function createCouponTemplate(data: any) {
     return request(`${API_BASE}/coupons/templates/create`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function updateCouponTemplate(data: any) {
+    return request(`${API_BASE}/coupons/templates/update`, {
         method: 'POST',
         data,
     });

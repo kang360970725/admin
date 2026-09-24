@@ -10,6 +10,7 @@ import {
   Modal,
   Select,
   Space,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -28,6 +29,7 @@ import {
   getUserCoupons,
   grantUserCoupon,
   updateCouponTemplateStatus,
+  updateCouponTemplate,
 } from '@/services/api';
 import { maskPhone } from '@/utils/privacy';
 
@@ -94,6 +96,7 @@ const CouponsPage: React.FC = () => {
   const [couponFilter, setCouponFilter] = useState<any>({});
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [grantOpen, setGrantOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formCreate] = Form.useForm();
@@ -110,6 +113,30 @@ const CouponsPage: React.FC = () => {
   const [checkedCategoryKeys, setCheckedCategoryKeys] = useState<React.Key[]>([]);
   const createScope = Form.useWatch('applicableScope', formCreate);
   const createType = Form.useWatch('type', formCreate);
+  const miniappClaimEnabled = Form.useWatch('miniappClaimEnabled', formCreate);
+  const dailyLimitEnabled = Form.useWatch('dailyLimitEnabled', formCreate);
+
+  const openTemplateModal = (record?: any) => {
+    const editing = record || null;
+    setEditingTemplate(editing);
+    const targets = Array.isArray(editing?.applicableProjectIds) ? editing.applicableProjectIds : [];
+    setProjectTargetKeys(editing?.applicableScope === 'PROJECT' ? targets.map((item: any) => String(item)) : []);
+    setCheckedCategoryKeys(editing?.applicableScope === 'CATEGORY' ? targets.map((item: any) => String(item)) : []);
+    formCreate.setFieldsValue(editing ? {
+      ...editing,
+      startAt: editing.startAt ? dayjs(editing.startAt) : null,
+      endAt: editing.endAt ? dayjs(editing.endAt) : null,
+      applicableTargetIds: targets,
+      dailyLimitEnabled: Number(editing.dailyClaimLimit || 0) > 0,
+    } : {
+      status: 'DRAFT',
+      applicableScope: 'ALL',
+      type: 'CASH',
+      miniappClaimEnabled: false,
+      dailyLimitEnabled: false,
+    });
+    setCreateOpen(true);
+  };
 
   const loadProjects = async (keyword?: string) => {
     setProjectLoading(true);
@@ -267,12 +294,15 @@ const CouponsPage: React.FC = () => {
       { title: '优惠值', dataIndex: 'discountValue', width: 120 },
       { title: '门槛', dataIndex: 'thresholdAmount', width: 120 },
       { title: '作用域', dataIndex: 'applicableScope', width: 120, render: (v: string) => scopeDict[v] || '-' },
+      { title: '小程序领券', dataIndex: 'miniappClaimEnabled', width: 120, render: (v: boolean, r: any) => v ? <Tag color="blue">开放{r?.dailyClaimLimit ? ` · 每日${r.dailyClaimLimit}` : ''}</Tag> : <Tag>仅平台发放</Tag> },
+      { title: '个人抢券上限', dataIndex: 'perUserLimit', width: 120, render: (v: any) => Number(v || 0) > 0 ? `${v}张` : '不限' },
       { title: '发放/已用', width: 140, render: (_: any, r: any) => `${r?.issuedCount || 0}/${r?.usedCount || 0}` },
       {
         title: '操作',
         width: 220,
         render: (_: any, r: any) => (
           <Space>
+            <Button size="small" onClick={() => openTemplateModal(r)}>编辑</Button>
             {templateStatusOptions.map((item) => (
               <Button
                 key={item.value}
@@ -347,7 +377,7 @@ const CouponsPage: React.FC = () => {
               onChange={(v) => setTemplateFilter((s: any) => ({ ...s, type: v || undefined }))}
             />
             <Button type="primary" onClick={() => loadData(1, limit)}>查询</Button>
-            <Button onClick={() => setCreateOpen(true)}>新建模板</Button>
+            <Button onClick={() => openTemplateModal()}>新建模板</Button>
             {access.canGrantMemberCoupon ? (
               <Button onClick={() => setGrantOpen(true)}>会员手动发券</Button>
             ) : null}
@@ -401,17 +431,24 @@ const CouponsPage: React.FC = () => {
       </Card>
 
       <Modal
-        title="新建券模板"
+        title={editingTemplate ? `编辑券模板 #${editingTemplate.id}` : '新建券模板'}
         open={createOpen}
-        onCancel={() => setCreateOpen(false)}
+        onCancel={() => {
+          setCreateOpen(false);
+          setEditingTemplate(null);
+          formCreate.resetFields();
+        }}
         onOk={async () => {
           try {
             const v = await formCreate.validateFields();
             setSubmitting(true);
-            await createCouponTemplate({
-              ...v,
+            const { dailyLimitEnabled: _dailyLimitEnabled, applicableTargetIds: _applicableTargetIds, ...formValues } = v;
+            const payload = {
+              ...formValues,
+              ...(editingTemplate ? { id: Number(editingTemplate.id) } : {}),
               startAt: v.startAt ? dayjs(v.startAt).toISOString() : undefined,
               endAt: v.endAt ? dayjs(v.endAt).toISOString() : undefined,
+              dailyClaimLimit: v.miniappClaimEnabled && v.dailyLimitEnabled ? Number(v.dailyClaimLimit) : undefined,
               applicableProjectIds:
                 createScope === 'CATEGORY'
                   ? (Array.isArray(v.applicableTargetIds)
@@ -420,9 +457,12 @@ const CouponsPage: React.FC = () => {
                   : (Array.isArray(v.applicableTargetIds)
                     ? v.applicableTargetIds.map((x: any) => Number(x)).filter((x: number) => Number.isFinite(x) && x > 0)
                     : []),
-            });
-            message.success('创建成功');
+            };
+            if (editingTemplate) await updateCouponTemplate(payload);
+            else await createCouponTemplate(payload);
+            message.success(editingTemplate ? '修改成功' : '创建成功');
             setCreateOpen(false);
+            setEditingTemplate(null);
             formCreate.resetFields();
             await loadData(1, limit);
           } catch (e: any) {
@@ -440,7 +480,7 @@ const CouponsPage: React.FC = () => {
           }
         }}
       >
-        <Form form={formCreate} layout="vertical" initialValues={{ status: 'DRAFT', applicableScope: 'ALL', type: 'CASH' }}>
+        <Form form={formCreate} layout="vertical" initialValues={{ status: 'DRAFT', applicableScope: 'ALL', type: 'CASH', miniappClaimEnabled: false, dailyLimitEnabled: false }}>
           <Form.Item name="name" label="模板名称" rules={[{ required: true, message: '请输入名称' }]}>
             <Input maxLength={120} />
           </Form.Item>
@@ -495,10 +535,27 @@ const CouponsPage: React.FC = () => {
             <Form.Item name="totalLimit" label="总发放上限" style={{ width: 220 }}>
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="perUserLimit" label="单用户上限" style={{ width: 220 }}>
+            <Form.Item name="perUserLimit" label="单用户主动领取上限" tooltip="只限制用户在小程序主动抢券，不限制后台发放和业务赠券" style={{ width: 220 }}>
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
           </Space>
+          <Card size="small" title="小程序领券设置" style={{ marginBottom: 18 }}>
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Form.Item name="miniappClaimEnabled" label="开放小程序主动领取" valuePropName="checked" style={{ marginBottom: 0 }}>
+                <Switch checkedChildren="开放" unCheckedChildren="仅平台发放" />
+              </Form.Item>
+              {miniappClaimEnabled ? <>
+                <Form.Item name="dailyLimitEnabled" label="启用每日限量" valuePropName="checked" style={{ marginBottom: 0 }}>
+                  <Switch />
+                </Form.Item>
+                {dailyLimitEnabled ? (
+                  <Form.Item name="dailyClaimLimit" label="每日可抢数量" rules={[{ required: true, message: '请输入每日可抢数量' }]} style={{ width: 260, marginBottom: 0 }}>
+                    <InputNumber min={1} precision={0} addonAfter="张/日" style={{ width: '100%' }} />
+                  </Form.Item>
+                ) : null}
+              </> : null}
+            </Space>
+          </Card>
           {createScope === 'PROJECT' ? (
             <Form.Item
               name="applicableTargetIds"

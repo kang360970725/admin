@@ -730,24 +730,39 @@ export default function UsersPage() {
         try {
             const values = await memberGrowthForm.validateFields();
             if (!memberDetail?.id) return;
-            setMemberGrowthSubmitting(true);
-            await adjustMemberLevel({
-                userId: Number(memberDetail.id),
-                levelCode: String(values.levelCode || ''),
-                sourceRechargeOrderId: values?.sourceRechargeOrderId ? Number(values.sourceRechargeOrderId) : undefined,
-                remark: values?.remark ? String(values.remark).trim() : undefined,
+            Modal.confirm({
+                title: '确认调整会员等级？',
+                content: '会员权益将按目标等级重新发放，当前可用权益的核销数量均置为 0。历史发放与核销记录仍会留存供审计；若实际权益存在差异，请人工核对并补差。',
+                okText: '确认调整并重新发放',
+                cancelText: '取消',
+                width: 520,
+                onOk: async () => {
+                    try {
+                        setMemberGrowthSubmitting(true);
+                        await adjustMemberLevel({
+                            userId: Number(memberDetail.id),
+                            levelCode: String(values.levelCode || ''),
+                            sourceRechargeOrderId: values?.sourceRechargeOrderId ? Number(values.sourceRechargeOrderId) : undefined,
+                            remark: values?.remark ? String(values.remark).trim() : undefined,
+                            confirmBenefitReset: true,
+                        });
+                        message.success('会员等级已更新，权益已按新等级重新发放');
+                        setMemberGrowthVisible(false);
+                        memberGrowthForm.resetFields();
+                        await loadMemberDetailData(Number(memberDetail.id));
+                        actionRef.current?.reload?.();
+                    } catch (error: any) {
+                        message.error(error?.response?.data?.message || error?.data?.message || error?.message || '会员等级调整失败');
+                        throw error;
+                    } finally {
+                        setMemberGrowthSubmitting(false);
+                    }
+                },
             });
-            message.success('会员等级已更新');
-            setMemberGrowthVisible(false);
-            memberGrowthForm.resetFields();
-            await loadMemberDetailData(Number(memberDetail.id));
-            actionRef.current?.reload?.();
         } catch (error: any) {
             if (!error?.errorFields) {
                 message.error(error?.response?.data?.message || error?.data?.message || error?.message || '会员等级调整失败');
             }
-        } finally {
-            setMemberGrowthSubmitting(false);
         }
     };
 
