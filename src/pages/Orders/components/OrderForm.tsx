@@ -936,6 +936,9 @@ export default function OrderUpsertModal(props: {
         value: String(card.gameUniqueId),
         label: `${card.gameNickname ? `${card.gameNickname} · ` : ''}${card.gameUniqueId}${card.isPrimary ? '（优先）' : ''}`,
     }));
+    const selectedMemberGameCard = memberGameCards.find(
+        (card) => String(card.gameUniqueId) === String(watchedCustomerGameId || '').trim(),
+    );
 
     useEffect(() => {
         if (!open || initialValues?.id) return;
@@ -1233,6 +1236,28 @@ export default function OrderUpsertModal(props: {
                                 </Form.Item>
                             </Input.Group>
                             <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+                                {selectedMemberGameCard ? (
+                                    <div style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        marginBottom: 6,
+                                        padding: '7px 10px',
+                                        borderRadius: 8,
+                                        background: '#f0f5ff',
+                                        border: '1px solid #d6e4ff',
+                                        color: '#1d39c4',
+                                    }}>
+                                        <span style={{ color: '#64748b' }}>已选游戏名片</span>
+                                        <strong>{selectedMemberGameCard.gameNickname || '未填写昵称'}</strong>
+                                        <span>·</span>
+                                        <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                                            {selectedMemberGameCard.gameUniqueId}
+                                        </span>
+                                        {selectedMemberGameCard.isPrimary ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>优先</Tag> : null}
+                                    </div>
+                                ) : null}
                                 默认按昵称/房间号处理；勾选准确ID后，服务者存单/结单时不再要求补客户游戏ID。
                             </div>
                         </Form.Item>

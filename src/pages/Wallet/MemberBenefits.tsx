@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { ModalForm, PageContainer, ProFormDigit, ProFormSelect, ProFormSwitch, ProFormText, ProFormTextArea, ProTable } from '@ant-design/pro-components';
-import { Button, Card, Form, InputNumber, message, Popconfirm, Select, Space, Switch, Tabs, Tag } from 'antd';
+import { Alert, Button, Card, Collapse, Empty, Form, InputNumber, message, Popconfirm, Select, Space, Switch, Tabs, Tag, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   createMemberBenefit,
@@ -37,6 +37,7 @@ export default function MemberBenefitsPage() {
   const [levels, setLevels] = useState<any[]>([]);
   const [selectedLevelId, setSelectedLevelId] = useState<number>();
   const [savingLevel, setSavingLevel] = useState(false);
+  const watchedLevelBenefits = Form.useWatch('benefits', form) || [];
 
   const loadOptions = async () => {
     const [benefitRows, levelRows]: any[] = await Promise.all([getMemberBenefits(), getMemberLevelBenefitConfigs()]);
@@ -131,40 +132,16 @@ export default function MemberBenefitsPage() {
     </ModalForm>
   </>;
 
-  const levelTab = <Card>
-    <Space direction="vertical" size={20} style={{ width: '100%' }}>
-      <Select style={{ width: 320 }} value={selectedLevelId} onChange={setSelectedLevelId} options={levels.map((item) => ({ label: `${item.code} · ${item.name}`, value: item.id }))} />
-      <Form form={form} layout="vertical">
-        <Form.List name="benefits">
-          {(fields, { add, remove }) => <Space direction="vertical" style={{ width: '100%' }} size={12}>
-            {fields.map((field) => <Card key={field.key} size="small">
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px,2fr) minmax(150px,1fr) 120px 90px 120px 32px', gap: 12, alignItems: 'start' }}>
-                <Form.Item {...field} name={[field.name, 'benefitId']} label="权益" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={benefits.filter((item) => item.enabled !== false).map((item) => ({ label: `${item.name}（${item.code}）`, value: item.id }))} /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'grantMode']} label="发放方式" rules={[{ required: true }]}><Select options={grantModeOptions} /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'quantity']} label="数量"><InputNumber min={0.01} precision={2} style={{ width: '100%' }} /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'unlimited']} label="不限量" valuePropName="checked"><Switch /></Form.Item>
-                <Form.Item {...field} name={[field.name, 'validityDays']} label="有效天数"><InputNumber min={1} precision={0} style={{ width: '100%' }} /></Form.Item>
-                <Button danger type="text" icon={<DeleteOutlined />} onClick={() => remove(field.name)} style={{ marginTop: 30 }} />
-              </div>
-              <Form.Item noStyle shouldUpdate={(prev, next) => prev?.benefits?.[field.name]?.grantMode !== next?.benefits?.[field.name]?.grantMode}>
-                {({ getFieldValue }) => getFieldValue(['benefits', field.name, 'grantMode']) === 'AUTOMATIC_DISCOUNT' ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: '180px minmax(220px,1fr) minmax(220px,1fr)', gap: 12 }}>
-                    <Form.Item {...field} name={[field.name, 'discountRate']} label="折后比例（%）" rules={[{ required: true }]}><InputNumber min={1} max={100} precision={2} style={{ width: '100%' }} placeholder="如98" /></Form.Item>
-                    <Form.Item {...field} name={[field.name, 'excludedProjectTypes']} label="不参与折扣的订单类型"><Select mode="tags" tokenSeparators={[',']} placeholder="如 EXPERIENCE、EUROPE_AMERICA" /></Form.Item>
-                    <Form.Item {...field} name={[field.name, 'excludedCategoryIds']} label="不参与折扣的商品分类ID"><Select mode="tags" tokenSeparators={[',']} placeholder="填写分类ID，避免按名称判断" /></Form.Item>
-                  </div>
-                ) : null}
-              </Form.Item>
-            </Card>)}
-            <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ grantMode: 'IDENTITY', quantity: 1, unlimited: false })} block>关联权益</Button>
-          </Space>}
-        </Form.List>
-      </Form>
-      <Button type="primary" loading={savingLevel} onClick={async () => {
+  const saveLevelBenefits = async () => {
         if (!selectedLevelId) return;
         try {
           setSavingLevel(true);
           const values = await form.validateFields();
+          const selectedIds = (values?.benefits || []).map((item: any) => Number(item.benefitId)).filter(Boolean);
+          if (new Set(selectedIds).size !== selectedIds.length) {
+            message.error('同一等级不能重复关联相同权益');
+            return;
+          }
           const rows = (values?.benefits || []).map((item: any, index: number) => ({
             ...item,
             sortOrder: (index + 1) * 10,
@@ -179,9 +156,108 @@ export default function MemberBenefitsPage() {
           await loadOptions();
         } catch (e: any) { if (!e?.errorFields) message.error(e?.response?.data?.message || e?.message || '保存失败'); }
         finally { setSavingLevel(false); }
-      }}>保存等级权益</Button>
-    </Space>
-  </Card>;
+  };
+
+  const levelTab = <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Card size="small" style={{ borderRadius: 14 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <Typography.Title level={5} style={{ margin: 0 }}>选择要维护的会员等级</Typography.Title>
+          <Typography.Text type="secondary">各等级独立保存，切换等级不会影响其他等级配置。</Typography.Text>
+        </div>
+        <Select
+          style={{ width: 'min(100%, 360px)' }}
+          size="large"
+          value={selectedLevelId}
+          onChange={setSelectedLevelId}
+          options={levels.map((item) => ({ label: `${item.code} · ${item.name}`, value: item.id }))}
+        />
+      </div>
+      {selectedLevel ? <Space wrap style={{ marginTop: 14 }}>
+        <Tag color="blue">{selectedLevel.code}</Tag>
+        <Tag>{selectedLevel.name}</Tag>
+        <Tag color="geekblue">已关联 {watchedLevelBenefits.length} 项权益</Tag>
+      </Space> : null}
+    </Card>
+
+    <Alert
+      type="info"
+      showIcon
+      message="权益按项目折叠展示"
+      description="点击权益标题展开维护发放方式、数量和有效期；自动折扣的排除规则仅在对应权益中显示。"
+    />
+
+    <Form form={form} layout="vertical">
+      <Form.List name="benefits">
+        {(fields, { add, remove }) => <Space direction="vertical" style={{ width: '100%' }} size={10}>
+          {fields.length === 0 ? <Card><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前等级暂未关联权益" /></Card> : null}
+          {fields.map((field, index) => {
+            const row = watchedLevelBenefits?.[field.name] || {};
+            const benefit = benefits.find((item) => Number(item.id) === Number(row.benefitId));
+            const grantMode = grantModeOptions.find((item) => item.value === row.grantMode)?.label || '未设置发放方式';
+            const selectedIds = watchedLevelBenefits.map((item: any) => Number(item?.benefitId)).filter(Boolean);
+            return <Collapse
+              key={field.key}
+              defaultActiveKey={fields.length <= 2 ? ['editor'] : []}
+              style={{ background: '#fff', borderRadius: 12 }}
+              items={[{
+                key: 'editor',
+                label: <Space wrap>
+                  <Typography.Text strong>{index + 1}. {benefit?.name || '请选择权益项目'}</Typography.Text>
+                  {benefit?.code ? <Tag>{benefit.code}</Tag> : null}
+                  <Tag color="blue">{grantMode}</Tag>
+                  {row.unlimited ? <Tag color="purple">不限量</Tag> : row.quantity ? <Tag>{row.quantity}{benefit?.unitName || ''}</Tag> : null}
+                  {benefit?.reviewRestricted ? <Tag color="red">审核时隐藏</Tag> : null}
+                </Space>,
+                extra: <Popconfirm title="确定解除该等级与此权益的关联？" onConfirm={() => remove(field.name)}>
+                  <Button danger type="text" size="small" icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()}>移除</Button>
+                </Popconfirm>,
+                children: <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0 16px', alignItems: 'start' }}>
+                    <Form.Item {...field} name={[field.name, 'benefitId']} label="权益项目" rules={[{ required: true, message: '请选择权益项目' }]}>
+                      <Select
+                        showSearch
+                        optionFilterProp="label"
+                        placeholder="搜索权益名称或编码"
+                        options={benefits.filter((item) => item.enabled !== false).map((item) => ({
+                          label: `${item.name}（${item.code}）`,
+                          value: item.id,
+                          disabled: selectedIds.includes(Number(item.id)) && Number(item.id) !== Number(row.benefitId),
+                        }))}
+                      />
+                    </Form.Item>
+                    <Form.Item {...field} name={[field.name, 'grantMode']} label="发放方式" rules={[{ required: true, message: '请选择发放方式' }]}><Select options={grantModeOptions} /></Form.Item>
+                    <Form.Item {...field} name={[field.name, 'quantity']} label="发放数量"><InputNumber min={0.01} precision={2} disabled={Boolean(row.unlimited)} style={{ width: '100%' }} /></Form.Item>
+                    <Form.Item {...field} name={[field.name, 'validityDays']} label="有效天数" extra="不填表示长期有效"><InputNumber min={1} precision={0} style={{ width: '100%' }} /></Form.Item>
+                    <Form.Item {...field} name={[field.name, 'unlimited']} label="数量限制" valuePropName="checked"><Switch checkedChildren="不限量" unCheckedChildren="按数量" /></Form.Item>
+                  </div>
+                  <Form.Item noStyle shouldUpdate={(prev, next) => prev?.benefits?.[field.name]?.grantMode !== next?.benefits?.[field.name]?.grantMode}>
+                    {({ getFieldValue }) => getFieldValue(['benefits', field.name, 'grantMode']) === 'AUTOMATIC_DISCOUNT' ? (
+                      <Card size="small" title="自动折扣规则" style={{ background: '#fafafa', borderRadius: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 16px' }}>
+                          <Form.Item {...field} name={[field.name, 'discountRate']} label="折后比例（%）" rules={[{ required: true, message: '请输入折后比例' }]}><InputNumber min={1} max={100} precision={2} style={{ width: '100%' }} placeholder="如 98 表示九八折" /></Form.Item>
+                          <Form.Item {...field} name={[field.name, 'excludedProjectTypes']} label="不参与折扣的订单类型"><Select mode="tags" tokenSeparators={[',']} placeholder="如 EXPERIENCE" /></Form.Item>
+                          <Form.Item {...field} name={[field.name, 'excludedCategoryIds']} label="不参与折扣的商品分类ID"><Select mode="tags" tokenSeparators={[',']} placeholder="输入分类ID后回车" /></Form.Item>
+                        </div>
+                      </Card>
+                    ) : null}
+                  </Form.Item>
+                </>,
+              }]}
+            />;
+          })}
+          <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ grantMode: 'IDENTITY', quantity: 1, unlimited: false })} block style={{ height: 44 }}>关联新权益</Button>
+        </Space>}
+      </Form.List>
+    </Form>
+
+    <Card size="small" style={{ position: 'sticky', bottom: 12, zIndex: 10, borderRadius: 12, boxShadow: '0 6px 24px rgba(15, 23, 42, 0.12)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <Typography.Text type="secondary">当前等级共 {watchedLevelBenefits.length} 项权益，保存后立即按新配置生效。</Typography.Text>
+        <Button type="primary" size="large" loading={savingLevel} disabled={!selectedLevelId} onClick={saveLevelBenefits}>保存当前等级权益</Button>
+      </div>
+    </Card>
+  </Space>;
 
   const usageTab = <ProTable
     rowKey="id"
