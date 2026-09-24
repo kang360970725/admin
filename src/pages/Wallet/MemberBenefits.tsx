@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { ModalForm, PageContainer, ProFormDigit, ProFormSelect, ProFormSwitch, ProFormText, ProFormTextArea, ProTable } from '@ant-design/pro-components';
-import { Alert, Button, Card, Collapse, Empty, Form, InputNumber, message, Popconfirm, Select, Space, Switch, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Collapse, Empty, Form, InputNumber, message, Popconfirm, Select, Space, Switch, Tabs, Tag, TreeSelect, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import {
   createMemberBenefit,
@@ -9,6 +9,7 @@ import {
   getMemberBenefits,
   getMemberBenefitUsageRecords,
   getMemberLevelBenefitConfigs,
+  getGoodsCategoryTree,
   replaceMemberLevelBenefits,
   updateMemberBenefit,
 } from '@/services/api';
@@ -37,13 +38,19 @@ export default function MemberBenefitsPage() {
   const [levels, setLevels] = useState<any[]>([]);
   const [selectedLevelId, setSelectedLevelId] = useState<number>();
   const [savingLevel, setSavingLevel] = useState(false);
+  const [categoryTree, setCategoryTree] = useState<any[]>([]);
   const watchedLevelBenefits = Form.useWatch('benefits', form) || [];
 
   const loadOptions = async () => {
-    const [benefitRows, levelRows]: any[] = await Promise.all([getMemberBenefits(), getMemberLevelBenefitConfigs()]);
+    const [benefitRows, levelRows, categoryRows]: any[] = await Promise.all([
+      getMemberBenefits(),
+      getMemberLevelBenefitConfigs(),
+      getGoodsCategoryTree(),
+    ]);
     setBenefits(Array.isArray(benefitRows) ? benefitRows : []);
     const normalizedLevels = Array.isArray(levelRows) ? levelRows : [];
     setLevels(normalizedLevels);
+    setCategoryTree(Array.isArray(categoryRows) ? categoryRows : []);
     setSelectedLevelId((current) => current || normalizedLevels?.[0]?.id);
   };
 
@@ -61,7 +68,6 @@ export default function MemberBenefitsPage() {
         validityDays: item.validityDays,
         sortOrder: item.sortOrder,
         discountRate: item?.config?.rate ? Number(item.config.rate) * 100 : undefined,
-        excludedProjectTypes: item?.config?.excludedProjectTypes || [],
         excludedCategoryIds: item?.config?.excludedCategoryIds || [],
       })),
     });
@@ -147,7 +153,6 @@ export default function MemberBenefitsPage() {
             sortOrder: (index + 1) * 10,
             config: item.grantMode === 'AUTOMATIC_DISCOUNT' ? {
               rate: Number(item.discountRate || 100) / 100,
-              excludedProjectTypes: item.excludedProjectTypes || [],
               excludedCategoryIds: item.excludedCategoryIds || [],
             } : undefined,
           }));
@@ -236,8 +241,29 @@ export default function MemberBenefitsPage() {
                       <Card size="small" title="自动折扣规则" style={{ background: '#fafafa', borderRadius: 10 }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 16px' }}>
                           <Form.Item {...field} name={[field.name, 'discountRate']} label="折后比例（%）" rules={[{ required: true, message: '请输入折后比例' }]}><InputNumber min={1} max={100} precision={2} style={{ width: '100%' }} placeholder="如 98 表示九八折" /></Form.Item>
-                          <Form.Item {...field} name={[field.name, 'excludedProjectTypes']} label="不参与折扣的订单类型"><Select mode="tags" tokenSeparators={[',']} placeholder="如 EXPERIENCE" /></Form.Item>
-                          <Form.Item {...field} name={[field.name, 'excludedCategoryIds']} label="不参与折扣的商品分类ID"><Select mode="tags" tokenSeparators={[',']} placeholder="输入分类ID后回车" /></Form.Item>
+                          <Form.Item {...field} name={[field.name, 'excludedCategoryIds']} label="不参与折扣的游戏分类" extra="选择后，该分类下商品不享受本等级折扣">
+                            <TreeSelect
+                              treeData={categoryTree.map(function mapCategory(node: any): any {
+                                const level = Number(node?.level || 0);
+                                return {
+                                  title: String(node?.name || node?.id || ''),
+                                  value: String(node?.id || ''),
+                                  key: String(node?.id || ''),
+                                  selectable: level >= 2,
+                                  disabled: node?.enabled === false,
+                                  children: Array.isArray(node?.children) ? node.children.map(mapCategory) : undefined,
+                                };
+                              })}
+                              treeCheckable
+                              showCheckedStrategy={TreeSelect.SHOW_ALL}
+                              treeDefaultExpandAll
+                              allowClear
+                              showSearch
+                              treeNodeFilterProp="title"
+                              placeholder="请选择不参与会员折扣的游戏分类"
+                              style={{ width: '100%' }}
+                            />
+                          </Form.Item>
                         </div>
                       </Card>
                     ) : null}
