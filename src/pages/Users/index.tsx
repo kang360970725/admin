@@ -4,6 +4,7 @@ import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, C
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
+import { formatMemberBenefitInputUnit, formatMemberBenefitQuantity } from '@/utils/memberBenefitUnit';
 import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
 import EditUserModal from './components/EditUserModal';
@@ -2077,7 +2078,7 @@ export default function UsersPage() {
                             max={memberBenefitUseGrant?.unlimited ? undefined : Number(memberBenefitUseGrant?.remainingQuantity || 0)}
                             precision={2}
                             style={{ width: '100%' }}
-                            addonAfter={memberBenefitUseGrant?.unitNameSnapshot || '次'}
+                            addonAfter={formatMemberBenefitInputUnit(memberBenefitUseGrant?.unitNameSnapshot)}
                         />
                     </Form.Item>
                     <Form.Item label="核销说明" name="remark" rules={[{ required: true, whitespace: true, message: '请填写本次核销说明，便于后续复核' }]}>
@@ -2139,7 +2140,7 @@ export default function UsersPage() {
                                 dataSource={memberBenefits}
                                 locale={{ emptyText: '暂无已发放权益' }}
                                 renderItem={(item: any) => {
-                                    const remaining = item?.unlimited ? '不限量' : `${Number(item?.remainingQuantity || 0)}${item?.unitNameSnapshot || ''}`;
+                                    const remaining = item?.unlimited ? '不限量' : formatMemberBenefitQuantity(item?.remainingQuantity, item?.unitNameSnapshot);
                                     const usable = item?.status === 'ACTIVE' && (item?.unlimited || Number(item?.remainingQuantity || 0) > 0) && (!item?.expiresAt || dayjs(item.expiresAt).isAfter(dayjs()));
                                     return <List.Item actions={usable && item?.benefit?.requiresVerification ? [
                                         <Button key="use" type="link" onClick={() => {
@@ -2149,7 +2150,7 @@ export default function UsersPage() {
                                     ] : undefined}>
                                         <List.Item.Meta
                                             title={<Space><span>{item?.benefitNameSnapshot || item?.benefit?.name}</span><Tag>{item?.levelCodeSnapshot}</Tag>{item?.benefit?.reviewRestricted ? <Tag color="red">审核隐藏</Tag> : null}</Space>}
-                                            description={`剩余 ${remaining} · 已用 ${Number(item?.usedQuantity || 0)}${item?.unitNameSnapshot || ''} · 单份价值 ¥${Number(item?.unitValueSnapshot || 0).toFixed(2)}${item?.expiresAt ? ` · ${dayjs(item.expiresAt).format('YYYY-MM-DD')}到期` : ''}`}
+                                            description={`剩余 ${remaining} · 已用 ${formatMemberBenefitQuantity(item?.usedQuantity, item?.unitNameSnapshot)} · 单份价值 ¥${Number(item?.unitValueSnapshot || 0).toFixed(2)}${item?.expiresAt ? ` · ${dayjs(item.expiresAt).format('YYYY-MM-DD')}到期` : ''}`}
                                         />
                                     </List.Item>;
                                 }}
@@ -2166,7 +2167,7 @@ export default function UsersPage() {
                                         <div style={{ width: '100%' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                                                 <span>{item?.grant?.benefitNameSnapshot || '-'}</span>
-                                                <span>核销 {Number(item?.quantity || 0)}{item?.grant?.unitNameSnapshot || ''}</span>
+                                                <span>核销 {formatMemberBenefitQuantity(item?.quantity, item?.grant?.unitNameSnapshot)}</span>
                                                 <Tag color={item?.status === 'CONFIRMED' ? 'green' : 'default'}>{item?.status === 'CONFIRMED' ? '已核销' : '已冲销'}</Tag>
                                             </div>
                                             <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>

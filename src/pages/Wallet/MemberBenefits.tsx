@@ -13,6 +13,7 @@ import {
   replaceMemberLevelBenefits,
   updateMemberBenefit,
 } from '@/services/api';
+import { formatMemberBenefitQuantity } from '@/utils/memberBenefitUnit';
 
 const categoryOptions = [
   { label: '服务权益', value: 'SERVICE' },
@@ -125,7 +126,7 @@ export default function MemberBenefitsPage() {
           <ProFormText name="code" label="权益编码" disabled={!!editing?.id} rules={[{ required: true }]} fieldProps={{ placeholder: '如 ORDER_DISCOUNT' }} />
           <ProFormText name="name" label="权益名称" rules={[{ required: true }]} />
           <ProFormSelect name="category" label="权益类型" options={categoryOptions} rules={[{ required: true }]} />
-          <ProFormText name="unitName" label="计量单位" rules={[{ required: true }]} />
+          <ProFormText name="unitName" label="单份规格 / 计量单位" rules={[{ required: true }]} extra="普通权益填“次、条、人”；组合规格可填“1000W”，系统展示时会按发放数量相乘。" />
           <ProFormDigit name="unitValue" label="单份权益价值" min={0} fieldProps={{ precision: 2 }} extra="发放时保存价值快照，用于退款试算" />
           <ProFormDigit name="sortOrder" label="排序" min={0} fieldProps={{ precision: 0 }} />
           <div className="bc-admin-form-grid-full"><ProFormTextArea name="description" label="权益说明" fieldProps={{ autoSize: { minRows: 3, maxRows: 6 } }} /></div>
@@ -211,7 +212,7 @@ export default function MemberBenefitsPage() {
                   <Typography.Text strong>{index + 1}. {benefit?.name || '请选择权益项目'}</Typography.Text>
                   {benefit?.code ? <Tag>{benefit.code}</Tag> : null}
                   <Tag color="blue">{grantMode}</Tag>
-                  {row.unlimited ? <Tag color="purple">不限量</Tag> : row.quantity ? <Tag>{row.quantity}{benefit?.unitName || ''}</Tag> : null}
+                  {row.unlimited ? <Tag color="purple">不限量</Tag> : row.quantity ? <Tag>{formatMemberBenefitQuantity(row.quantity, benefit?.unitName)}</Tag> : null}
                   {benefit?.reviewRestricted ? <Tag color="red">审核时隐藏</Tag> : null}
                 </Space>,
                 extra: <Popconfirm title="确定解除该等级与此权益的关联？" onConfirm={() => remove(field.name)}>
@@ -293,7 +294,7 @@ export default function MemberBenefitsPage() {
       { title: '会员', dataIndex: ['user', 'name'], width: 150, search: false, render: (_: any, row: any) => row?.user?.realName || row?.user?.name || `#${row?.userId}` },
       { title: '会员编号', dataIndex: ['user', 'memberProfile', 'memberCode'], width: 130, search: false, render: (_: any, row: any) => row?.user?.memberProfile?.memberCode || '-' },
       { title: '权益', dataIndex: ['grant', 'benefitNameSnapshot'], width: 180, search: false, render: (_: any, row: any) => row?.grant?.benefitNameSnapshot || '-' },
-      { title: '核销数量', dataIndex: 'quantity', width: 110, search: false, render: (_: any, row: any) => `${Number(row.quantity || 0)}${row?.grant?.unitNameSnapshot || ''}` },
+      { title: '核销数量', dataIndex: 'quantity', width: 110, search: false, render: (_: any, row: any) => formatMemberBenefitQuantity(row.quantity, row?.grant?.unitNameSnapshot) },
       { title: '抵扣价值', dataIndex: 'deductedValue', width: 110, search: false, render: (value: any) => `¥${Number(value || 0).toFixed(2)}` },
       { title: '关联业务', dataIndex: 'sourceType', width: 150, search: false, render: (_: any, row: any) => row.sourceType ? `${row.sourceType}${row.sourceId ? ` #${row.sourceId}` : ''}` : '-' },
       { title: '操作人', dataIndex: 'operatorName', width: 130, search: false },
