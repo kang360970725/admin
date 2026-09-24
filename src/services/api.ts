@@ -887,7 +887,7 @@ export async function rollbackDispatchToArchived(dispatchId: number, data?: { re
 //     });
 // }
 // 项目下拉（支持 keyword）
-export async function getGameProjectOptions(data: { keyword?: string }) {
+export async function getGameProjectOptions(data: { keyword?: string; ids?: number[] }) {
     return request(`${API_BASE}/game-project/options`, {
         method: 'POST',
         data,

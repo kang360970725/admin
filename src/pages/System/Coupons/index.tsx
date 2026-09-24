@@ -116,10 +116,15 @@ const CouponsPage: React.FC = () => {
   const miniappClaimEnabled = Form.useWatch('miniappClaimEnabled', formCreate);
   const dailyLimitEnabled = Form.useWatch('dailyLimitEnabled', formCreate);
 
-  const openTemplateModal = (record?: any) => {
+  const openTemplateModal = async (record?: any) => {
     const editing = record || null;
     setEditingTemplate(editing);
     const targets = Array.isArray(editing?.applicableProjectIds) ? editing.applicableProjectIds : [];
+    formCreate.resetFields();
+    await Promise.all([
+      loadLevel2Categories(),
+      loadProjects(undefined, editing?.applicableScope === 'PROJECT' ? targets : []),
+    ]);
     setProjectTargetKeys(editing?.applicableScope === 'PROJECT' ? targets.map((item: any) => String(item)) : []);
     setCheckedCategoryKeys(editing?.applicableScope === 'CATEGORY' ? targets.map((item: any) => String(item)) : []);
     formCreate.setFieldsValue(editing ? {
@@ -138,18 +143,28 @@ const CouponsPage: React.FC = () => {
     setCreateOpen(true);
   };
 
-  const loadProjects = async (keyword?: string) => {
+  const loadProjects = async (keyword?: string, ids: any[] = []) => {
     setProjectLoading(true);
     try {
       const kw = String(keyword || '').trim();
-      const res: any = await getGameProjectOptions({ keyword: kw || undefined });
-      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-      setProjectOptions(
-        list.map((item: any) => ({
+      const normalizedIds = ids.map((item: any) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0);
+      const responses: any[] = await Promise.all([
+        getGameProjectOptions({ keyword: kw || undefined }),
+        normalizedIds.length ? getGameProjectOptions({ ids: normalizedIds }) : Promise.resolve([]),
+      ]);
+      const list = responses.flatMap((res: any) => Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : []);
+      const options = Array.from(new Map(list.map((item: any) => [Number(item.id), {
           value: Number(item.id),
           label: item?.price != null ? `${item.name}（¥${item.price}）` : `${item.name}`,
-        })),
-      );
+        }])).values()) as Array<{ label: string; value: number }>;
+      setProjectOptions(options);
+      if (normalizedIds.length) {
+        setSelectedProjects((current) => {
+          const next = { ...current };
+          options.filter((item) => normalizedIds.includes(item.value)).forEach((item) => { next[String(item.value)] = item; });
+          return next;
+        });
+      }
     } catch (e) {
       console.error(e);
       setProjectOptions([]);
@@ -231,14 +246,6 @@ const CouponsPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    if (!createOpen) return;
-    formCreate.setFieldValue('applicableTargetIds', []);
-    setProjectTargetKeys([]);
-    setCheckedCategoryKeys([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createScope]);
-
   const loadData = async (nextPage = page, nextLimit = limit) => {
     setLoading(true);
     try {
@@ -282,45 +289,41 @@ const CouponsPage: React.FC = () => {
 
   const templateColumns = useMemo(
     () => [
-      { title: 'ID', dataIndex: 'id', width: 80 },
-      { title: '名称', dataIndex: 'name' },
-      { title: '类型', dataIndex: 'type', width: 140, render: (v: string) => templateTypeDict[v] || '-' },
+      { title: 'ID', dataIndex: 'id', width: 70, fixed: 'left' },
+      { title: '券模板', dataIndex: 'name', width: 220, fixed: 'left', ellipsis: true, render: (v: string, r: any) => <div style={{ minWidth: 0 }}><div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v || '未命名模板'}</div><div style={{ color: '#999', fontSize: 12, marginTop: 3 }}>{templateTypeDict[r?.type] || '-'}</div></div> },
       {
         title: '状态',
         dataIndex: 'status',
-        width: 120,
+        width: 90,
         render: (v: string) => <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{templateStatusDict[v] || '-'}</Tag>,
       },
-      { title: '优惠值', dataIndex: 'discountValue', width: 120 },
-      { title: '门槛', dataIndex: 'thresholdAmount', width: 120 },
-      { title: '作用域', dataIndex: 'applicableScope', width: 120, render: (v: string) => scopeDict[v] || '-' },
-      { title: '小程序领券', dataIndex: 'miniappClaimEnabled', width: 120, render: (v: boolean, r: any) => v ? <Tag color="blue">开放{r?.dailyClaimLimit ? ` · 每日${r.dailyClaimLimit}` : ''}</Tag> : <Tag>仅平台发放</Tag> },
-      { title: '个人抢券上限', dataIndex: 'perUserLimit', width: 120, render: (v: any) => Number(v || 0) > 0 ? `${v}张` : '不限' },
-      { title: '发放/已用', width: 140, render: (_: any, r: any) => `${r?.issuedCount || 0}/${r?.usedCount || 0}` },
+      { title: '优惠规则', width: 150, render: (_: any, r: any) => <div><div>{r?.type === 'DISCOUNT' ? `${Number(r?.discountValue || 0)}折` : r?.type === 'FREE' ? '免单' : `¥${Number(r?.discountValue || 0).toFixed(2)}`}</div><div style={{ color: '#999', fontSize: 12 }}>{Number(r?.thresholdAmount || 0) > 0 ? `满¥${Number(r.thresholdAmount).toFixed(2)}可用` : '无门槛'}</div></div> },
+      { title: '适用范围', dataIndex: 'applicableScope', width: 120, render: (v: string, r: any) => <div>{scopeDict[v] || '-'}{Array.isArray(r?.applicableProjectIds) && r.applicableProjectIds.length ? <div style={{ color: '#999', fontSize: 12 }}>{r.applicableProjectIds.length}项</div> : null}</div> },
+      { title: '领取方式', dataIndex: 'miniappClaimEnabled', width: 150, render: (v: boolean, r: any) => v ? <Space direction="vertical" size={3}><Tag color="blue">小程序开放</Tag><span style={{ color: '#999', fontSize: 12 }}>{r?.dailyClaimLimit ? `每日${r.dailyClaimLimit}张` : '每日不限'}</span></Space> : <Tag>仅平台发放</Tag> },
+      { title: '领取限制', width: 120, render: (_: any, r: any) => <div><div>每人 {Number(r?.perUserLimit || 0) > 0 ? `${r.perUserLimit}张` : '不限'}</div><div style={{ color: '#999', fontSize: 12 }}>总量 {Number(r?.totalLimit || 0) > 0 ? `${r.totalLimit}张` : '不限'}</div></div> },
+      { title: '发放 / 已用', width: 110, render: (_: any, r: any) => <span>{r?.issuedCount || 0} / {r?.usedCount || 0}</span> },
       {
         title: '操作',
         width: 220,
+        fixed: 'right',
         render: (_: any, r: any) => (
-          <Space>
+          <Space size={8}>
             <Button size="small" onClick={() => openTemplateModal(r)}>编辑</Button>
-            {templateStatusOptions.map((item) => (
-              <Button
-                key={item.value}
-                size="small"
-                type={r?.status === item.value ? 'primary' : 'default'}
-                onClick={async () => {
+            <Select
+              size="small"
+              value={r?.status}
+              style={{ width: 108 }}
+              options={templateStatusOptions}
+              onChange={async (value) => {
                   try {
-                    await updateCouponTemplateStatus({ id: Number(r.id), status: item.value });
+                    await updateCouponTemplateStatus({ id: Number(r.id), status: value });
                     message.success('状态已更新');
                     await loadData(page, limit);
                   } catch (e: any) {
                     message.error(e?.data?.message || e?.message || '更新失败');
                   }
                 }}
-              >
-                {item.label}
-              </Button>
-            ))}
+            />
           </Space>
         ),
       },
@@ -426,7 +429,8 @@ const CouponsPage: React.FC = () => {
             showSizeChanger: true,
             onChange: (p, s) => loadData(p, s),
           }}
-          scroll={{ x: 1200 }}
+          tableLayout="fixed"
+          scroll={{ x: tab === 'templates' ? 1400 : 1200 }}
         />
       </Card>
 
@@ -472,13 +476,7 @@ const CouponsPage: React.FC = () => {
           }
         }}
         confirmLoading={submitting}
-        width={720}
-        afterOpenChange={(open) => {
-          if (open) {
-            void loadLevel2Categories();
-            void loadProjects();
-          }
-        }}
+        width={900}
       >
         <Form form={formCreate} layout="vertical" initialValues={{ status: 'DRAFT', applicableScope: 'ALL', type: 'CASH', miniappClaimEnabled: false, dailyLimitEnabled: false }}>
           <Form.Item name="name" label="模板名称" rules={[{ required: true, message: '请输入名称' }]}>
@@ -492,7 +490,11 @@ const CouponsPage: React.FC = () => {
               <Select options={templateStatusOptions} />
             </Form.Item>
             <Form.Item name="applicableScope" label="适用范围" style={{ width: 180 }}>
-              <Select options={scopeOptions} />
+              <Select options={scopeOptions} onChange={() => {
+                formCreate.setFieldValue('applicableTargetIds', []);
+                setProjectTargetKeys([]);
+                setCheckedCategoryKeys([]);
+              }} />
             </Form.Item>
           </Space>
           <Space style={{ width: '100%' }} align="start">
@@ -593,7 +595,7 @@ const CouponsPage: React.FC = () => {
                   description: x.label,
                 }))}
                 render={(item) => item.title}
-                listStyle={{ width: 280, height: 320 }}
+                  listStyle={{ width: 390, height: 340 }}
               />
             </Form.Item>
           ) : null}
@@ -604,21 +606,23 @@ const CouponsPage: React.FC = () => {
               rules={[{ required: true, message: '请选择分类' }]}
             >
               <>
-                <Tree
-                  checkable
-                  selectable={false}
-                  defaultExpandAll
-                  treeData={categoryTreeOptions}
-                  checkedKeys={checkedCategoryKeys}
-                  onCheck={(nextChecked) => {
-                    const keys = Array.isArray(nextChecked) ? nextChecked : nextChecked?.checked || [];
-                    setCheckedCategoryKeys(keys);
-                    formCreate.setFieldValue(
-                      'applicableTargetIds',
-                      keys.map((k) => String(k)).filter((x) => !!x),
-                    );
-                  }}
-                />
+                <div style={{ maxHeight: 360, overflow: 'auto', padding: '12px 16px', border: '1px solid #d9d9d9', borderRadius: 8, background: '#fafafa' }}>
+                  <Tree
+                    checkable
+                    selectable={false}
+                    defaultExpandAll
+                    treeData={categoryTreeOptions}
+                    checkedKeys={checkedCategoryKeys}
+                    onCheck={(nextChecked) => {
+                      const keys = Array.isArray(nextChecked) ? nextChecked : nextChecked?.checked || [];
+                      setCheckedCategoryKeys(keys);
+                      formCreate.setFieldValue(
+                        'applicableTargetIds',
+                        keys.map((k) => String(k)).filter((x) => !!x),
+                      );
+                    }}
+                  />
+                </div>
                 <Form.Item name="applicableTargetIds" noStyle>
                   <Input type="hidden" />
                 </Form.Item>
