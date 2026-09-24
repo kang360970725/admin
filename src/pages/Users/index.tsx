@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {PageContainer, ProTable} from '@ant-design/pro-components';
-import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker} from 'antd';
+import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker, Collapse} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
 import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
@@ -2149,28 +2149,70 @@ export default function UsersPage() {
                             <Descriptions.Item label="最近充值">{memberDetail?.memberProfile?.lastRechargeAt ? dayjs(memberDetail.memberProfile.lastRechargeAt).format('YYYY-MM-DD HH:mm:ss') : '-'}</Descriptions.Item>
                         </Descriptions>
 
-                        <Card size="small" title="会员权益台账">
-                            <List
-                                size="small"
-                                dataSource={memberBenefits}
-                                locale={{ emptyText: '暂无已发放权益' }}
-                                renderItem={(item: any) => {
-                                    const remaining = item?.unlimited ? '不限量' : formatMemberBenefitQuantity(item?.remainingQuantity, item?.unitNameSnapshot);
-                                    const usable = item?.status === 'ACTIVE' && (item?.unlimited || Number(item?.remainingQuantity || 0) > 0) && (!item?.expiresAt || dayjs(item.expiresAt).isAfter(dayjs()));
-                                    return <List.Item actions={usable && item?.benefit?.requiresVerification ? [
-                                        <Button key="use" type="link" onClick={() => {
-                                            setMemberBenefitUseGrant(item);
-                                            memberBenefitUseForm.setFieldsValue({ quantity: 1, remark: '' });
-                                        }}>核销</Button>,
-                                    ] : undefined}>
-                                        <List.Item.Meta
-                                            title={<Space><span>{item?.benefitNameSnapshot || item?.benefit?.name}</span><Tag>{item?.levelCodeSnapshot}</Tag>{item?.benefit?.reviewRestricted ? <Tag color="red">审核隐藏</Tag> : null}</Space>}
-                                            description={`剩余 ${remaining} · 已用 ${formatMemberBenefitQuantity(item?.usedQuantity, item?.unitNameSnapshot)} · 单份价值 ¥${Number(item?.unitValueSnapshot || 0).toFixed(2)}${item?.expiresAt ? ` · ${dayjs(item.expiresAt).format('YYYY-MM-DD')}到期` : ''}`}
-                                        />
-                                    </List.Item>;
-                                }}
-                            />
-                        </Card>
+                        {(() => {
+                            const currentLevelCode = String(memberDetail?.memberProfile?.levelCode || '').toUpperCase();
+                            const isExpiredGrant = (item: any) => !!item?.expiresAt && !dayjs(item.expiresAt).isAfter(dayjs());
+                            const isInvalidGrant = (item: any) => (
+                                String(item?.status || '').toUpperCase() !== 'ACTIVE'
+                                || isExpiredGrant(item)
+                                || (!!currentLevelCode && String(item?.levelCodeSnapshot || '').toUpperCase() !== currentLevelCode)
+                            );
+                            const activeBenefits = memberBenefits.filter((item: any) => !isInvalidGrant(item));
+                            const invalidBenefits = memberBenefits.filter((item: any) => isInvalidGrant(item));
+                            const invalidStatus = (item: any) => {
+                                const status = String(item?.status || '').toUpperCase();
+                                if (status === 'REPLACED') return { text: '等级调整已失效', color: 'orange' };
+                                if (status === 'REVOKED') return { text: '已撤销', color: 'red' };
+                                if (status === 'EXPIRED' || isExpiredGrant(item)) return { text: '已过期', color: 'default' };
+                                if (currentLevelCode && String(item?.levelCodeSnapshot || '').toUpperCase() !== currentLevelCode) return { text: '等级已变更', color: 'orange' };
+                                return { text: '已失效', color: 'default' };
+                            };
+                            const renderBenefit = (item: any, invalid = false) => {
+                                const remaining = item?.unlimited ? '不限量' : formatMemberBenefitQuantity(item?.remainingQuantity, item?.unitNameSnapshot);
+                                const usable = !invalid && (item?.unlimited || Number(item?.remainingQuantity || 0) > 0);
+                                const state = invalid ? invalidStatus(item) : null;
+                                return <List.Item key={item?.id} actions={usable && item?.benefit?.requiresVerification ? [
+                                    <Button key="use" type="link" onClick={() => {
+                                        setMemberBenefitUseGrant(item);
+                                        memberBenefitUseForm.setFieldsValue({ quantity: 1, remark: '' });
+                                    }}>核销</Button>,
+                                ] : undefined} style={invalid ? { opacity: 0.72 } : undefined}>
+                                    <List.Item.Meta
+                                        title={<Space wrap>
+                                            <span>{item?.benefitNameSnapshot || item?.benefit?.name}</span>
+                                            <Tag>{item?.levelCodeSnapshot}</Tag>
+                                            {state ? <Tag color={state.color}>{state.text}</Tag> : null}
+                                            {!invalid && !usable ? <Tag>已用完</Tag> : null}
+                                            {item?.benefit?.reviewRestricted ? <Tag color="red">审核隐藏</Tag> : null}
+                                        </Space>}
+                                        description={`剩余 ${remaining} · 已用 ${formatMemberBenefitQuantity(item?.usedQuantity, item?.unitNameSnapshot)} · 单份价值 ¥${Number(item?.unitValueSnapshot || 0).toFixed(2)}${item?.expiresAt ? ` · ${dayjs(item.expiresAt).format('YYYY-MM-DD')}到期` : ''}`}
+                                    />
+                                </List.Item>;
+                            };
+                            return <Card size="small" title="当前可用会员权益">
+                                <List
+                                    size="small"
+                                    dataSource={activeBenefits}
+                                    locale={{ emptyText: '暂无当前可用权益' }}
+                                    renderItem={(item: any) => renderBenefit(item)}
+                                />
+                                {invalidBenefits.length ? (
+                                    <Collapse
+                                        ghost
+                                        style={{ marginTop: 8, borderTop: '1px solid #f0f0f0' }}
+                                        items={[{
+                                            key: 'invalid-member-benefits',
+                                            label: <Space><span>已失效权益</span><Tag>{invalidBenefits.length}</Tag><span style={{ color: '#999', fontSize: 12 }}>默认收起，仅供历史核对</span></Space>,
+                                            children: <List
+                                                size="small"
+                                                dataSource={invalidBenefits}
+                                                renderItem={(item: any) => renderBenefit(item, true)}
+                                            />,
+                                        }]}
+                                    />
+                                ) : null}
+                            </Card>;
+                        })()}
 
                         <Card size="small" title="权益核销记录">
                             <List
