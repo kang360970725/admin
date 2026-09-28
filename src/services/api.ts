@@ -458,6 +458,12 @@ export async function getStaffExitPreview(id: number) {
     });
 }
 
+export async function grantStaffExitLoginGrace(id: number) {
+    return request<{ success: boolean; graceUntil: string }>(`${API_BASE}/users/${id}/staff-exit-login-grace`, {
+        method: 'POST',
+    });
+}
+
 export async function clearStaffAssets(id: number, data: { addToBlacklist?: boolean; remark: string }) {
     return request(`${API_BASE}/users/${id}/staff-clear`, {
         method: 'POST',

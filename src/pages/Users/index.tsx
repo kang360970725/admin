@@ -3,7 +3,7 @@ import {PageContainer, ProTable} from '@ant-design/pro-components';
 import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker, Collapse} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
-import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
+import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantStaffExitLoginGrace, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
 import { formatMemberBenefitInputUnit, formatMemberBenefitQuantity } from '@/utils/memberBenefitUnit';
 import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
@@ -373,6 +373,25 @@ export default function UsersPage() {
         } catch (error) {
             message.error('删除失败');
         }
+    };
+
+    const handleGrantExitLoginGrace = (record: any) => {
+        Modal.confirm({
+            title: '临时放开登录30分钟？',
+            content: '该操作仅允许已退店员工在30分钟内登录处理余额，不会恢复在店状态、接单权限或退店冷却期。',
+            okText: '确认放开',
+            cancelText: '取消',
+            onOk: async () => {
+                try {
+                    const result = await grantStaffExitLoginGrace(Number(record.id));
+                    message.success(`已放开至 ${dayjs(result.graceUntil).format('YYYY-MM-DD HH:mm:ss')}`);
+                    actionRef.current?.reload();
+                } catch (error: any) {
+                    message.error(error?.response?.data?.message || '临时放开登录失败');
+                    throw error;
+                }
+            },
+        });
     };
 
     const openStaffExit = async (record: any) => {
@@ -924,6 +943,15 @@ export default function UsersPage() {
                 {isStaffScene && access.canStaffClear && canExitOrClearStaff(record) ? (
                     <Button type={compact ? 'default' : 'link'} size="small" danger onClick={() => openStaffClear(record)}>
                         清退
+                    </Button>
+                ) : null}
+                {isStaffScene && access.canStaffExit && String(record?.staffEmploymentStatus || '') === 'EXITED' ? (
+                    <Button
+                        type={compact ? 'default' : 'link'}
+                        size="small"
+                        onClick={() => handleGrantExitLoginGrace(record)}
+                    >
+                        临时登录30分钟
                     </Button>
                 ) : null}
                 {canDeleteCurrentUser && isAnonymousUserRecord(record) ? (
