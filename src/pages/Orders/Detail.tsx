@@ -1519,7 +1519,8 @@ const OrderDetailPage: React.FC = () => {
         const orderTime = o?.orderTime ? dayjs(o.orderTime) : dayjs(o?.createdAt || new Date());
         const endTime = isHourlyLocal && estHours != null ? orderTime.add(estHours, 'hour').add(20, 'minute') : null;
 
-        const baseWan = o?.baseAmountWan ?? null;
+        const baseWan = Number(o?.baseAmountWan);
+        const baseWanText = Number.isFinite(baseWan) && baseWan > 0 ? `${baseWan} 万` : '无保底';
         const originalAmount = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.finalPayableAmount ?? o?.paidAmount ?? 0);
         const discountAmount = Number(o?.discountAmount ?? 0);
         const couponDiscountAmount = Number(o?.couponDiscountAmount ?? 0);
@@ -1565,17 +1566,15 @@ const OrderDetailPage: React.FC = () => {
         if (isMemberBalancePayment) {
             const deducted = Number(receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
             const balanceAfter = Number(receiptMeta?.memberBalanceAfter ?? 0);
-            const rewardPointsPreview = Number(receiptMeta?.rewardPointsPreview ?? 0);
             financeLines.push(`储值扣除：¥${deducted.toFixed(2)}`);
             financeLines.push(`储值余额：¥${balanceAfter.toFixed(2)}`);
-            financeLines.push(`预计增加积分：${rewardPointsPreview}`);
         }
 
         const customerText = [
             `订单编号：${orderNo}`,
             `下单项目：${projectName}`,
             `订单${estHours != null ? '时长' : '保底'}：${
-                isHourlyLocal ? `${estHours != null ? estHours.toFixed(2) : '-'} 小时` : `${baseWan ?? '-'} 万`
+                isHourlyLocal ? `${estHours != null ? estHours.toFixed(2) : '-'} 小时` : baseWanText
             }`,
             `接待客服：${csName}`,
             `接待陪玩：`,
@@ -1613,8 +1612,8 @@ const OrderDetailPage: React.FC = () => {
         setReceiptTextCustomer(customerText);
         setReceiptTextStaff(staffText);
         const image = await generateReceiptImage('蓝猫爽打 · 萌爪订单', customerText, {
-            width: 450,
-            theme: {accent: '#22d3ee', accent2: '#a78bfa'},
+            width: 800,
+            theme: {accent: '#f55f8b', accent2: '#5599df'},
         });
         setReceiptImgCustomer(image);
         setReceiptType(type);
