@@ -92,6 +92,7 @@ const parseReceipt = (text: string): ParsedReceipt => {
                 label === '商品小计' ||
                 label === '人工调整' ||
                 label === '人工优惠' ||
+                label === '会员折扣' ||
                 label === '优惠券抵扣' ||
                 label === '实付金额' ||
                 label === '储值扣除' ||

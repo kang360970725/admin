@@ -58,6 +58,7 @@ import {
     getPlayerOptions,
     markOrderPaid,
     payMemberBalanceSupplement,
+    previewMemberBalanceHourlySettlement,
     recalculateOrderSettlements,
     refundOrder, rollbackWrongSettlementReversals,
     rollbackDispatchToAccepted,
@@ -153,7 +154,9 @@ const OrderDetailPage: React.FC = () => {
     const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
     const [confirmCompleteLoading, setConfirmCompleteLoading] = useState(false);
     const [balanceSupplementLoading, setBalanceSupplementLoading] = useState(false);
-    const [confirmActualPaidAmount, setConfirmActualPaidAmount] = useState<number>(0);
+    const [confirmActualHours, setConfirmActualHours] = useState<number>(0.5);
+    const [balancePricingPreview, setBalancePricingPreview] = useState<any>(null);
+    const [balancePricingLoading, setBalancePricingLoading] = useState(false);
     const [confirmCompleteRemark, setConfirmCompleteRemark] = useState('');
     const [confirmCompleteSettlementBaseMode, setConfirmCompleteSettlementBaseMode] = useState<'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT'>('SETTLEMENT_BASE_AMOUNT');
     const [confirmRenewalInvalid, setConfirmRenewalInvalid] = useState(false);
@@ -194,6 +197,43 @@ const OrderDetailPage: React.FC = () => {
             )}
         </Space>
     );
+
+    useEffect(() => {
+        if (!confirmCompleteOpen || order?.balanceSettlementMode !== 'RESERVE_CAPTURE') return;
+        if (!(Number(confirmActualHours) >= 0.5)) {
+            setBalancePricingPreview(null);
+            return;
+        }
+        let cancelled = false;
+        const timer = window.setTimeout(async () => {
+            try {
+                setBalancePricingLoading(true);
+                const result = await previewMemberBalanceHourlySettlement({
+                    id: Number(order.id),
+                    actualHours: Number(confirmActualHours),
+                });
+                if (cancelled) return;
+                setBalancePricingPreview(result);
+                if (isModePlay && modePlayAlloc?.rows?.length) {
+                    setModePlayAlloc((prev: any) => prev ? {
+                        ...prev,
+                        rows: seedModePlayEqualByRound(prev.rows, Number(result?.finalPayableAmount || 0)),
+                    } : prev);
+                }
+            } catch (e: any) {
+                if (!cancelled) {
+                    setBalancePricingPreview(null);
+                    message.error(e?.response?.data?.message || '结算金额计算失败');
+                }
+            } finally {
+                if (!cancelled) setBalancePricingLoading(false);
+            }
+        }, 250);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [confirmCompleteOpen, confirmActualHours, order?.id, order?.balanceSettlementMode]);
 
     // 重算工具 - 玩法单分轮输入
     const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<any>(null);
@@ -1206,7 +1246,10 @@ const OrderDetailPage: React.FC = () => {
         setConfirmCompleteRemark('');
         const reservedBalanceOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE';
         setConfirmCompleteSettlementBaseMode(reservedBalanceOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
-        setConfirmActualPaidAmount(Number(order?.paidAmount ?? order?.balanceReservedAmount ?? 0));
+        const dispatchHours = (Array.isArray(order?.dispatches) ? order.dispatches : [])
+            .reduce((sum: number, item: any) => sum + Number(item?.billableHours || 0), 0);
+        setConfirmActualHours(dispatchHours > 0 ? dispatchHours : Math.max(0.5, Number(order?.orderQuantity || 0.5)));
+        setBalancePricingPreview(null);
 
         // ✅ 玩法单：在打开弹窗前一次性初始化分轮表格
         if (isModePlay) {
@@ -1282,9 +1325,7 @@ const OrderDetailPage: React.FC = () => {
         // - basisAmount：本单结算金额（可选按结算金额 / 实收金额）
         const reservedBalanceOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE';
         const cashAmount = reservedBalanceOrder
-            ? (order?.balanceReservationStatus === 'HELD'
-                ? Number(confirmActualPaidAmount || 0)
-                : Number(order?.paidAmount || 0))
+            ? Number(balancePricingPreview?.finalPayableAmount ?? order?.paidAmount ?? 0)
             : getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
         const basisAmount = reservedBalanceOrder
             ? cashAmount
@@ -1345,6 +1386,7 @@ const OrderDetailPage: React.FC = () => {
                 id: Number(order.id),
                 remark: confirmCompleteRemark || undefined,
                 paidAmount: cashAmount,
+                ...(reservedBalanceOrder ? {actualHours: confirmActualHours} : {}),
                 confirmPaid: true,
             };
 
@@ -1368,11 +1410,16 @@ const OrderDetailPage: React.FC = () => {
                 return;
             }
 
-            message.success('已确认结单');
+            const settlementAmountChanged = reservedBalanceOrder && Math.abs(Number(balancePricingPreview?.differenceAmount || 0)) >= 0.01;
+            message.success(settlementAmountChanged ? '已确认结单，结算金额已更新' : '已确认结单');
             setConfirmCompleteOpen(false);
             setConfirmRenewalInvalid(false);
             setConfirmRenewalInvalidReason('');
-            await loadDetail();
+            const refreshedOrder = await loadDetail();
+            if (settlementAmountChanged && canUseReceipt && refreshedOrder) {
+                message.info('结算信息发生变化，已生成最新订单小票，请补发给客户');
+                await openReceipt('customer', refreshedOrder);
+            }
         } catch (e: any) {
             message.error(e?.response?.data?.message || '确认结单失败');
         } finally {
@@ -1506,8 +1553,8 @@ const OrderDetailPage: React.FC = () => {
 
 
     // 从详情数据生成两段文案
-    const buildReceiptTextsFromDetail = () => {
-        const o: any = order || {};
+    const buildReceiptTextsFromDetail = (detailInput?: any) => {
+        const o: any = detailInput || order || {};
         const projectName = o?.project?.name || o?.projectSnapshot?.name || '-';
         const billingModeLocal = String(o?.projectSnapshot?.billingMode ?? o?.project?.billingMode ?? '');
         const isHourlyLocal = billingModeLocal === 'HOURLY';
@@ -1543,7 +1590,7 @@ const OrderDetailPage: React.FC = () => {
         const playerLines: string[] = pickPlayersLines(o);
 
         const unitPrice = Number(o?.projectSnapshot?.price ?? o?.project?.price);
-        const paid = Number(o?.paidAmount ?? o?.receivableAmount);
+        const paid = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.paidAmount);
         const estHours =
             isHourlyLocal && Number.isFinite(unitPrice) && unitPrice > 0 && Number.isFinite(paid) && paid >= 0
                 ? paid / unitPrice
@@ -1557,6 +1604,7 @@ const OrderDetailPage: React.FC = () => {
         const originalAmount = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.finalPayableAmount ?? o?.paidAmount ?? 0);
         const discountAmount = Number(o?.discountAmount ?? 0);
         const couponDiscountAmount = Number(o?.couponDiscountAmount ?? 0);
+        const memberDiscountAmount = Number(o?.memberDiscountAmount ?? 0);
         const manualAdjustAmount = Number(o?.manualAdjustAmount ?? 0);
         const finalPayableAmount = Number(
             o?.finalPayableAmount ??
@@ -1591,13 +1639,16 @@ const OrderDetailPage: React.FC = () => {
         if (Number.isFinite(manualAdjustAmount) && manualAdjustAmount !== 0) {
             financeLines.push(`人工优惠：${manualAdjustAmount > 0 ? '- ' : '+ '}¥${Math.abs(manualAdjustAmount).toFixed(2)}`);
         }
+        if (Number.isFinite(memberDiscountAmount) && memberDiscountAmount > 0) {
+            financeLines.push(`会员折扣：- ¥${memberDiscountAmount.toFixed(2)}`);
+        }
         if (Number.isFinite(couponDiscountAmount) && couponDiscountAmount > 0) {
             financeLines.push(`优惠券抵扣：- ¥${couponDiscountAmount.toFixed(2)}`);
         }
         financeLines.push(`实付金额：¥${Number.isFinite(paidAmount) ? paidAmount.toFixed(2) : finalPayableAmount.toFixed(2)}`);
         financeLines.push(`支付方式：${paymentChannelText}`);
         if (isMemberBalancePayment) {
-            const deducted = Number(receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
+            const deducted = Number(o?.balanceCapturedAmount ?? receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
             const balanceAfter = Number(receiptMeta?.memberBalanceAfter ?? 0);
             financeLines.push(`储值扣除：¥${deducted.toFixed(2)}`);
             financeLines.push(`储值余额：¥${balanceAfter.toFixed(2)}`);
@@ -1640,8 +1691,13 @@ const OrderDetailPage: React.FC = () => {
         return {customerText, staffText};
     };
 
-    const openReceipt = async (type: 'customer' | 'staff') => {
-        const {customerText, staffText} = buildReceiptTextsFromDetail();
+    const openReceipt = async (type: 'customer' | 'staff', detailInput?: any) => {
+        const receiptOrder = detailInput || order;
+        if (receiptOrder?.balanceReservationStatus === 'SUPPLEMENT_PENDING') {
+            message.warning('该订单尚有储值补款未完成，暂不能生成最终结算小票');
+            return;
+        }
+        const {customerText, staffText} = buildReceiptTextsFromDetail(receiptOrder);
         setReceiptTextCustomer(customerText);
         setReceiptTextStaff(staffText);
         const image = await generateReceiptImage('蓝猫爽打 · 萌爪订单', customerText, {
@@ -1808,6 +1864,7 @@ const OrderDetailPage: React.FC = () => {
             const res = await getOrderDetail(orderId);
             setOrder(res);
             await hydrateStaffProfiles(res);
+            return res;
         } catch (e: any) {
             message.error(e?.response?.data?.message || '加载订单详情失败');
         } finally {
@@ -4449,11 +4506,12 @@ const OrderDetailPage: React.FC = () => {
                     // ✅ 玩法单 + 需要分配：校验不过不允许确认
                     disabled: (() => {
                         if (!playerEvalFormValid) return true;
+                        if (order?.balanceSettlementMode === 'RESERVE_CAPTURE' && (balancePricingLoading || !balancePricingPreview)) return true;
                         if (!(isModePlay && modePlayAlloc?.need)) return false;
                         const v = validateModePlayAlloc(
                             modePlayAlloc.rows,
                             order?.balanceSettlementMode === 'RESERVE_CAPTURE'
-                                ? Number(confirmActualPaidAmount || 0)
+                                ? Number(balancePricingPreview?.finalPayableAmount || 0)
                                 : getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode),
                         );
                         return !v.ok;
@@ -4470,25 +4528,51 @@ const OrderDetailPage: React.FC = () => {
                                     下单预占 ¥{Number(order?.balanceReservedAmount || 0).toFixed(2)}。请按实际服务时长填写最终消费；少于预占会自动释放差额，超出预占会先进入待补款，补齐后再确认结单。
                                 </Typography.Text>
                                 <InputNumber
-                                    min={0}
-                                    precision={2}
-                                    step={1}
-                                    value={confirmActualPaidAmount}
+                                    min={0.5}
+                                    precision={1}
+                                    step={0.5}
+                                    value={confirmActualHours}
                                     disabled={order?.balanceReservationStatus !== 'HELD'}
-                                    addonBefore="实际消费"
-                                    addonAfter="元"
+                                    addonBefore="真实服务时长"
+                                    addonAfter="小时"
                                     style={{width: 320, maxWidth: '100%'}}
                                     onChange={(value) => {
-                                        const next = Number(value || 0);
-                                        setConfirmActualPaidAmount(next);
-                                        if (isModePlay && modePlayAlloc?.rows?.length) {
-                                            setModePlayAlloc((prev: any) => prev ? {
-                                                ...prev,
-                                                rows: seedModePlayEqualByRound(prev.rows, next),
-                                            } : prev);
-                                        }
+                                        setConfirmActualHours(Number(value || 0));
                                     }}
                                 />
+                                {balancePricingLoading ? <Typography.Text type="secondary">正在计算最终扣款…</Typography.Text> : null}
+                                {balancePricingPreview ? (
+                                    <Descriptions size="small" column={isMobile ? 1 : 3} bordered>
+                                        <Descriptions.Item label="小时单价"><Typography.Text strong style={{color: '#286fbe'}}>¥{Number(balancePricingPreview.unitPrice || 0).toFixed(2)}</Typography.Text></Descriptions.Item>
+                                        <Descriptions.Item label="真实时长"><Typography.Text strong style={{color: '#286fbe'}}>{Number(balancePricingPreview.actualHours || 0)} 小时</Typography.Text></Descriptions.Item>
+                                        <Descriptions.Item label="消费原价"><Typography.Text strong style={{color: '#1677ff'}}>¥{Number(balancePricingPreview.originalAmount || 0).toFixed(2)}</Typography.Text></Descriptions.Item>
+                                        <Descriptions.Item label="会员折扣">
+                                            <Typography.Text strong style={{color: '#d48806'}}>-¥{Number(balancePricingPreview.memberDiscountAmount || 0).toFixed(2)}</Typography.Text>
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label={balancePricingPreview.couponName ? `优惠券（${balancePricingPreview.couponName}）` : '优惠券'}>
+                                            <Typography.Text strong style={{color: '#d46b08'}}>-¥{Number(balancePricingPreview.couponDiscountAmount || 0).toFixed(2)}</Typography.Text>
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label="其他优惠"><Typography.Text style={{color: '#d48806'}}>-¥{Number(
+                                            Number(balancePricingPreview.activityDiscountAmount || 0) + Number(balancePricingPreview.manualAdjustAmount || 0),
+                                        ).toFixed(2)}</Typography.Text></Descriptions.Item>
+                                        <Descriptions.Item label="优惠合计"><Typography.Text strong style={{color: '#cf1322'}}>-¥{Number(balancePricingPreview.discountAmount || 0).toFixed(2)}</Typography.Text></Descriptions.Item>
+                                        <Descriptions.Item label="下单预占"><Typography.Text strong style={{color: '#722ed1'}}>¥{Number(balancePricingPreview.reservedAmount || 0).toFixed(2)}</Typography.Text></Descriptions.Item>
+                                        <Descriptions.Item label="最终扣款">
+                                            <Typography.Text strong style={{color: '#e94979', fontSize: 18}}>
+                                                ¥{Number(balancePricingPreview.finalPayableAmount || 0).toFixed(2)}
+                                            </Typography.Text>
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                ) : null}
+                                {balancePricingPreview && Number(balancePricingPreview.differenceAmount || 0) !== 0 ? (
+                                    <Alert
+                                        type={Number(balancePricingPreview.differenceAmount) > 0 ? 'warning' : 'success'}
+                                        showIcon
+                                        message={Number(balancePricingPreview.differenceAmount) > 0
+                                            ? `超出预占，需补款 ¥${Number(balancePricingPreview.differenceAmount).toFixed(2)}`
+                                            : `少于预占，将释放 ¥${Math.abs(Number(balancePricingPreview.differenceAmount)).toFixed(2)}`}
+                                    />
+                                ) : null}
                             </Space>
                         </Card>
                     ) : null}
@@ -4673,6 +4757,34 @@ const OrderDetailPage: React.FC = () => {
                             结单时决定本单收益基数，不影响“收钱吧”人工收款对账。
                         </Typography.Text>
                         {(() => {
+                            if (order?.balanceSettlementMode === 'RESERVE_CAPTURE') {
+                                const finalAmount = Number(balancePricingPreview?.finalPayableAmount || 0);
+                                const originalAmount = Number(balancePricingPreview?.originalAmount || 0);
+                                const discountAmount = Number(balancePricingPreview?.discountAmount || 0);
+                                return (
+                                    <div style={{
+                                        border: '1px solid #91caff',
+                                        borderRadius: 10,
+                                        background: '#f0f7ff',
+                                        padding: '12px 16px',
+                                    }}>
+                                        <Space size={[18, 8]} wrap>
+                                            <Typography.Text style={{color: '#595959'}}>
+                                                优惠前 <span style={{color: '#1677ff', fontWeight: 700}}>¥{originalAmount.toFixed(2)}</span>
+                                            </Typography.Text>
+                                            <Typography.Text style={{color: '#595959'}}>
+                                                优惠合计 <span style={{color: '#d48806', fontWeight: 700}}>-¥{discountAmount.toFixed(2)}</span>
+                                            </Typography.Text>
+                                            <Typography.Text strong>
+                                                最终结算金额 <span style={{color: '#e94979', fontSize: 22}}>¥{finalAmount.toFixed(2)}</span>
+                                            </Typography.Text>
+                                        </Space>
+                                        <div style={{marginTop: 8, color: '#506b86', fontSize: 12}}>
+                                            储值小时单固定按最终扣款金额结算，确认后订单结算基数将同步更新为 ¥{finalAmount.toFixed(2)}。
+                                        </div>
+                                    </div>
+                                );
+                            }
                             const paidAmount = toNum(order?.isGifted !== true ? order?.paidAmount : order?.receivableAmount);
                             const settlementBaseAmount = (() => {
                                 const explicit = toNum(order?.settlementBaseAmount);

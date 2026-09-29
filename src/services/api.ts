@@ -1090,6 +1090,13 @@ export async function payMemberBalanceSupplement(data: { id: number; idempotency
     });
 }
 
+export async function previewMemberBalanceHourlySettlement(data: { id: number; actualHours: number }) {
+    return request(`${API_BASE}/orders/member-balance/hourly-settlement-preview`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function updateDispatchParticipants(data: {
     dispatchId: number;
     playerIds: number[];
