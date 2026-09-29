@@ -924,8 +924,10 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     const pink = '#f55f8b';
     const pinkDark = '#e94979';
     const blue = '#397dcf';
-    const ink = '#353238';
-    const muted = '#8c7f84';
+    const valueBlue = '#286fbe';
+    const timeBlueGray = '#506b86';
+    const ink = '#262126';
+    const muted = '#675b60';
     const font = (weight: string | number, size: number) => `${weight} ${sx(size)}px "Alimama FangYuanTi VF", "PingFang SC", "Microsoft YaHei", sans-serif`;
     const drawText = (
         value: string,
@@ -973,7 +975,7 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     drawText('每一局游戏，都有蓝猫守护', 876, 1177, 42, pink, 700, 'center');
 
     // Order number sits above the six icon-aligned rows to preserve all current data.
-    fitText(`订单编号：${parsed.orderNo || '-'}`, 1430, 1341, 520, 22, 18, '#a88b94', 400, 'right');
+    fitText(`订单编号：${parsed.orderNo || '-'}`, 1430, 1341, 520, 27, 22, '#765f67', 600, 'right');
     drawText('订单信息', 876, 1303, 50, '#ffffff', 700, 'center');
     const orderRows = [
         {label: '下单项目', value: parsed.project || '-', strong: false},
@@ -985,11 +987,16 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     ];
     const rowYs = [1382, 1472, 1570, 1672, 1773, 1873];
     orderRows.forEach((row, index) => {
-        drawText(`${row.label}：`, 420, rowYs[index], row.label.length > 5 ? 31 : 34, ink, 500);
-        fitText(row.value, 710, rowYs[index], 690, 34, 23, row.strong ? pink : ink, row.strong ? 700 : 400);
+        drawText(`${row.label}：`, 420, rowYs[index], row.label.length > 5 ? 35 : 38, ink, 600);
+        const valueColor = row.strong
+            ? pinkDark
+            : row.label === '下单时间'
+                ? timeBlueGray
+                : valueBlue;
+        fitText(row.value, 710, rowYs[index], 690, 39, 27, valueColor, row.strong ? 800 : 600);
     });
     if (parsed.estimatedEndTime) {
-        drawText(`预计结单：${parsed.estimatedEndTime}`, 1395, 1909, 22, muted, 400, 'right');
+        drawText(`预计结单：${parsed.estimatedEndTime}`, 1395, 1909, 27, timeBlueGray, 600, 'right');
     }
 
     drawText('结算信息', 876, 2041, 50, '#ffffff', 700, 'center');
@@ -1007,14 +1014,14 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
             const fy = 2114 + row * financeGap;
             const labelX = columnStarts[column];
             const valueX = valueEnds[column];
-            drawText(`${item.label}：`, labelX, fy, rowsPerColumn > 3 ? 22 : 25, ink, 500);
-            fitText(item.value, valueX, fy, 220, rowsPerColumn > 3 ? 22 : 25, 18, ink, 400, 'right');
+            drawText(`${item.label}：`, labelX, fy, rowsPerColumn > 3 ? 27 : 30, ink, 600);
+            fitText(item.value, valueX, fy, 220, rowsPerColumn > 3 ? 27 : 30, 21, valueBlue, 600, 'right');
         });
     } else {
         ordinaryFinance.forEach((item, index) => {
             const fy = 2118 + index * 55;
-            drawText(`${item.label}：`, 420, fy, 31, ink, 500);
-            fitText(item.value, 1385, fy, 650, 32, 22, ink, 400, 'right');
+            drawText(`${item.label}：`, 420, fy, 35, ink, 600);
+            fitText(item.value, 1385, fy, 650, 37, 26, valueBlue, 600, 'right');
         });
     }
     drawText(`${paidItem.label}：`, 420, 2350, 38, blue, 700);
@@ -1025,10 +1032,10 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
         '消费过程中如遇任何问题，请随时联系本单客服处理～',
         '订单完结24小时内支持售后，客服为售后唯一渠道；',
         '请勿相信其他任何人，谨防上当受骗。',
-    ]).flatMap((line) => wrapped(line, 860, 30));
-    tipLines.slice(0, 5).forEach((line, index) => drawText(line, 348, 2665 + index * 48, 30, '#51484b', 400));
-    drawText('本店通过各类渠道收集客服或打手私联接单证据，', 348, 2864, 28, '#51484b', 400);
-    drawText('举报查实私加联系方式及私单奖 500-2000R', 348, 2910, 29, pinkDark, 700);
+    ]).flatMap((line) => wrapped(line, 860, 34, 500));
+    tipLines.slice(0, 3).forEach((line, index) => drawText(line, 348, 2665 + index * 54, 34, '#332d30', 500));
+    drawText('本店通过各类渠道收集客服或打手私联接单证据，', 348, 2864, 32, '#332d30', 500);
+    drawText('举报查实私加联系方式及私单奖 500-2000R', 348, 2910, 33, '#d92f68', 800);
 
     drawText('感谢你的选择，喵～ 期待下次陪你一起玩！', 876, 3047, 41, pink, 700, 'center');
 
@@ -1055,11 +1062,11 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     }
     ctx.restore();
     drawText('扫码进入蓝猫爽打小程序', 548, 3168, 34, pinkDark, 700);
-    drawText('查订单 · 找客服 · 享福利', 548, 3221, 28, ink, 400);
-    drawText('微信扫码即可进入小程序', 548, 3268, 23, muted, 400);
+    drawText('查订单 · 找客服 · 享福利', 548, 3221, 31, ink, 600);
+    drawText('微信扫码即可进入小程序', 548, 3268, 27, muted, 500);
 
-    drawText(`BlueCat · 萌爪订单小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, 876, 3395, 28, '#9d9095', 400, 'center');
-    drawText('BlueCat · 蓝猫爽打 与您同行。', 876, 3475, 31, '#9d9095', 400, 'center');
+    drawText(`BlueCat · 萌爪订单小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, 876, 3395, 30, '#74686d', 500, 'center');
+    drawText('BlueCat · 蓝猫爽打 与您同行。', 876, 3475, 33, '#74686d', 500, 'center');
 
     return canvas.toDataURL('image/png');
 };

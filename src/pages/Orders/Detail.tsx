@@ -57,6 +57,7 @@ import {
     getOrderDetail,
     getPlayerOptions,
     markOrderPaid,
+    payMemberBalanceSupplement,
     recalculateOrderSettlements,
     refundOrder, rollbackWrongSettlementReversals,
     rollbackDispatchToAccepted,
@@ -151,6 +152,8 @@ const OrderDetailPage: React.FC = () => {
     // ✅ 客服确认结单（两段式结单第二步）
     const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
     const [confirmCompleteLoading, setConfirmCompleteLoading] = useState(false);
+    const [balanceSupplementLoading, setBalanceSupplementLoading] = useState(false);
+    const [confirmActualPaidAmount, setConfirmActualPaidAmount] = useState<number>(0);
     const [confirmCompleteRemark, setConfirmCompleteRemark] = useState('');
     const [confirmCompleteSettlementBaseMode, setConfirmCompleteSettlementBaseMode] = useState<'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT'>('SETTLEMENT_BASE_AMOUNT');
     const [confirmRenewalInvalid, setConfirmRenewalInvalid] = useState(false);
@@ -1201,7 +1204,9 @@ const OrderDetailPage: React.FC = () => {
     // ==========================
     const openConfirmComplete = () => {
         setConfirmCompleteRemark('');
-        setConfirmCompleteSettlementBaseMode('SETTLEMENT_BASE_AMOUNT');
+        const reservedBalanceOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE';
+        setConfirmCompleteSettlementBaseMode(reservedBalanceOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
+        setConfirmActualPaidAmount(Number(order?.paidAmount ?? order?.balanceReservedAmount ?? 0));
 
         // ✅ 玩法单：在打开弹窗前一次性初始化分轮表格
         if (isModePlay) {
@@ -1275,8 +1280,15 @@ const OrderDetailPage: React.FC = () => {
         // ✅ 口径拆分：
         // - cashAmount：真实实收
         // - basisAmount：本单结算金额（可选按结算金额 / 实收金额）
-        const cashAmount = getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
-        const basisAmount = getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode);
+        const reservedBalanceOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE';
+        const cashAmount = reservedBalanceOrder
+            ? (order?.balanceReservationStatus === 'HELD'
+                ? Number(confirmActualPaidAmount || 0)
+                : Number(order?.paidAmount || 0))
+            : getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
+        const basisAmount = reservedBalanceOrder
+            ? cashAmount
+            : getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode);
 
         try {
             setConfirmCompleteLoading(true);
@@ -1348,7 +1360,13 @@ const OrderDetailPage: React.FC = () => {
             payload.orderTipUserIds = orderTip.enabled ? orderTip.tippedUserIds : [];
             payload.settlementBaseMode = confirmCompleteSettlementBaseMode;
 
-            await confirmCompleteOrder(payload);
+            const confirmResult: any = await confirmCompleteOrder(payload);
+            if (confirmResult?.supplementRequired) {
+                message.warning(confirmResult.message || `尚需补款 ¥${Number(confirmResult.pendingSupplementAmount || 0).toFixed(2)}`);
+                setConfirmCompleteOpen(false);
+                await loadDetail();
+                return;
+            }
 
             message.success('已确认结单');
             setConfirmCompleteOpen(false);
@@ -1359,6 +1377,21 @@ const OrderDetailPage: React.FC = () => {
             message.error(e?.response?.data?.message || '确认结单失败');
         } finally {
             setConfirmCompleteLoading(false);
+        }
+    };
+
+    const submitMemberBalanceSupplement = async () => {
+        if (!order?.id) return;
+        try {
+            setBalanceSupplementLoading(true);
+            const idempotencyKey = `${order.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const result: any = await payMemberBalanceSupplement({ id: Number(order.id), idempotencyKey });
+            message.success(`储值补款成功 ¥${Number(result?.amount || order?.balancePendingSupplementAmount || 0).toFixed(2)}`);
+            await loadDetail();
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || '储值补款失败');
+        } finally {
+            setBalanceSupplementLoading(false);
         }
     };
 
@@ -2937,7 +2970,20 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         </Tooltip> : null}
 
-                        {canUpdatePaid ? <Button disabled={!isHourly} onClick={openPaidModal}>
+                        {canUpdatePaid && Number(order?.balancePendingSupplementAmount || 0) > 0 ? (
+                            <Button
+                                type="primary"
+                                danger
+                                loading={balanceSupplementLoading}
+                                onClick={submitMemberBalanceSupplement}
+                            >
+                                储值补款 ¥{Number(order?.balancePendingSupplementAmount || 0).toFixed(2)}
+                            </Button>
+                        ) : null}
+                        {canUpdatePaid ? <Button
+                            disabled={!isHourly || order?.balanceSettlementMode === 'RESERVE_CAPTURE'}
+                            onClick={openPaidModal}
+                        >
                             小时单补收修改实付
                         </Button> : null}
                     </Space>
@@ -2957,7 +3003,18 @@ const OrderDetailPage: React.FC = () => {
                     <Descriptions.Item label="应收金额">¥{order?.receivableAmount ?? '-'}</Descriptions.Item>
                     <Descriptions.Item label="实付金额">
                         ¥{order?.paidAmount ?? '-'}
-                        {isHourly ? <Tag style={{marginLeft: 8}}>小时单可补收</Tag> : null}
+                        {order?.balanceSettlementMode === 'RESERVE_CAPTURE' ? (
+                            <Tag
+                                color={Number(order?.balancePendingSupplementAmount || 0) > 0 ? 'error' : 'blue'}
+                                style={{marginLeft: 8}}
+                            >
+                                {Number(order?.balancePendingSupplementAmount || 0) > 0
+                                    ? `待补款 ¥${Number(order.balancePendingSupplementAmount).toFixed(2)}`
+                                    : order?.balanceReservationStatus === 'HELD'
+                                        ? `已预占 ¥${Number(order?.balanceReservedAmount || 0).toFixed(2)}`
+                                        : '储值已结算'}
+                            </Tag>
+                        ) : isHourly ? <Tag style={{marginLeft: 8}}>小时单可补收</Tag> : null}
                     </Descriptions.Item>
                     <Descriptions.Item label="结算金额">
                         ¥{(() => {
@@ -4395,13 +4452,46 @@ const OrderDetailPage: React.FC = () => {
                         if (!(isModePlay && modePlayAlloc?.need)) return false;
                         const v = validateModePlayAlloc(
                             modePlayAlloc.rows,
-                            getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode),
+                            order?.balanceSettlementMode === 'RESERVE_CAPTURE'
+                                ? Number(confirmActualPaidAmount || 0)
+                                : getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode),
                         );
                         return !v.ok;
                     })(),
                 }}
             >
                 <Space direction="vertical" size={12} style={{width: '100%'}}>
+
+                    {order?.balanceSettlementMode === 'RESERVE_CAPTURE' ? (
+                        <Card size="small" style={{borderRadius: 12, borderColor: '#91caff', background: '#f0f7ff'}}>
+                            <Space direction="vertical" size={8} style={{width: '100%'}}>
+                                <Typography.Text strong>储值订单最终结算</Typography.Text>
+                                <Typography.Text type="secondary">
+                                    下单预占 ¥{Number(order?.balanceReservedAmount || 0).toFixed(2)}。请按实际服务时长填写最终消费；少于预占会自动释放差额，超出预占会先进入待补款，补齐后再确认结单。
+                                </Typography.Text>
+                                <InputNumber
+                                    min={0}
+                                    precision={2}
+                                    step={1}
+                                    value={confirmActualPaidAmount}
+                                    disabled={order?.balanceReservationStatus !== 'HELD'}
+                                    addonBefore="实际消费"
+                                    addonAfter="元"
+                                    style={{width: 320, maxWidth: '100%'}}
+                                    onChange={(value) => {
+                                        const next = Number(value || 0);
+                                        setConfirmActualPaidAmount(next);
+                                        if (isModePlay && modePlayAlloc?.rows?.length) {
+                                            setModePlayAlloc((prev: any) => prev ? {
+                                                ...prev,
+                                                rows: seedModePlayEqualByRound(prev.rows, next),
+                                            } : prev);
+                                        }
+                                    }}
+                                />
+                            </Space>
+                        </Card>
+                    ) : null}
 
                     {renewalGroup ? (
                         <Card size="small" style={{borderRadius: 12, borderColor: renewalGroupPending ? '#91caff' : '#d9d9d9'}}>

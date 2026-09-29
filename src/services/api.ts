@@ -1083,6 +1083,13 @@ export async function updateOrderPaidAmount(data: { id: number; paidAmount: numb
     });
 }
 
+export async function payMemberBalanceSupplement(data: { id: number; idempotencyKey: string }) {
+    return request(`${API_BASE}/orders/member-balance/supplement`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function updateDispatchParticipants(data: {
     dispatchId: number;
     playerIds: number[];
