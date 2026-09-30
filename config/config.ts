@@ -138,6 +138,13 @@ export default defineConfig({
       component: './Performance/Dashboard',
       access: 'canViewPerformanceDashboard',
     },
+    {
+      path: '/performance/leaderboard',
+      icon: 'TrophyOutlined',
+      name: '陪玩竞技榜',
+      component: './Performance/Leaderboard',
+      access: 'canViewPerformanceDashboard',
+    },
 
     // ✅ 根路径跳欢迎页
     { path: '/', redirect: '/welcome' },
@@ -283,6 +290,7 @@ export default defineConfig({
         { path: '/staff/workbench', name: '服务者工作台', component: './Staff/Workbench', access: 'canViewWorkbench' },
         { path: '/staff/questionnaires', name: '信息采集', component: './Staff/Questionnaires', access: 'canViewStaffQuestionnaires' },
         { path: '/staff/leave', name: '请假报备', component: './Staff/Activity', access: 'canViewWorkbench' },
+        { path: '/staff/my-card', name: '我的名片', component: './Staff/MyCard', access: 'canViewOwnStaffCard' },
       ],
     },
 

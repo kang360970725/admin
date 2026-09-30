@@ -908,7 +908,7 @@ const OrderDetailPage: React.FC = () => {
                 round: Number(d?.round ?? 0),
                 participantIds,
                 participantNames,
-                score: Number(firstStored?.score ?? 3),
+                score: Number(firstStored?.score ?? 5),
                 tipEnabled: Array.isArray(firstStored?.tippedUserIds) && firstStored.tippedUserIds.length > 0,
                 tippedUserIds: Array.isArray(firstStored?.tippedUserIds)
                     ? firstStored.tippedUserIds.map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n) && n > 0)
@@ -1397,9 +1397,6 @@ const OrderDetailPage: React.FC = () => {
             }
 
             if (isModePlay) payload.modePlayAllocList = modePlayAllocList;
-            payload.playerEvaluations = buildExpandedPlayerEvaluations(playerEvalRows);
-            payload.orderTipEnabled = Boolean(orderTip.enabled);
-            payload.orderTipUserIds = orderTip.enabled ? orderTip.tippedUserIds : [];
             payload.settlementBaseMode = confirmCompleteSettlementBaseMode;
 
             const confirmResult: any = await confirmCompleteOrder(payload);
@@ -4505,7 +4502,6 @@ const OrderDetailPage: React.FC = () => {
                 okButtonProps={{
                     // ✅ 玩法单 + 需要分配：校验不过不允许确认
                     disabled: (() => {
-                        if (!playerEvalFormValid) return true;
                         if (order?.balanceSettlementMode === 'RESERVE_CAPTURE' && (balancePricingLoading || !balancePricingPreview)) return true;
                         if (!(isModePlay && modePlayAlloc?.need)) return false;
                         const v = validateModePlayAlloc(
@@ -4838,6 +4834,7 @@ const OrderDetailPage: React.FC = () => {
                     </div>
 
                     <div style={{
+                        display: 'none',
                         border: '1px solid #e5e7eb',
                         background: '#fafafa',
                         borderRadius: 12,

@@ -130,6 +130,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewMyOrders: has('staff:my-orders:page') && isDispatchEligibleStaff,
     canViewWorkbench: has('staff:workbench:page') && isDispatchEligibleStaff,
     canViewStaffQuestionnaires: (has('staff:questionnaires:page') || has('staff:workbench:page')) && isDispatchEligibleStaff,
+    canViewOwnStaffCard: userType === 'STAFF',
 
     // 订单/结算
     canViewOrderManagement: has('orders:list:page') || canManageOrderArchiveInstructions,

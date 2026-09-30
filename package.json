@@ -20,6 +20,8 @@
     "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^5.0.1",
     "@ant-design/pro-components": "^2.4.4",
+    "@ffmpeg/ffmpeg": "0.12.15",
+    "@ffmpeg/util": "0.12.2",
     "@umijs/max": "^4.5.3",
     "@wangeditor/editor": "^5.1.23",
     "@wangeditor/editor-for-react": "^1.0.6",

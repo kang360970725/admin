@@ -360,6 +360,18 @@ export async function reviewStaffPublicCard(id: number, data: { status: 'APPROVE
     return request(`${API_BASE}/member/engagement/staff-cards/${id}/review`, { method: 'PATCH', data });
 }
 
+export async function updateStaffPublicCard(id: number, data: Record<string, any>) {
+    return request(`${API_BASE}/member/engagement/staff-cards/${id}`, { method: 'PATCH', data });
+}
+
+export async function getMyStaffPublicCard() {
+    return request(`${API_BASE}/member/engagement/staff-card/me`, { method: 'GET' });
+}
+
+export async function updateMyStaffPublicCard(data: Record<string, any>) {
+    return request(`${API_BASE}/member/engagement/staff-card/me`, { method: 'PATCH', data });
+}
+
 export async function createMemberRechargePlan(data: any) {
     return request(`${API_BASE}/member/recharge-plans`, {
         method: 'POST',
@@ -686,7 +698,7 @@ export async function hideGameProjectReview(reviewId: number, data: { hidden: bo
     });
 }
 
-export async function getUploadInfo(data: { module: string; filename?: string; scene?: string }) {
+export async function getUploadInfo(data: { module: string; filename?: string; scene?: string; fileSize?: number; mimeType?: string }) {
     return request<{
         mode: 'signature';
         module: string;
@@ -3475,6 +3487,13 @@ export async function getPerformanceDashboardOverview(data: any) {
 
 export async function getPerformanceDashboardList(data: any) {
     return request(`${API_BASE}/performance/dashboard/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function getPlayerLeaderboardOverview(data: any) {
+    return request(`${API_BASE}/performance/leaderboard/overview`, {
         method: 'POST',
         data,
     });
