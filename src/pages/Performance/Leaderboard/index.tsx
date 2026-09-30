@@ -35,7 +35,7 @@ const LeaderboardPage: React.FC = () => {
         ...(primary === 'netIncomeAmount' ? [{title: '净收益', dataIndex: 'netIncomeAmount', width: 160, render: (v: number) => <strong className={styles.cyanText}>{money(v)}</strong>}] : []),
         ...(primary === 'completedOrders' ? [{title: '完成接单', dataIndex: 'completedOrders', width: 140, render: (v: number) => <strong className={styles.cyanText}>{v} 单</strong>}] : []),
         ...(primary === 'grossPerformanceAmount' ? [{title: '总业绩', dataIndex: 'grossPerformanceAmount', width: 160, render: (v: number) => <strong className={styles.cyanText}>{money(v)}</strong>}] : []),
-        {title: '最近业绩', dataIndex: 'latestAt', width: 130, render: formatTime},
+        {title: '最近结算', dataIndex: 'latestAt', width: 130, render: formatTime},
     ];
 
     const drawPoster = async () => {
