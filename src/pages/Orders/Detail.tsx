@@ -199,7 +199,14 @@ const OrderDetailPage: React.FC = () => {
     );
 
     useEffect(() => {
-        if (!confirmCompleteOpen || order?.balanceSettlementMode !== 'RESERVE_CAPTURE') return;
+        const previewBillingMode = order?.projectSnapshot?.billingMode || order?.project?.billingMode;
+        if (!confirmCompleteOpen
+            || order?.balanceSettlementMode !== 'RESERVE_CAPTURE'
+            || previewBillingMode !== 'HOURLY') {
+            setBalancePricingPreview(null);
+            setBalancePricingLoading(false);
+            return;
+        }
         if (!(Number(confirmActualHours) >= 0.5)) {
             setBalancePricingPreview(null);
             return;
@@ -214,12 +221,6 @@ const OrderDetailPage: React.FC = () => {
                 });
                 if (cancelled) return;
                 setBalancePricingPreview(result);
-                if (isModePlay && modePlayAlloc?.rows?.length) {
-                    setModePlayAlloc((prev: any) => prev ? {
-                        ...prev,
-                        rows: seedModePlayEqualByRound(prev.rows, Number(result?.finalPayableAmount || 0)),
-                    } : prev);
-                }
             } catch (e: any) {
                 if (!cancelled) {
                     setBalancePricingPreview(null);
@@ -233,7 +234,7 @@ const OrderDetailPage: React.FC = () => {
             cancelled = true;
             window.clearTimeout(timer);
         };
-    }, [confirmCompleteOpen, confirmActualHours, order?.id, order?.balanceSettlementMode]);
+    }, [confirmCompleteOpen, confirmActualHours, order?.id, order?.balanceSettlementMode, order?.projectSnapshot?.billingMode, order?.project?.billingMode]);
 
     // 重算工具 - 玩法单分轮输入
     const [recalcModePlayAlloc, setRecalcModePlayAlloc] = useState<any>(null);
@@ -1244,8 +1245,8 @@ const OrderDetailPage: React.FC = () => {
     // ==========================
     const openConfirmComplete = () => {
         setConfirmCompleteRemark('');
-        const reservedBalanceOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE';
-        setConfirmCompleteSettlementBaseMode(reservedBalanceOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
+        const reservedHourlyOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE' && isHourly;
+        setConfirmCompleteSettlementBaseMode(reservedHourlyOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
         const dispatchHours = (Array.isArray(order?.dispatches) ? order.dispatches : [])
             .reduce((sum: number, item: any) => sum + Number(item?.billableHours || 0), 0);
         setConfirmActualHours(dispatchHours > 0 ? dispatchHours : Math.max(0.5, Number(order?.orderQuantity || 0.5)));
@@ -1324,10 +1325,11 @@ const OrderDetailPage: React.FC = () => {
         // - cashAmount：真实实收
         // - basisAmount：本单结算金额（可选按结算金额 / 实收金额）
         const reservedBalanceOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE';
-        const cashAmount = reservedBalanceOrder
+        const reservedHourlyOrder = reservedBalanceOrder && isHourly;
+        const cashAmount = reservedHourlyOrder
             ? Number(balancePricingPreview?.finalPayableAmount ?? order?.paidAmount ?? 0)
             : getOrderSettlementBasisAmount(order, 'PAID_AMOUNT');
-        const basisAmount = reservedBalanceOrder
+        const basisAmount = reservedHourlyOrder
             ? cashAmount
             : getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode);
 
@@ -1386,7 +1388,7 @@ const OrderDetailPage: React.FC = () => {
                 id: Number(order.id),
                 remark: confirmCompleteRemark || undefined,
                 paidAmount: cashAmount,
-                ...(reservedBalanceOrder ? {actualHours: confirmActualHours} : {}),
+                ...(reservedHourlyOrder ? {actualHours: confirmActualHours} : {}),
                 confirmPaid: true,
             };
 
@@ -1407,7 +1409,7 @@ const OrderDetailPage: React.FC = () => {
                 return;
             }
 
-            const settlementAmountChanged = reservedBalanceOrder && Math.abs(Number(balancePricingPreview?.differenceAmount || 0)) >= 0.01;
+            const settlementAmountChanged = reservedHourlyOrder && Math.abs(Number(balancePricingPreview?.differenceAmount || 0)) >= 0.01;
             message.success(settlementAmountChanged ? '已确认结单，结算金额已更新' : '已确认结单');
             setConfirmCompleteOpen(false);
             setConfirmRenewalInvalid(false);
@@ -4502,11 +4504,11 @@ const OrderDetailPage: React.FC = () => {
                 okButtonProps={{
                     // ✅ 玩法单 + 需要分配：校验不过不允许确认
                     disabled: (() => {
-                        if (order?.balanceSettlementMode === 'RESERVE_CAPTURE' && (balancePricingLoading || !balancePricingPreview)) return true;
+                        if (order?.balanceSettlementMode === 'RESERVE_CAPTURE' && isHourly && (balancePricingLoading || !balancePricingPreview)) return true;
                         if (!(isModePlay && modePlayAlloc?.need)) return false;
                         const v = validateModePlayAlloc(
                             modePlayAlloc.rows,
-                            order?.balanceSettlementMode === 'RESERVE_CAPTURE'
+                            order?.balanceSettlementMode === 'RESERVE_CAPTURE' && isHourly
                                 ? Number(balancePricingPreview?.finalPayableAmount || 0)
                                 : getOrderSettlementBasisAmount(order, confirmCompleteSettlementBaseMode),
                         );
@@ -4516,7 +4518,7 @@ const OrderDetailPage: React.FC = () => {
             >
                 <Space direction="vertical" size={12} style={{width: '100%'}}>
 
-                    {order?.balanceSettlementMode === 'RESERVE_CAPTURE' ? (
+                    {order?.balanceSettlementMode === 'RESERVE_CAPTURE' && isHourly ? (
                         <Card size="small" style={{borderRadius: 12, borderColor: '#91caff', background: '#f0f7ff'}}>
                             <Space direction="vertical" size={8} style={{width: '100%'}}>
                                 <Typography.Text strong>储值订单最终结算</Typography.Text>
@@ -4753,7 +4755,7 @@ const OrderDetailPage: React.FC = () => {
                             结单时决定本单收益基数，不影响“收钱吧”人工收款对账。
                         </Typography.Text>
                         {(() => {
-                            if (order?.balanceSettlementMode === 'RESERVE_CAPTURE') {
+                            if (order?.balanceSettlementMode === 'RESERVE_CAPTURE' && isHourly) {
                                 const finalAmount = Number(balancePricingPreview?.finalPayableAmount || 0);
                                 const originalAmount = Number(balancePricingPreview?.originalAmount || 0);
                                 const discountAmount = Number(balancePricingPreview?.discountAmount || 0);
