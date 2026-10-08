@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, message, Modal, Popconfirm, Row, Select, Space, Statistic, Tabs, Tag } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, List, message, Modal, Popconfirm, Row, Select, Space, Statistic, Tabs, Tag } from 'antd';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -13,6 +13,7 @@ import {
   listEquipmentRentalBills,
   listEquipmentRentalContracts,
   payEquipmentRentalBill,
+  refundEquipmentRentalBill,
   updateEquipmentRentalContract,
   waiveEquipmentRentalBill,
 } from '@/services/api';
@@ -30,6 +31,11 @@ const EquipmentRentalFeesPage: React.FC = () => {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [externalPaidOpen, setExternalPaidOpen] = useState(false);
   const [externalPaidBill, setExternalPaidBill] = useState<EquipmentRentalBill | null>(null);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundBill, setRefundBill] = useState<EquipmentRentalBill | null>(null);
+  const [reconciliations, setReconciliations] = useState<any[]>([]);
+  const [reconciliationOpen, setReconciliationOpen] = useState(false);
+  const [logBill, setLogBill] = useState<EquipmentRentalBill | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<Array<{ label: string; value: number }>>([]);
@@ -43,6 +49,17 @@ const EquipmentRentalFeesPage: React.FC = () => {
   const [contractForm] = Form.useForm();
   const [generateForm] = Form.useForm();
   const [externalPaidForm] = Form.useForm();
+  const [refundForm] = Form.useForm();
+
+  const openRefund = (row: EquipmentRentalBill, presetAmount?: number, presetRemark?: string) => {
+    setRefundBill(row);
+    refundForm.resetFields();
+    refundForm.setFieldsValue({
+      amount: Number(presetAmount ?? row.refundableAmount ?? row.paidAmount ?? 0),
+      remark: presetRemark || '',
+    });
+    setRefundOpen(true);
+  };
 
   const fetchStaffOptions = async (keyword?: string) => {
     try {
@@ -163,7 +180,9 @@ const EquipmentRentalFeesPage: React.FC = () => {
         return <Tag color={color}>{label}</Tag>;
       },
     },
-    { title: '金额', dataIndex: 'amount', width: 100, search: false, render: (_, row) => `¥${money(row.amount)}` },
+    { title: '应缴', dataIndex: 'amount', width: 100, search: false, render: (_, row) => `¥${money(row.amount)}` },
+    { title: '已缴', dataIndex: 'paidAmount', width: 100, search: false, render: (_, row) => `¥${money(row.paidAmount)}` },
+    { title: '已退', dataIndex: 'refundedAmount', width: 100, search: false, render: (_, row) => Number(row.refundedAmount || 0) > 0 ? <Tag color="blue">¥{money(row.refundedAmount)}</Tag> : '-' },
     { title: '未扣', dataIndex: 'remainingAmount', width: 100, search: false, render: (_, row) => `¥${money(row.remainingAmount)}` },
     {
       title: '计费周期',
@@ -206,8 +225,9 @@ const EquipmentRentalFeesPage: React.FC = () => {
     {
       title: '操作',
       valueType: 'option',
-      width: 120,
-      render: (_, row) => row.status === 'PENDING' ? [
+      width: 260,
+      render: (_, row) => {
+        const actions: React.ReactNode[] = row.status === 'PENDING' ? [
         <Popconfirm
           key="pay"
           title="确认手动缴纳该设备租赁费？"
@@ -230,6 +250,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
             setExternalPaidBill(row);
             externalPaidForm.resetFields();
             externalPaidForm.setFieldsValue({
+              amount: Number(row.remainingAmount || row.amount || 0),
               remark: '',
             });
             setExternalPaidOpen(true);
@@ -252,7 +273,15 @@ const EquipmentRentalFeesPage: React.FC = () => {
         >
           <a>减免</a>
         </Popconfirm>,
-      ] : [],
+        ] : [];
+        if (row.canRefund && Number(row.refundableAmount || 0) > 0) {
+          actions.push(<a key="refund" onClick={() => openRefund(row)}>退费</a>);
+        }
+        if ((row.adjustmentLogs || []).length > 0) {
+          actions.push(<a key="logs" onClick={() => setLogBill(row)}>操作记录</a>);
+        }
+        return actions;
+      },
     },
   ], [staffLoading, staffOptions]);
 
@@ -355,6 +384,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
             setSubmitting(true);
             await confirmEquipmentRentalBillPaidExternal({
               billId: externalPaidBill.id,
+              amount: Number(values.amount),
               remark: String(values.remark || '').trim(),
             });
             message.success('已确认其他渠道缴费');
@@ -373,11 +403,18 @@ const EquipmentRentalFeesPage: React.FC = () => {
             type="info"
             showIcon
             message="该操作不会扣除员工钱包余额"
-            description={`账单将标记为已缴费，已缴金额 ¥${money(externalPaidBill?.remainingAmount || externalPaidBill?.amount || 0)}。请填写实际收款渠道或凭证说明。`}
+            description="可按实际情况修改本次确认金额；确认后账单金额同步为该金额。请填写真实收款渠道、凭证或调整原因。"
           />
           <Form form={externalPaidForm} layout="vertical">
             <Form.Item
-              label="缴费说明"
+              label="实际缴费金额"
+              name="amount"
+              rules={[{ required: true, message: '请输入实际缴费金额' }]}
+            >
+              <InputNumber min={0.01} precision={2} addonBefore="¥" style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              label="调整原因 / 缴费说明"
               name="remark"
               rules={[{ required: true, message: '请填写其他渠道缴费说明' }]}
             >
@@ -385,6 +422,113 @@ const EquipmentRentalFeesPage: React.FC = () => {
             </Form.Item>
           </Form>
         </Space>
+      </Modal>
+
+      <Modal
+        title="确认设备费退费"
+        open={refundOpen}
+        confirmLoading={submitting}
+        okText="确认退费"
+        okButtonProps={{ danger: true }}
+        onCancel={() => {
+          setRefundOpen(false);
+          setRefundBill(null);
+        }}
+        onOk={async () => {
+          try {
+            const values = await refundForm.validateFields();
+            if (!refundBill?.id) return;
+            setSubmitting(true);
+            await refundEquipmentRentalBill({
+              billId: refundBill.id,
+              amount: Number(values.amount),
+              remark: String(values.remark || '').trim(),
+            });
+            message.success('退费成功，款项已退回服务者可用余额');
+            setRefundOpen(false);
+            setRefundBill(null);
+            billActionRef.current?.reload();
+          } catch (e: any) {
+            if (!e?.errorFields) message.error(e?.data?.message || e?.message || '退费失败');
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message={`本单最多可退 ¥${money(refundBill?.refundableAmount || 0)}`}
+          description="只有服务者自行确认扣缴且存在钱包流水的设备费才允许退费；支持部分退费，退款将原路回到服务者可用余额并生成关联流水。"
+          style={{ marginBottom: 16 }}
+        />
+        <Form form={refundForm} layout="vertical">
+          <Form.Item label="退费金额" name="amount" rules={[{ required: true, message: '请输入退费金额' }]}>
+            <InputNumber min={0.01} max={Number(refundBill?.refundableAmount || 0)} precision={2} addonBefore="¥" style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="退费原因" name="remark" rules={[{ required: true, whitespace: true, message: '退费原因必填' }]}>
+            <Input.TextArea rows={3} placeholder="请填写重算差异、配置调整或其他退费原因" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="重算结果"
+        open={reconciliationOpen}
+        footer={<Button type="primary" onClick={() => setReconciliationOpen(false)}>完成</Button>}
+        onCancel={() => setReconciliationOpen(false)}
+        width={760}
+      >
+        <List
+          dataSource={reconciliations}
+          locale={{ emptyText: '已缴费账单金额均正确，无需调整' }}
+          renderItem={(item: any) => (
+            <List.Item
+              actions={item.canRefund ? [
+                <Button
+                  key="refund"
+                  type="primary"
+                  danger
+                  size="small"
+                  onClick={() => {
+                    setReconciliationOpen(false);
+                    openRefund({
+                      id: item.billId,
+                      userId: item.userId,
+                      billMonth: item.billMonth,
+                      refundableAmount: item.refundableAmount,
+                      paidAmount: item.refundableAmount,
+                    } as EquipmentRentalBill, Math.min(Number(item.difference), Number(item.refundableAmount)), `重算后正确金额为 ¥${money(item.correctAmount)}，退还多收差额`);
+                  }}
+                >
+                  确认退差额 ¥{money(Math.min(Number(item.difference), Number(item.refundableAmount)))}
+                </Button>,
+              ] : undefined}
+            >
+              <List.Item.Meta
+                title={`${item.user?.name || maskPhone(item.user?.phone) || `#${item.userId}`} · ${item.billMonth}`}
+                description={`当前账单 ¥${money(item.currentAmount)}，重算正确金额 ¥${money(item.correctAmount)}。${item.reason}`}
+              />
+            </List.Item>
+          )}
+        />
+      </Modal>
+
+      <Modal title={`账单 #${logBill?.id || '-'} 操作记录`} open={Boolean(logBill)} footer={null} onCancel={() => setLogBill(null)} width={720}>
+        <List
+          dataSource={logBill?.adjustmentLogs || []}
+          locale={{ emptyText: '暂无操作记录' }}
+          renderItem={(item: any) => (
+            <List.Item>
+              <Descriptions size="small" column={1} style={{ width: '100%' }}>
+                <Descriptions.Item label="操作">{item.action}</Descriptions.Item>
+                <Descriptions.Item label="操作人">{item.user?.name || maskPhone(item.user?.phone) || `#${item.userId}`}</Descriptions.Item>
+                <Descriptions.Item label="时间">{dayjs(item.createdAt).format('YYYY-MM-DD HH:mm:ss')}</Descriptions.Item>
+                <Descriptions.Item label="原因">{item.remark || '-'}</Descriptions.Item>
+              </Descriptions>
+            </List.Item>
+          )}
+        />
       </Modal>
 
       <Modal
@@ -460,7 +604,10 @@ const EquipmentRentalFeesPage: React.FC = () => {
             const values = await generateForm.validateFields();
             setSubmitting(true);
             const res = await generateEquipmentRentalBills({ month: monthValue(values.month) });
-            message.success(`已生成/更新 ${res?.affected ?? 0} 条账单`);
+            const differences = Array.isArray(res?.reconciliations) ? res.reconciliations : [];
+            setReconciliations(differences);
+            setReconciliationOpen(true);
+            message.success(`已生成/更新 ${res?.affected ?? 0} 条，${res?.correct ?? 0} 条已缴账单金额正确，${differences.length} 条存在差异`);
             setGenerateOpen(false);
             billActionRef.current?.reload();
           } catch (e: any) {

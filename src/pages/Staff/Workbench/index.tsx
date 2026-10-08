@@ -93,9 +93,12 @@ const WorkbenchPage: React.FC = () => {
     // 统计
     const [statsLoading, setStatsLoading] = useState(false);
     const [todayCount, setTodayCount] = useState(0);
-    const [todayIncome, setTodayIncome] = useState(0);
     const [monthCount, setMonthCount] = useState(0);
     const [monthIncome, setMonthIncome] = useState(0);
+    const [monthRank, setMonthRank] = useState(0);
+    const [monthRankParticipantCount, setMonthRankParticipantCount] = useState(0);
+    const [gapToPreviousOrders, setGapToPreviousOrders] = useState(0);
+    const [ordersToOvertake, setOrdersToOvertake] = useState(0);
 
     // 订单池
     const [poolLoading, setPoolLoading] = useState(false);
@@ -257,9 +260,12 @@ const WorkbenchPage: React.FC = () => {
         try {
             const res = await ordersMyStats({});
             setTodayCount(Number(res?.todayCount ?? 0));
-            setTodayIncome(Number(res?.todayIncome ?? 0));
             setMonthCount(Number(res?.monthCount ?? 0));
             setMonthIncome(Number(res?.monthIncome ?? 0));
+            setMonthRank(Number(res?.monthRank ?? 0));
+            setMonthRankParticipantCount(Number(res?.monthRankParticipantCount ?? 0));
+            setGapToPreviousOrders(Number(res?.gapToPreviousOrders ?? 0));
+            setOrdersToOvertake(Number(res?.ordersToOvertake ?? 0));
         } catch (e: any) {
             message.error(e?.response?.data?.message || '获取统计失败');
         } finally {
@@ -1066,7 +1072,7 @@ const WorkbenchPage: React.FC = () => {
                         </Col>
                         <Col xs={12} md={12} lg={6}>
                             <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
-                                <Statistic title="今日收入" value={todayIncome} precision={2} prefix="¥"/>
+                                <Statistic title="本月收入" value={monthIncome} precision={2} prefix="¥"/>
                             </Card>
                         </Col>
                         <Col xs={12} md={12} lg={6}>
@@ -1075,8 +1081,28 @@ const WorkbenchPage: React.FC = () => {
                             </Card>
                         </Col>
                         <Col xs={12} md={12} lg={6}>
-                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
-                                <Statistic title="本月收入" value={monthIncome} precision={2} prefix="¥"/>
+                            <Card
+                                loading={statsLoading}
+                                bodyStyle={{padding: isMobile ? 12 : 16}}
+                                style={{background: 'linear-gradient(135deg, #eff6ff 0%, #ecfeff 100%)', borderColor: '#91caff'}}
+                            >
+                                <Statistic
+                                    title="本月接单排名"
+                                    value={monthRank > 0 ? monthRank : '-'}
+                                    prefix={monthRank > 0 ? '第' : undefined}
+                                    suffix={monthRank > 0 ? '名' : undefined}
+                                    valueStyle={{color: monthRank === 1 ? '#d48806' : '#1677ff'}}
+                                />
+                                <div style={{marginTop: 4, minHeight: 22, color: 'rgba(0,0,0,.58)', fontSize: 12}}>
+                                    {monthRank === 1
+                                        ? '本月暂居第一，继续保持！'
+                                        : monthRank > 1 && gapToPreviousOrders === 0
+                                            ? `与上一名同为 ${monthCount} 单，再完成 1 单有机会反超`
+                                            : monthRank > 1
+                                                ? `距上一名 ${gapToPreviousOrders} 单，再完成 ${ordersToOvertake} 单有机会反超`
+                                                : '完成首单后即可参与本月排名'}
+                                    {monthRankParticipantCount > 0 ? ` · 共 ${monthRankParticipantCount} 人` : ''}
+                                </div>
                             </Card>
                         </Col>
                     </Row>

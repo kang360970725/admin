@@ -115,7 +115,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canResetInternalPassword,
     canStaffExit: isSuperAdmin || has('users:staff:exit:button'),
     canStaffClear: isSuperAdmin || has('users:staff:clear:button'),
-    canResetWithdrawQrCode: isSuperAdmin || has('users:staff:withdraw-qr-reset:button'),
+    canResetWithdrawQrCode: isSuperAdmin || roleName === 'STORE_MANAGER' || has('users:staff:withdraw-qr-reset:button'),
     canViewExcellentStaff: isSuperAdmin || has('users:excellent-staff:page'),
     canManageExcellentStaff: isSuperAdmin || has('users:excellent-staff:manage:button'),
     canManualMemberRecharge: isSuperAdmin || has('users:member:recharge:button'),

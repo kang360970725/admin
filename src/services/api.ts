@@ -2524,6 +2524,17 @@ export interface EquipmentRentalBill {
     remark?: string | null;
     totalAssets?: number;
     insufficient?: boolean;
+    refundedAmount?: number;
+    refundableAmount?: number;
+    canRefund?: boolean;
+    adjustmentLogs?: Array<{
+        id: number;
+        userId: number;
+        action: string;
+        remark?: string | null;
+        createdAt: string;
+        user?: { id: number; name?: string; phone?: string };
+    }>;
     user?: {
         id: number;
         name?: string;
@@ -2598,7 +2609,24 @@ export async function listEquipmentRentalBills(data: {
 }
 
 export async function generateEquipmentRentalBills(data: { month: string }) {
-    return request<{ month: string; affected: number }>(`${API_BASE}/equipment-rental-fees/bills/generate`, {
+    return request<{
+        month: string;
+        affected: number;
+        correct: number;
+        reconciliations: Array<{
+            billId: number;
+            billMonth: string;
+            userId: number;
+            user?: { id: number; name?: string; phone?: string };
+            currentAmount: number;
+            correctAmount: number;
+            difference: number;
+            refundedAmount: number;
+            refundableAmount: number;
+            canRefund: boolean;
+            reason: string;
+        }>;
+    }>(`${API_BASE}/equipment-rental-fees/bills/generate`, {
         method: 'POST',
         data,
     });
@@ -2618,8 +2646,15 @@ export async function payEquipmentRentalBill(data: { billId: number; remark?: st
     });
 }
 
-export async function confirmEquipmentRentalBillPaidExternal(data: { billId: number; remark: string }) {
+export async function confirmEquipmentRentalBillPaidExternal(data: { billId: number; amount: number; remark: string }) {
     return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/bills/confirm-paid-external`, {
+        method: 'POST',
+        data,
+    });
+}
+
+export async function refundEquipmentRentalBill(data: { billId: number; amount: number; remark: string }) {
+    return request<EquipmentRentalBill>(`${API_BASE}/equipment-rental-fees/bills/refund`, {
         method: 'POST',
         data,
     });

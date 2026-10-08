@@ -15,6 +15,7 @@ interface EditUserModalProps {
     staffTagOptions?: Array<{ label: string; value: string }>;
     staffRuleEngineConfig?: StaffRuleEngineConfig | null;
     isSuperAdmin?: boolean;
+    canResetWithdrawQrCode?: boolean;
 }
 
 const DEFAULT_STAFF_RULE_GROUP_CODE = 'default_rule';
@@ -28,6 +29,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     staffTagOptions = [],
     staffRuleEngineConfig = null,
     isSuperAdmin = false,
+    canResetWithdrawQrCode = false,
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
@@ -343,7 +345,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                             description="清理后用户需要重新上传收款码。"
                             okText="确认清理"
                             cancelText="取消"
-                            disabled={!hasWithdrawQrCode || staffEditLocked}
+                            disabled={!hasWithdrawQrCode || !canResetWithdrawQrCode}
                             onConfirm={async () => {
                                 if (!user?.id) return;
                                 try {
@@ -361,7 +363,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                                 }
                             }}
                         >
-                            <Button loading={resetQrLoading} disabled={!hasWithdrawQrCode || staffEditLocked}>
+                            <Button loading={resetQrLoading} disabled={!hasWithdrawQrCode || !canResetWithdrawQrCode}>
                                 重新上传收款码
                             </Button>
                         </Popconfirm>

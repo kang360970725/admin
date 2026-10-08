@@ -1912,6 +1912,7 @@ export default function UsersPage() {
                 staffTagOptions={staffTagOptions}
                 staffRuleEngineConfig={staffRuleEngineConfig}
                 isSuperAdmin={access.canSeeAdmin}
+                canResetWithdrawQrCode={access.canResetWithdrawQrCode}
                 onCancel={() => {
                     setEditModalVisible(false);
                     setEditingUser(null);
