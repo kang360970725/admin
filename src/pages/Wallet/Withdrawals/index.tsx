@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import {Button, message, Tag, Space, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm, Form} from 'antd';
+import {Alert, Button, message, Tag, Space, Image, Card, Row, Col, Statistic, DatePicker, Popconfirm, Form} from 'antd';
 import type { ActionType } from '@ant-design/pro-components';
 import { ModalForm, ProFormRadio, ProFormTextArea, ProTable } from '@ant-design/pro-components';
 import { useModel } from '@umijs/max';
@@ -412,6 +412,35 @@ const WithdrawalsPage: React.FC = () => {
                                     <span>申请时间：{formatDateTime(currentRow.createdAt)}</span>
                                 </div>
                             </Card>
+
+                            {Number(currentRow?.feeRiskPreview?.totalRiskAmount || 0) > 0 ? (
+                                <Alert
+                                    type={Number(currentRow?.feeRiskPreview?.riskGapAmount || 0) > 0 ? 'error' : 'warning'}
+                                    showIcon
+                                    message={(
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                                            <Space size={6}>
+                                                <strong>费用资金风险</strong>
+                                                <Tag color={Number(currentRow?.feeRiskPreview?.riskGapAmount || 0) > 0 ? 'red' : 'orange'} style={{ marginInlineEnd: 0 }}>
+                                                    {Number(currentRow?.feeRiskPreview?.riskGapAmount || 0) > 0 ? '存在缺口' : '需关注'}
+                                                </Tag>
+                                            </Space>
+                                            <span style={{ fontWeight: 700 }}>
+                                                预估 ¥{Number(currentRow?.feeRiskPreview?.totalRiskAmount || 0).toFixed(2)}
+                                                {Number(currentRow?.feeRiskPreview?.riskGapAmount || 0) > 0
+                                                    ? ` · 缺口 ¥${Number(currentRow?.feeRiskPreview?.riskGapAmount || 0).toFixed(2)}`
+                                                    : ''}
+                                            </span>
+                                        </div>
+                                    )}
+                                    description={(
+                                        <div style={{ fontSize: 12, lineHeight: 1.55 }}>
+                                            设备费 ¥{Number(currentRow?.feeRiskPreview?.equipment?.totalRiskAmount || 0).toFixed(2)} · 管理费 ¥{Number(currentRow?.feeRiskPreview?.offlineManagement?.totalRiskAmount || 0).toFixed(2)} · 提现后参考资产 ¥{Number(currentRow?.feeRiskPreview?.fundingAfterWithdrawal || 0).toFixed(2)}。可结合服务者信用决定是否放行。
+                                        </div>
+                                    )}
+                                    style={{ padding: '8px 12px' }}
+                                />
+                            ) : null}
 
                             <div className="bc-admin-form-section">
                                 <div className="bc-admin-form-section-title">收款信息</div>

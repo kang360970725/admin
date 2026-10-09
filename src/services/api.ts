@@ -1699,6 +1699,14 @@ export interface WalletWithdrawalRequest {
         nickname?: string | null;
         staffEmploymentStatus?: 'ACTIVE' | 'FROZEN' | 'EXITED' | 'BLACKLISTED' | string;
     };
+    feeRiskPreview?: {
+        riskLevel: 'NONE' | 'NOTICE' | 'HIGH';
+        totalRiskAmount: number;
+        riskGapAmount: number;
+        fundingAfterWithdrawal: number;
+        equipment: { outstandingAmount: number; estimatedAmount: number; totalRiskAmount: number; contractCount: number };
+        offlineManagement: { outstandingAmount: number; estimatedAmount: number; totalRiskAmount: number; contractCount: number };
+    };
 }
 
 /**
