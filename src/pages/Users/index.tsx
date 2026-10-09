@@ -403,6 +403,7 @@ export default function UsersPage() {
             staffExitForm.setFieldsValue({
                 mode: 'RELEASE_TO_AVAILABLE',
                 addToBlacklist: false,
+                remark: '',
             });
             setStaffExitVisible(true);
         } catch (error: any) {
@@ -2038,6 +2039,16 @@ export default function UsersPage() {
                     </Form.Item>
                     <Form.Item name="addToBlacklist" valuePropName="checked">
                         <Checkbox>同时加入黑名单</Checkbox>
+                    </Form.Item>
+                    <Form.Item
+                        noStyle
+                        shouldUpdate={(previous, current) => previous.addToBlacklist !== current.addToBlacklist}
+                    >
+                        {({ getFieldValue }) => getFieldValue('addToBlacklist') ? (
+                            <Form.Item label="拉黑原因" name="remark" rules={[{ required: true, message: '请输入拉黑原因' }]}>
+                                <Input.TextArea rows={3} placeholder="该原因会脱敏展示在小程序门店信用名单中" maxLength={255} showCount />
+                            </Form.Item>
+                        ) : null}
                     </Form.Item>
                     <div style={{ color: '#999', fontSize: 12, lineHeight: '20px' }}>
                         普通退出默认进入规则配置的冷却期。限制服务后不可再次入驻。

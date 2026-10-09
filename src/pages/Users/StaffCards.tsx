@@ -1,6 +1,7 @@
 import {
   getStaffPublicCards,
   reviewStaffPublicCard,
+  setStaffPublicCardVisibility,
   updateStaffPublicCard,
 } from '@/services/api';
 import { uploadFileToCosBySts } from '@/utils/cosUpload';
@@ -25,6 +26,7 @@ import {
   Segmented,
   Select,
   Space,
+  Switch,
   Tag,
   Typography,
   Upload,
@@ -292,6 +294,29 @@ export default function StaffCardsPage() {
       ),
     },
     {
+      title: '小程序展示',
+      dataIndex: 'publicVisible',
+      search: false,
+      width: 110,
+      render: (_: any, r: any) => (
+        <Switch
+          checked={Boolean(r.publicVisible)}
+          disabled={r.status !== 'APPROVED'}
+          checkedChildren="展示"
+          unCheckedChildren="隐藏"
+          onChange={async (checked) => {
+            try {
+              await setStaffPublicCardVisibility(r.id, checked);
+              message.success(checked ? '已在小程序展示' : '已从小程序隐藏');
+              actionRef.current?.reload();
+            } catch (e: any) {
+              message.error(e?.message || '展示状态修改失败');
+            }
+          }}
+        />
+      ),
+    },
+    {
       title: '提交时间',
       dataIndex: 'submittedAt',
       valueType: 'dateTime',
@@ -321,7 +346,7 @@ export default function StaffCardsPage() {
   return (
     <PageContainer
       title="服务者名片管理"
-      subTitle="后台统一维护，提交审核通过后在小程序公开展示"
+      subTitle="审核通过后，可单独控制是否在小程序公开展示"
     >
       <ProTable
         rowKey="id"

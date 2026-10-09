@@ -364,6 +364,10 @@ export async function updateStaffPublicCard(id: number, data: Record<string, any
     return request(`${API_BASE}/member/engagement/staff-cards/${id}`, { method: 'PATCH', data });
 }
 
+export async function setStaffPublicCardVisibility(id: number, publicVisible: boolean) {
+    return request(`${API_BASE}/member/engagement/staff-cards/${id}/visibility`, { method: 'PATCH', data: { publicVisible } });
+}
+
 export async function getMyStaffPublicCard() {
     return request(`${API_BASE}/member/engagement/staff-card/me`, { method: 'GET' });
 }
@@ -456,7 +460,7 @@ export async function deleteUserMemberGameCard(id: number, cardId: number): Prom
 
 export async function exitStaffShop(
     id: number,
-    data: { mode: 'RELEASE_TO_AVAILABLE' | 'CLEAR_ALL'; addToBlacklist?: boolean },
+    data: { mode: 'RELEASE_TO_AVAILABLE' | 'CLEAR_ALL'; addToBlacklist?: boolean; remark?: string },
 ) {
     return request(`${API_BASE}/users/${id}/staff-exit`, {
         method: 'POST',
