@@ -123,6 +123,227 @@ body.bc-mobile-fullscreen .bc-icp-footer {
   backdrop-filter: blur(8px);
 }
 
+.bc-order-create-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.bc-order-create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+.bc-payment-preview-panel {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+}
+
+.bc-order-create-side-placeholder {
+  min-height: 1px;
+}
+
+.bc-order-liability-panel {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 20px;
+  border: 1px solid #ffccc7;
+  border-radius: 18px;
+  background: #fff7f6;
+}
+
+.bc-order-liability-panel.is-paid {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+}
+
+.bc-order-liability-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: #fff;
+  background: #ff4d4f;
+  font-size: 17px;
+  font-weight: 800;
+  place-items: center;
+}
+
+.bc-order-liability-panel.is-paid .bc-order-liability-icon {
+  background: #52c41a;
+  font-size: 24px;
+}
+
+.bc-order-liability-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.bc-order-liability-amount {
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #7f1d1d;
+  background: #fff1f0;
+}
+
+.bc-order-liability-amount strong {
+  float: right;
+  font-size: 18px;
+}
+
+.bc-payment-preview-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bc-payment-ticket {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 16px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.bc-payment-ticket-expiry {
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #ad6800;
+  background: #fff7e6;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.bc-payment-ticket-brand {
+  color: #1677ff;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.bc-payment-ticket-subtitle {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.bc-payment-ticket-info {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 5px 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 12px;
+}
+
+.bc-payment-ticket-info strong {
+  overflow: hidden;
+  color: #1f2937;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bc-payment-ticket-amount {
+  color: #1677ff;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.bc-payment-ticket-capture {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 320px;
+  pointer-events: none;
+}
+
+.bc-payment-ticket-capture .bc-payment-ticket {
+  width: 320px;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+.bc-payment-ticket-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  cursor: context-menu;
+}
+
+.bc-payment-ticket-notice {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #475569;
+  background: #eff6ff;
+  font-size: 12px;
+  line-height: 1.65;
+  text-align: left;
+}
+
+.bc-payment-ticket-scan,
+.bc-payment-ticket-rendering {
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+}
+
+.bc-payment-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 30px 16px;
+  color: #64748b;
+  text-align: center;
+}
+
+.bc-payment-preview-empty.error {
+  color: #b42318;
+}
+
+.bc-payment-preview-placeholder {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  border: 2px dashed #91caff;
+  border-radius: 20px;
+  color: #1677ff;
+  background: #e6f4ff;
+  font-size: 40px;
+  font-weight: 800;
+  place-items: center;
+}
+
 .bc-admin-form-summary-card {
   min-width: 0;
   padding: 12px 14px;
@@ -182,6 +403,63 @@ body.bc-mobile-fullscreen .bc-icp-footer {
 
 .bc-admin-form-summary-card.info .bc-admin-form-summary-value {
   color: #1677ff;
+}
+
+.bc-order-create-summary {
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.bc-order-create-summary .bc-admin-form-summary-card {
+  padding: 9px 12px;
+}
+
+.bc-order-payment-channel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+
+.bc-order-payment-channel .ant-radio-button-wrapper {
+  padding-inline: 8px;
+  text-align: center;
+}
+
+.bc-order-payment-channel .bc-order-payment-manual:not(.ant-radio-button-wrapper-checked) {
+  border-color: #d9d9d9;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.bc-order-payment-channel .bc-order-payment-manual:not(.ant-radio-button-wrapper-checked)::before {
+  background-color: #d9d9d9;
+}
+
+.bc-order-manual-channel-note {
+  margin: -8px 0 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #92400e;
+  background: #fffbeb;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.bc-order-settlement-adjust {
+  margin-top: -4px;
+  border: 1px dashed #d9e3f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.bc-order-attribution-hint {
+  margin-top: -2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #0958d9;
+  background: #e6f4ff;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .bc-admin-form-section {
@@ -249,6 +527,31 @@ body.bc-mobile-fullscreen .bc-icp-footer {
     max-width: calc(100vw - 16px);
   }
 
+  .bc-order-create-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .bc-order-create-side-placeholder {
+    display: none;
+  }
+
+  .bc-order-liability-panel {
+    position: static;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .bc-payment-preview-panel {
+    position: static;
+    padding: 12px;
+  }
+
+  .bc-payment-ticket {
+    padding-top: 14px;
+  }
+
   .bc-order-upsert-modal .ant-modal-content {
     max-height: calc(100vh - 16px);
     padding: 16px 16px 0;
@@ -283,6 +586,32 @@ body.bc-mobile-fullscreen .bc-icp-footer {
     padding-bottom: 8px;
     overflow-x: auto;
     scrollbar-width: none;
+  }
+
+  .bc-order-create-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+
+  .bc-order-upsert-modal {
+    width: calc(100vw - 12px) !important;
+  }
+
+  .bc-order-upsert-modal .ant-modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 8px;
+    margin-inline: -4px;
+    padding: 10px 4px 12px;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .bc-order-upsert-modal .ant-modal-footer .ant-btn {
+    width: 100%;
+    margin-inline-start: 0 !important;
   }
 
   .bc-admin-form-summary::-webkit-scrollbar {
@@ -569,6 +898,23 @@ body.bc-mobile-fullscreen .ant-pro-layout-content {
 /* 保险：侧栏区域不允许溢出到外面 */
 .ant-pro-sider {
   overflow: hidden;
+  isolation: isolate;
+  background: #fff !important;
+}
+
+.ant-pro-sider .ant-layout-sider-children,
+.ant-pro-sider .ant-pro-sider-logo,
+.ant-pro-sider .ant-pro-sider-menu,
+.ant-pro-sider .ant-menu,
+.ant-pro-sider .ant-pro-sider-footer {
+  background: #fff !important;
+}
+
+/* 冻结列必须使用实色背景，否则横向滚动时会透出底层单元格。 */
+.ant-table-wrapper .ant-table-cell-fix-right,
+.ant-table-wrapper .ant-table-cell-fix-right-first,
+.ant-table-wrapper .ant-table-cell-fix-right-last {
+  background: #fff !important;
 }
 
 .ant-pro-sider-collapsed .ant-pro-sider-footer {
@@ -576,6 +922,17 @@ body.bc-mobile-fullscreen .ant-pro-layout-content {
 }
 /* ✅ 修复 ProComponents Login 容器在移动端产生的横向溢出 */
 @media (max-width: 767px) {
+  .ant-pro-sider,
+  .ant-pro-sider .ant-layout-sider-children,
+  .ant-pro-sider .ant-menu {
+    background: #fff !important;
+  }
+
+  .ant-pro-sider {
+    z-index: 1001 !important;
+    box-shadow: 8px 0 24px rgba(15, 23, 42, 0.16);
+  }
+
   .bc-login,
   .bc-login * {
     box-sizing: border-box;

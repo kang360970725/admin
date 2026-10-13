@@ -3,11 +3,13 @@ import {useModel, useNavigate} from '@umijs/max';
 import {Button, Card, Checkbox, Col, Collapse, DatePicker, Form, Input, InputNumber, List, message, Modal, Pagination, Row, Select, Space, Tag, Tooltip, Typography} from 'antd';
 import {
     createOrder,
+    createShouqianbaPaymentRequest,
     deleteOrder,
     getOrderSourceOptions,
     getOrders,
     markOrderPaid,
     postFinanceReconciliation,
+    updateOrder,
 } from '@/services/api';
 import OrderUpsertModal from './components/OrderForm';
 import {PageContainer, ProTable, type ActionType} from '@ant-design/pro-components';
@@ -22,6 +24,8 @@ import { maskedCustomerGameId } from '@/utils/orderCustomerPrivacy';
  * - 其余保持原样，不动你的历史状态（最小改动）
  */
 const statusText: Record<string, { text: string; color?: string }> = {
+    DRAFT: {text: '订单草稿', color: 'default'},
+    WAIT_PAYMENT: {text: '待在线支付', color: 'processing'},
     WAIT_ASSIGN: {text: '待派单', color: 'default'},
     WAIT_ACCEPT: {text: '待接单', color: 'orange'},
     ACCEPTED: {text: '已接单', color: 'blue'},
@@ -45,6 +49,7 @@ const OrdersPage: React.FC = () => {
     const navigate = useNavigate();
     const isMobile = useIsMobile(768);
     const [createOpen, setCreateOpen] = useState(false);
+    const [createdPayment, setCreatedPayment] = useState<any>(null);
     const [todayOverview, setTodayOverview] = useState<any>(null);
     const [overviewLoading, setOverviewLoading] = useState(false);
     const [consumptionSummary, setConsumptionSummary] = useState<any>(null);
@@ -204,11 +209,22 @@ const OrdersPage: React.FC = () => {
         const original = String(row?.customerOriginalIdentifier || '').trim();
         if (type === 'ALIAS') {
             return (
-                <Space size={4} wrap>
-                    <Tag color="gold">昵称/房间号</Tag>
-                    <span>{original || '-'}</span>
-                    {row?.customerGameId ? <Tag color="green">已补ID</Tag> : <Tag color="warning">待补ID</Tag>}
-                </Space>
+                <div style={{ minWidth: 150, lineHeight: 1.5 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                        <Tag color="gold" style={{ flexShrink: 0, marginInlineEnd: 0 }}>昵称/房间号</Tag>
+                        <Tooltip title={original || undefined}>
+                            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {original || '-'}
+                            </span>
+                        </Tooltip>
+                    </div>
+                    <Tag
+                        color={row?.customerGameId ? 'green' : 'warning'}
+                        style={{ marginTop: 5, marginInlineEnd: 0 }}
+                    >
+                        {row?.customerGameId ? '已补ID' : '待补ID'}
+                    </Tag>
+                </div>
             );
         }
         return renderCustomerGameId(row);
@@ -291,7 +307,8 @@ const OrdersPage: React.FC = () => {
                             </div>
                             <Space size={4} wrap style={{ justifyContent: 'flex-end' }}>
                                 <Tag color={s.color}>{s.text}</Tag>
-                                {row?.isGifted ? <Tag>赠送</Tag> : row?.isPaid === false ? <Tag color="red">未收款</Tag> : <Tag color="green">已收款</Tag>}
+                                {row?.isGifted ? <Tag>赠送</Tag> : row?.isPaid === false ? <Tag color="red">未收款·责任客服催收中</Tag> : <Tag color="green">已收款</Tag>}
+                                {row?.unpaidAutoDeductedAt ? <Tag color="volcano">客服余额代扣</Tag> : null}
                             </Space>
                         </Space>
 
@@ -444,7 +461,7 @@ const OrdersPage: React.FC = () => {
         {
             title: '客户标识',
             dataIndex: 'customerGameId',
-            ellipsis: true,
+            width: 210,
             hideInTable: isMobile,
             render: (_: any, row: any) => {
                 if (String(row?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS') {
@@ -505,41 +522,32 @@ const OrdersPage: React.FC = () => {
         {
             title: '操作',
             valueType: 'option',
-            width: 260,
+            width: 160,
+            fixed: 'right',
+            align: 'center',
             render: (_: any, row: any) => {
-                // ✅ 列表快捷“确认收款”：排除赠送单 + 未收款
-                const canQuickMarkPaid = !row?.isGifted && row?.isPaid === false;
-
-                return [
-                    // <a key="detail" onClick={() => navigate(`/orders/${row.id}`)}>
-                    <a
+                const canDelete = hasOrderPermission('orders:list:delete:button')
+                    && String(row?.status).toUpperCase() === 'REFUNDED';
+                return (
+                    <Space size={6} wrap={false}>
+                    <Button
+                        size="small"
                         href={`/orders/${row.id}`}
                         target="_blank"
-                        rel="noopener noreferrer"
                     >
                         详情
-                    </a>,
-                    hasOrderPermission('orders:list:delete:button') && String(row?.status).toUpperCase() === 'REFUNDED' ? (
-                        <a
-                            key="delete"
-                            style={{ color: '#ff4d4f' }}
+                    </Button>
+                    {canDelete ? (
+                        <Button
+                            size="small"
+                            danger
                             onClick={() => confirmDeleteOrder(row)}
                         >
                             删除
-                        </a>
-                    ) : null,
-
-
-                    // canQuickMarkPaid ? (
-                    //     <a
-                    //         key="markPaid"
-                    //         style={{ color: '#1677ff', fontWeight: 500 }}
-                    //         onClick={() => openMarkPaidModal(row)}
-                    //     >
-                    //         确认收款
-                    //     </a>
-                    // ) : null,
-                ].filter(Boolean);
+                        </Button>
+                    ) : null}
+                    </Space>
+                );
             },
         },
     ];
@@ -550,7 +558,18 @@ const OrdersPage: React.FC = () => {
             <style>
                 {`
                 .orders-row-unpaid td{
-                    background: rgba(255, 77, 79, 0.08) !important;
+                    background: #fff2f0 !important;
+                }
+                .orders-row-unpaid:hover td{
+                    background: #ffe7e5 !important;
+                }
+                .orders-row-unpaid .ant-table-cell-fix-right,
+                .orders-row-unpaid .ant-table-cell-fix-right-first{
+                    background: #fff2f0 !important;
+                }
+                .orders-row-unpaid:hover .ant-table-cell-fix-right,
+                .orders-row-unpaid:hover .ant-table-cell-fix-right-first{
+                    background: #ffe7e5 !important;
                 }
                 `}
             </style>
@@ -739,7 +758,7 @@ const OrdersPage: React.FC = () => {
                                 <Space>
                                     <Button onClick={() => void loadMobileOrders(1, mobileFilters)}>筛选</Button>
                                     {hasOrderPermission('orders:list:create:button') ? (
-                                        <Button type="primary" onClick={() => setCreateOpen(true)}>
+                                        <Button type="primary" onClick={() => { setCreatedPayment(null); setCreateOpen(true); }}>
                                             新建
                                         </Button>
                                     ) : null}
@@ -781,11 +800,11 @@ const OrdersPage: React.FC = () => {
                     pageSizeOptions: [10, 20, 50, 100],
                     simple: isMobile,
                 }}
-                scroll={isMobile ? { x: 760 } : undefined}
+                scroll={{ x: 1600 }}
                 toolbar={{
                     actions: [
                         hasOrderPermission('orders:list:create:button') ? (
-                            <Button key="new" type="primary" onClick={() => setCreateOpen(true)} style={isMobile ? {width: '100%'} : undefined}>
+                            <Button key="new" type="primary" onClick={() => { setCreatedPayment(null); setCreateOpen(true); }} style={isMobile ? {width: '100%'} : undefined}>
                                 新建订单
                             </Button>
                         ) : null,
@@ -849,14 +868,24 @@ const OrdersPage: React.FC = () => {
                 open={createOpen}
                 title="创建订单"
                 showPlayers
-                onCancel={() => setCreateOpen(false)}
+                paymentResult={createdPayment}
+                onViewCreatedOrder={(orderId) => {
+                    setCreateOpen(false);
+                    setCreatedPayment(null);
+                    if (orderId) navigate(`/orders/${orderId}`);
+                }}
+                onCancel={() => {
+                    setCreateOpen(false);
+                    setCreatedPayment(null);
+                }}
                 onSubmit={async (payload) => {
-                    const created = await createOrder({
+                    const orderPayload = {
                         source: 'LIST',
                         projectId: payload?.projectId,
                         receivableAmount: payload?.receivableAmount,
                         paidAmount: payload?.paidAmount,
                         settlementAmount: payload?.settlementAmount,
+                        orderQuantity: payload?.orderQuantity,
                         baseAmountWan: payload?.baseAmountWan ?? undefined,
                         customerIdentifierType: payload?.customerIdentifierType,
                         customerOriginalIdentifier: payload?.customerOriginalIdentifier,
@@ -872,7 +901,7 @@ const OrdersPage: React.FC = () => {
                         customClubRate: payload?.customClubRate,
                         remark: payload?.remark,
                         isGifted: Boolean(payload?.isGifted),
-                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : undefined,
+                        userCouponId: payload?.userCouponId != null ? Number(payload.userCouponId) : (createdPayment?.orderId ? null : undefined),
                         manualAdjustAmount: payload?.manualAdjustAmount != null ? Number(payload.manualAdjustAmount) : undefined,
                         playerIds: payload?.playerIds,
                         isRenewal: Boolean(payload?.isRenewal),
@@ -882,10 +911,47 @@ const OrdersPage: React.FC = () => {
 
                         // ✅ 是否已收款（不再由 paymentTime 推断）
                         isPaid: Boolean(payload?.isPaid),
-                    });
+                    };
+                    const existingOrderId = Number(createdPayment?.orderId || 0);
+                    const created = existingOrderId
+                        ? await updateOrder({ id: existingOrderId, ...orderPayload })
+                        : await createOrder(orderPayload);
 
-                    const orderId = Number((created as any)?.id ?? (created as any)?.data?.id);
+                    const orderId = existingOrderId || Number((created as any)?.id ?? (created as any)?.data?.id);
                     if (!orderId) throw new Error('创建订单失败：未返回订单ID');
+
+                    if (String(payload?.paymentChannel || '').toUpperCase() === 'SHOUQIANBA') {
+                        try {
+                            const payment: any = await createShouqianbaPaymentRequest({
+                                orderId,
+                                amount: Number(
+                                    existingOrderId
+                                        ? ((created as any)?.finalPayableAmount ?? (created as any)?.paidAmount)
+                                        : (payload?.paidAmount || payload?.receivableAmount || 0),
+                                ),
+                                purpose: 'ORDER',
+                            });
+                            setCreatedPayment({
+                                ...payment,
+                                orderId,
+                                amount: Number(payment?.amount ?? payload?.paidAmount ?? payload?.receivableAmount ?? 0),
+                                autoSerial: (created as any)?.autoSerial ?? (created as any)?.data?.autoSerial,
+                                projectName: payload?.projectName,
+                                customerIdentifier: payload?.customerOriginalIdentifier || payload?.customerGameId,
+                            });
+                            message.success(existingOrderId ? '订单信息及付款码已更新，旧码已失效' : '订单已创建，收款码已生成');
+                        } catch (error: any) {
+                            setCreatedPayment({
+                                orderId,
+                                amount: Number(payload?.paidAmount || payload?.receivableAmount || 0),
+                                error: error?.response?.data?.message || error?.message || '收款码生成失败',
+                            });
+                            message.warning('订单已创建，但收款码生成失败，可进入订单详情重试');
+                        }
+                        actionRef.current?.reload?.();
+                        if (isMobile) void loadMobileOrders(1, mobileFilters);
+                        return;
+                    }
 
                     message.success('创建成功');
                     setCreateOpen(false);

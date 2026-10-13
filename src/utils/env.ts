@@ -16,7 +16,7 @@ export const isProd = (): boolean => getEnv() === 'production';
 
 // 获取 API 基础地址
 export const getApiBase = (): string => {
-    return process.env.API_BASE || 'http://localhost:3000';
+    return process.env.API_BASE || 'http://127.0.0.1:3000';
 };
 
 // 获取应用名称

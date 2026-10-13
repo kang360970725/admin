@@ -11,6 +11,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Col,
     Collapse,
+    Alert,
     DatePicker,
     Form,
     Input,
@@ -27,9 +28,12 @@ import {
     Tag,
     Space,
     AutoComplete,
+    QRCode,
+    Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import { getGameProjectOptions, getMemberOrderContext, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
+import html2canvas from 'html2canvas';
+import { getGameProjectOptions, getMemberOrderContext, getOrderDetail, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import { maskPhone } from '@/utils/privacy';
 
@@ -226,14 +230,21 @@ export default function OrderUpsertModal(props: {
     showPlayers?: boolean; // ✅ 新建用：选择打手并派单
     onCancel: () => void;
     onSubmit: (payload: OrderUpsertValues) => Promise<void>;
+    paymentResult?: any;
+    onViewCreatedOrder?: (orderId: number) => void;
 }) {
-    const { open, title, initialValues, showPlayers, onCancel, onSubmit } = props;
+    const { open, title, initialValues, showPlayers, onCancel, onSubmit, paymentResult, onViewCreatedOrder } = props;
     const receiptLocked = Boolean(initialValues?.id && initialValues?.isPaid);
 
     const [form] = Form.useForm<OrderUpsertValues>();
     const isMobile = useIsMobile(768);
 
     const [submitting, setSubmitting] = useState(false);
+    const paymentTicketRef = useRef<HTMLDivElement | null>(null);
+    const [paymentTicketImage, setPaymentTicketImage] = useState('');
+    const [paymentClock, setPaymentClock] = useState(() => Date.now());
+    const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+    const [generatedPaymentSignature, setGeneratedPaymentSignature] = useState('');
 
     // 项目下拉
     const [projectLoading, setProjectLoading] = useState(false);
@@ -557,7 +568,7 @@ export default function OrderUpsertModal(props: {
         form?.setFieldsValue?.({
             ...initialValues,
             orderTime: initialValues?.orderTime ? dayjs(initialValues.orderTime) : now,
-            paymentTime: initialValues?.paymentTime ? dayjs(initialValues.paymentTime) : now,
+            paymentTime: initialValues?.paymentTime ? dayjs(initialValues.paymentTime) : undefined,
             orderQuantity:
                 initialValues?.orderQuantity != null
                     ? Number(initialValues.orderQuantity)
@@ -568,10 +579,10 @@ export default function OrderUpsertModal(props: {
             isDesignated: Boolean(initialValues?.isDesignated ?? false),
             designatedPlayerIds: Array.isArray(initialValues?.designatedPlayerIds) ? initialValues?.designatedPlayerIds : [],
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
-            paymentChannel: initialValues?.paymentChannel || 'MANUAL',
-            isPaid: String(initialValues?.paymentChannel || '').trim().toUpperCase() === 'BALANCE'
+            paymentChannel: initialValues?.paymentChannel || 'SHOUQIANBA',
+            isPaid: String(initialValues?.paymentChannel || 'SHOUQIANBA').trim().toUpperCase() === 'BALANCE'
                 ? true
-                : Boolean(initialValues?.isPaid ?? true),
+                : Boolean(initialValues?.isPaid ?? false),
             settlementAmount:
                 initialValues?.settlementAmount != null
                     ? Number(initialValues.settlementAmount)
@@ -663,15 +674,52 @@ export default function OrderUpsertModal(props: {
             autoSelectedCardRef.current = '';
             void fetchMemberCoupons(Number(changed.customerUserId));
         } else if (changed?.customerUserId !== undefined) {
-            form?.setFieldsValue?.({ userCouponId: undefined } as any);
+            memberContextRequestRef.current += 1;
+            setMemberOrderContext(null);
+            form?.setFieldsValue?.({
+                userCouponId: undefined,
+                paymentChannel: 'SHOUQIANBA',
+                isPaid: false,
+                paymentTime: undefined,
+                manualAdjustAmount: 0,
+            } as any);
             setCouponOptions([]);
             setCouponMetaMap({});
-            setMemberOrderContext(null);
             autoSelectedCardRef.current = '';
+            const projectId = Number(form?.getFieldValue?.('projectId') || 0);
+            const project = projectMap?.[projectId];
+            if (project) {
+                const quantity = String(project?.billingMode || '') === 'HOURLY'
+                    ? Math.max(1, Number(form?.getFieldValue?.('orderQuantity') || 1))
+                    : 1;
+                const originalAmount = toMoney(Number(project?.price || 0) * quantity);
+                form?.setFieldsValue?.({
+                    receivableAmount: originalAmount,
+                    paidAmount: originalAmount,
+                    settlementAmount: originalAmount,
+                } as any);
+            }
         }
 
         if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'BALANCE') {
             form?.setFieldValue?.('isPaid' as any, true);
+        }
+        if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'MANUAL') {
+            form?.setFieldsValue?.({
+                isPaid: false,
+                paymentTime: undefined,
+            } as any);
+        }
+        if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'SHOUQIANBA') {
+            form?.setFieldsValue?.({
+                isPaid: false,
+                paymentTime: undefined,
+                bonusAttributionType: 'NONE',
+                isRenewal: false,
+                renewalPlayerIds: [],
+                isDesignated: false,
+                designatedPlayerIds: [],
+            } as any);
         }
 
         if (showPlayers && Array.isArray(changed?.playerIds) && changed.playerIds.length > MAX_PLAYERS) {
@@ -841,7 +889,11 @@ export default function OrderUpsertModal(props: {
                 paymentChannel: paymentChannel || undefined,
 
                 orderTime: v?.orderTime ? dayjs(v.orderTime).toISOString() : now.toISOString(),
-                paymentTime: receiptLocked ? initialValues?.paymentTime : (v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString()),
+                paymentTime: receiptLocked
+                    ? initialValues?.paymentTime
+                    : (paymentChannel === 'MANUAL' && isPaid
+                        ? (v?.paymentTime ? dayjs(v.paymentTime).toISOString() : now.toISOString())
+                        : undefined),
 
                 inviter: (isRenewal || isDesignated) ? undefined : (v?.inviter?.trim?.() || undefined),
 
@@ -884,7 +936,7 @@ export default function OrderUpsertModal(props: {
 
     // ---------- UI：默认 2 列（你当前 UI 改动） ----------
     // 2列：lg=12；要 3 列把 lg 改 8
-    const compactColProps = { xs: 12, sm: 12, md: 12, lg: 12 };
+    const compactColProps = { xs: 24, sm: 12, md: 12, lg: 12 };
     const fullColProps = { xs: 24, sm: 24, md: 24, lg: 24 };
 
     const watchedProjectId = Form.useWatch('projectId', form);
@@ -902,11 +954,133 @@ export default function OrderUpsertModal(props: {
     const watchedIsRenewal = watchedAttributionType === 'RENEWAL' || watchedLegacyIsRenewal;
     const watchedIsDesignated = watchedAttributionType === 'DESIGNATED' || watchedLegacyIsDesignated;
     const watchedCustomerUserId = Number(Form.useWatch('customerUserId', form) ?? 0);
+    const watchedCustomerGameId = String(Form.useWatch('customerGameId', form) || '').trim();
+    const watchedProjectName = String(Form.useWatch('projectName', form) || '').trim();
     const watchedPaymentChannel = String(Form.useWatch('paymentChannel', form) || '').trim().toUpperCase();
     const watchedReceivableAmount = Number(Form.useWatch('receivableAmount', form) || 0);
     const watchedPaidAmount = Number(Form.useWatch('paidAmount', form) || 0);
     const watchedSettlementAmount = Number(Form.useWatch('settlementAmount', form) || 0);
+    const watchedBaseAmountWan = Number(Form.useWatch('baseAmountWan', form) || 0);
     const watchedUserCouponId = Number(Form.useWatch('userCouponId', form) || 0);
+    const watchedOrderQuantity = Number(Form.useWatch('orderQuantity', form) || 1);
+    const watchedCustomerOriginalIdentifier = String(Form.useWatch('customerOriginalIdentifier', form) || '').trim();
+    const watchedManualAdjustAmount = Number(Form.useWatch('manualAdjustAmount', form) || 0);
+    const currentPaymentSignature = JSON.stringify({
+        projectId: curProjectId,
+        orderQuantity: watchedOrderQuantity,
+        receivableAmount: toMoney(watchedReceivableAmount),
+        paidAmount: toMoney(watchedPaidAmount),
+        settlementAmount: toMoney(watchedSettlementAmount),
+        customerUserId: watchedCustomerUserId,
+        customerGameId: watchedCustomerGameId,
+        customerOriginalIdentifier: watchedCustomerOriginalIdentifier,
+        userCouponId: watchedUserCouponId,
+        manualAdjustAmount: toMoney(watchedManualAdjustAmount),
+    });
+    const paymentCodeStale = Boolean(paymentResult?.paymentId && generatedPaymentSignature && generatedPaymentSignature !== currentPaymentSignature);
+    const paymentCodeExpired = Boolean(
+        paymentResult?.expiresAt
+        && new Date(paymentResult.expiresAt).getTime() <= paymentClock,
+    );
+    const paymentCodeInvalid = paymentCodeStale || paymentCodeExpired;
+    const paymentExpiryLabel = paymentResult?.expiresAt
+        ? dayjs(paymentResult.expiresAt).format('HH:mm')
+        : '';
+
+    useEffect(() => {
+        if (!paymentResult?.paymentId || !paymentResult?.expiresAt) return undefined;
+        setPaymentClock(Date.now());
+        const timer = window.setInterval(() => setPaymentClock(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [paymentResult?.paymentId, paymentResult?.expiresAt]);
+
+    useEffect(() => {
+        const orderId = Number(paymentResult?.orderId || 0);
+        if (!open || !orderId || !paymentResult?.paymentId) {
+            setPaymentConfirmed(false);
+            return undefined;
+        }
+        let cancelled = false;
+        let timer: number | undefined;
+        const checkPaid = async () => {
+            try {
+                const detail: any = await getOrderDetail(orderId);
+                if (cancelled) return;
+                const paid = detail?.isPaid === true || String(detail?.payStatus || '').toUpperCase() === 'SUCCESS';
+                setPaymentConfirmed(paid);
+                if (!paid) timer = window.setTimeout(checkPaid, 3000);
+            } catch {
+                if (!cancelled) timer = window.setTimeout(checkPaid, 5000);
+            }
+        };
+        void checkPaid();
+        return () => {
+            cancelled = true;
+            if (timer) window.clearTimeout(timer);
+        };
+    }, [open, paymentResult?.orderId, paymentResult?.paymentId]);
+
+    useEffect(() => {
+        if (paymentResult?.paymentId) setGeneratedPaymentSignature(currentPaymentSignature);
+        else setGeneratedPaymentSignature('');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paymentResult?.paymentId]);
+
+    useEffect(() => {
+        const hasCode = Boolean(paymentResult?.paymentUrl || paymentResult?.qrCodeContent);
+        if (!hasCode) {
+            setPaymentTicketImage('');
+            return;
+        }
+        let cancelled = false;
+        const timer = window.setTimeout(async () => {
+            if (!paymentTicketRef.current) return;
+            try {
+                const canvas = await html2canvas(paymentTicketRef.current, {
+                    backgroundColor: '#ffffff',
+                    scale: 2,
+                    useCORS: true,
+                });
+                if (!cancelled) setPaymentTicketImage(canvas.toDataURL('image/png'));
+            } catch {
+                if (!cancelled) setPaymentTicketImage('');
+            }
+        }, 120);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [paymentResult, watchedProjectName, watchedCustomerGameId, watchedPaidAmount]);
+
+    const confirmAndSubmitOrder = () => {
+        const isOnline = watchedPaymentChannel === 'SHOUQIANBA';
+        const isBalance = watchedPaymentChannel === 'BALANCE';
+        const actionTitle = isOnline
+            ? (paymentResult?.orderId ? '核对修改并重新生成付款码' : '核对订单并生成付款码')
+            : (isBalance ? '核对并确认会员储值支付' : '核对并创建线下订单');
+        Modal.confirm({
+            title: actionTitle,
+            content: (
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <Typography.Text>项目：{watchedProjectName || '-'}</Typography.Text>
+                    <Typography.Text>客户：{watchedCustomerGameId || watchedCustomerOriginalIdentifier || '未填写'}</Typography.Text>
+                    <Typography.Text strong>本次收款：¥{watchedPaidAmount.toFixed(2)}</Typography.Text>
+                    <Typography.Text type="secondary">
+                        {isOnline
+                            ? (paymentResult?.orderId ? '确认后将更新原订单并撤销旧付款码，不会重复创建订单。' : '确认后先保存订单草稿，再向收钱吧创建预支付请求；成功后进入待支付。')
+                            : (isBalance
+                                ? '确认后将预占会员储值余额；预占成功后订单进入待派单。'
+                                : (watchedIsPaid ? '确认后将按线下已收款创建订单，并进入待派单。' : '该订单将以“未收款”进入派单流程，派单客服承担催收及超时扣款责任。'))}
+                    </Typography.Text>
+                </Space>
+            ),
+            okText: isOnline
+                ? (paymentResult?.orderId ? '更新并重新生成' : '确认并生成')
+                : (isBalance ? '确认预占并创建' : '确认创建'),
+            cancelText: '返回核对',
+            onOk: async () => handleOk(),
+        });
+    };
     const selectedMember = watchedCustomerUserId > 0 ? memberMetaMap?.[watchedCustomerUserId] : null;
     const selectedCoupon = watchedUserCouponId > 0 ? couponMetaMap?.[watchedUserCouponId] : null;
     const selectedProject = curProjectId > 0 ? projectMap?.[curProjectId] : null;
@@ -1023,36 +1197,30 @@ export default function OrderUpsertModal(props: {
             open={open}
             title={title}
             onCancel={onCancel}
-            onOk={handleOk}
+            onOk={confirmAndSubmitOrder}
             confirmLoading={submitting}
             destroyOnClose
             rootClassName="bc-order-upsert-modal-root"
             className="bc-order-upsert-modal"
-            width={isMobile ? '96vw' : 700}
+            width={isMobile ? '96vw' : 1080}
             style={{ top: isMobile ? 8 : 24 }}
             okText="保存"
             cancelText="取消"
+            footer={watchedPaymentChannel === 'SHOUQIANBA' ? null : undefined}
             okButtonProps={{
                 disabled: balanceInsufficient,
             }}
         >
-            <Form form={form} layout="vertical" onValuesChange={onValuesChange} className="bc-admin-form">
-                <div className="bc-admin-form-summary">
+            <div className="bc-order-create-layout">
+            <Form form={form} layout="vertical" onValuesChange={onValuesChange} className="bc-admin-form bc-order-create-form">
+                <div className="bc-admin-form-summary bc-order-create-summary">
                     <div className="bc-admin-form-summary-card info">
                         <div className="bc-admin-form-summary-label">应收金额</div>
                         <div className="bc-admin-form-summary-value">¥{watchedReceivableAmount.toFixed(2)}</div>
                     </div>
-                    <div className="bc-admin-form-summary-card info">
-                        <div className="bc-admin-form-summary-label">实收金额</div>
-                        <div className="bc-admin-form-summary-value">¥{watchedPaidAmount.toFixed(2)}</div>
-                    </div>
                     <div className="bc-admin-form-summary-card warning">
                         <div className="bc-admin-form-summary-label">优惠抵扣</div>
                         <div className="bc-admin-form-summary-value">¥{totalDiscountPreview.toFixed(2)}</div>
-                    </div>
-                    <div className="bc-admin-form-summary-card info">
-                        <div className="bc-admin-form-summary-label">结算金额</div>
-                        <div className="bc-admin-form-summary-value">¥{watchedSettlementAmount.toFixed(2)}</div>
                     </div>
                     <div className={`bc-admin-form-summary-card ${watchedIsPaid ? 'success' : 'danger'}`}>
                         <div className="bc-admin-form-summary-label">收款状态</div>
@@ -1060,20 +1228,32 @@ export default function OrderUpsertModal(props: {
                     </div>
                 </div>
                 {/* 1) 订单核心 */}
-                <div className="bc-admin-form-section-title">订单信息</div>
+                <div className="bc-admin-form-section-title">① 客户与收款</div>
 
                 <Row gutter={[16, 12]}>
                     <Col {...compactColProps}>
                         <Form.Item name="paymentChannel" label="收款方式">
-                            <Select
-                                placeholder="默认线下收款"
-                                allowClear={false}
-                                options={[
-                                    { label: '线下收款', value: 'MANUAL' },
-                                    { label: '会员储值', value: 'BALANCE' },
-                                ]}
-                            />
+                            <Radio.Group
+                                className="bc-order-payment-channel"
+                                optionType="button"
+                                buttonStyle="solid"
+                                disabled={Boolean(paymentResult?.orderId)}
+                            >
+                                <Radio.Button value="SHOUQIANBA">在线收款</Radio.Button>
+                                <Radio.Button value="BALANCE">会员储值</Radio.Button>
+                                <Radio.Button value="MANUAL" className="bc-order-payment-manual">特殊线下</Radio.Button>
+                            </Radio.Group>
                         </Form.Item>
+                        {watchedPaymentChannel === 'MANUAL' ? (
+                            <div className="bc-order-manual-channel-note">
+                                仅用于客户已转账、现金收款、在线支付失败/限额或历史订单补录。
+                            </div>
+                        ) : null}
+                        {paymentResult?.orderId ? (
+                            <div style={{ marginTop: -8, marginBottom: 8, color: '#64748b', fontSize: 12 }}>
+                                草稿已建立，收款方式已锁定；如需更换渠道，请关闭后作废该草稿并重新创建。
+                            </div>
+                        ) : null}
                     </Col>
                     <Col {...compactColProps}>
                         <Form.Item name="orderSource" label="订单渠道来源" rules={[{ required: true, message: '请选择订单渠道来源' }]}>
@@ -1093,6 +1273,7 @@ export default function OrderUpsertModal(props: {
                                 onSearch={(v) => fetchMembers(v)}
                                 options={memberOptions}
                                 loading={memberLoading}
+                                disabled={Boolean(paymentResult?.orderId)}
                                 allowClear
                             />
                         </Form.Item>
@@ -1110,7 +1291,7 @@ export default function OrderUpsertModal(props: {
                             />
                         </Form.Item>
                     </Col>
-                    <Col {...fullColProps}>
+                    {watchedCustomerUserId > 0 ? <Col {...fullColProps}>
                         <Form.Item name="userCouponId" label="使用优惠券">
                             <Select
                                 placeholder={
@@ -1135,7 +1316,7 @@ export default function OrderUpsertModal(props: {
                                     : (couponLoading ? '正在加载会员优惠券…' : '该会员暂无当前项目可用优惠券。')}
                             </div>
                         ) : null}
-                    </Col>
+                    </Col> : null}
 
                     {/* ✅ 小时单才展示“下单小时(数量)” */}
                     {showQtyForHourly ? (
@@ -1148,11 +1329,7 @@ export default function OrderUpsertModal(props: {
                                 <InputNumber min={1} max={24} step={1} style={{ width: '100%' }} placeholder="例如：1 / 2 / 3 ..." />
                             </Form.Item>
                         </Col>
-                    ) : <Col {...compactColProps}>
-                        <Form.Item name="baseAmountWan" label="订单保底(万)">
-                            <InputNumber min={0} style={{ width: '100%' }} placeholder="随项目自动同步，可手改" />
-                        </Form.Item>
-                    </Col>}
+                    ) : null}
 
                     <Col {...compactColProps}>
                         <Form.Item name="receivableAmount" label="应收金额" rules={[{ required: true, message: '请输入应收金额' }]}>
@@ -1181,15 +1358,39 @@ export default function OrderUpsertModal(props: {
                         ) : null}
                     </Col>
 
-                    <Col {...compactColProps}>
-                        <Form.Item name="settlementAmount" label="结算金额" rules={[{ required: true, message: '请输入结算金额' }]}>
-                            <InputNumber
-                                min={0}
-                                style={{ width: '100%' }}
-                                disabled={memberDiscountActive}
-                                placeholder="默认跟实收金额一致"
-                            />
-                        </Form.Item>
+                    <Col {...fullColProps}>
+                        <Collapse
+                            ghost
+                            size="small"
+                            className="bc-order-settlement-adjust"
+                            items={[{
+                                key: 'settlement',
+                                label: showQtyForHourly
+                                    ? `高级金额设置 · 结算 ¥${watchedSettlementAmount.toFixed(2)}${memberDiscountActive ? '（已锁定）' : ''}`
+                                    : `高级金额设置 · 保底 ${watchedBaseAmountWan} 万 · 结算 ¥${watchedSettlementAmount.toFixed(2)}`,
+                                children: (
+                                    <Row gutter={[12, 0]}>
+                                        {!showQtyForHourly ? (
+                                            <Col {...compactColProps}>
+                                                <Form.Item name="baseAmountWan" label="订单保底（万）">
+                                                    <InputNumber min={0} style={{ width: '100%' }} placeholder="默认随项目同步" />
+                                                </Form.Item>
+                                            </Col>
+                                        ) : null}
+                                        <Col {...compactColProps}>
+                                            <Form.Item name="settlementAmount" label="结算金额" rules={[{ required: true, message: '请输入结算金额' }]}>
+                                                <InputNumber
+                                                    min={0}
+                                                    style={{ width: '100%' }}
+                                                    disabled={memberDiscountActive}
+                                                    placeholder="默认跟实收金额一致"
+                                                />
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+                                ),
+                            }]}
+                        />
                     </Col>
 
                     {memberDiscountActive ? <Col {...fullColProps}>
@@ -1263,7 +1464,7 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    <Col {...compactColProps}>
+                    {watchedPaymentChannel === 'MANUAL' ? <Col {...compactColProps}>
                         <Form.Item name="paymentTime" label="付款时间">
                             <DatePicker
                                 showTime
@@ -1272,8 +1473,8 @@ export default function OrderUpsertModal(props: {
                                 placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
                             />
                         </Form.Item>
-                    </Col>
-                    <Col {...compactColProps}>
+                    </Col> : null}
+                    {watchedPaymentChannel === 'MANUAL' ? <Col {...compactColProps}>
                         <Form.Item
                             name="isPaid"
                             valuePropName="checked"
@@ -1283,7 +1484,7 @@ export default function OrderUpsertModal(props: {
                         >
                             <Checkbox disabled={isBalancePayment}>已付款</Checkbox>
                         </Form.Item>
-                    </Col>
+                    </Col> : null}
                     {watchedIsPaid && watchedPaymentChannel === 'BALANCE' ? (
                         <Col {...fullColProps}>
                             <div style={{
@@ -1310,7 +1511,15 @@ export default function OrderUpsertModal(props: {
                     {/* 新建可选派单 */}
                     {showPlayers ? (
                         <Col {...fullColProps}>
-                            <Form.Item name="playerIds" label={`接待陪玩（最多 ${MAX_PLAYERS} 人）`}>
+                            <Form.Item
+                                name="playerIds"
+                                label={watchedPaymentChannel === 'SHOUQIANBA'
+                                    ? `预选服务者（最多 ${MAX_PLAYERS} 人）`
+                                    : `接待陪玩（最多 ${MAX_PLAYERS} 人）`}
+                                extra={watchedPaymentChannel === 'SHOUQIANBA'
+                                    ? '付款前不会实际派单；付款成功时仅在所选服务者全部空闲的情况下自动派单，否则保持待派单。'
+                                    : undefined}
+                            >
                                 {isMobile ? (
                                     <div>
                                         <Button
@@ -1406,6 +1615,11 @@ export default function OrderUpsertModal(props: {
                                         <Radio.Button value="DESIGNATED">指定</Radio.Button>
                                     </Radio.Group>
                                 </Form.Item>
+                                {watchedPaymentChannel === 'SHOUQIANBA' ? (
+                                    <div className="bc-order-attribution-hint">
+                                        归因会随预选服务者一起保留；支付成功且自动派单后生效。如服务者非空闲，订单保持待派单，归因选择不会丢失。
+                                    </div>
+                                ) : null}
                                 {watchedIsRenewal ? (
                                     <Form.Item
                                         name="renewalPlayerIds"
@@ -1501,6 +1715,121 @@ export default function OrderUpsertModal(props: {
                     <Input />
                 </Form.Item>
             </Form>
+            {watchedPaymentChannel === 'SHOUQIANBA' ? (
+                <aside className="bc-payment-preview-panel">
+                    <div className="bc-payment-preview-heading">
+                        <Typography.Text strong>付款码</Typography.Text>
+                        <Typography.Text type="secondary">创建订单后在此直接展示</Typography.Text>
+                    </div>
+                    {paymentResult?.paymentUrl || paymentResult?.qrCodeContent ? (
+                        <>
+                            <div className="bc-payment-ticket-capture" aria-hidden="true">
+                                <div className="bc-payment-ticket" ref={paymentTicketRef}>
+                                    <div className="bc-payment-ticket-brand">蓝猫爽打</div>
+                                    <div className="bc-payment-ticket-subtitle">订单在线付款</div>
+                                    <div className="bc-payment-ticket-info">
+                                        <span>订单</span><strong>{paymentResult?.autoSerial || `#${paymentResult?.orderId}`}</strong>
+                                        <span>项目</span><strong>{paymentResult?.projectName || watchedProjectName || '-'}</strong>
+                                        <span>客户</span><strong>{paymentResult?.customerIdentifier || watchedCustomerGameId || '未填写'}</strong>
+                                    </div>
+                                    <QRCode value={String(paymentResult?.qrCodeContent || paymentResult?.paymentUrl || '')} size={220} bordered={false} />
+                                    <div className="bc-payment-ticket-amount">¥{Number(paymentResult?.amount || watchedPaidAmount || 0).toFixed(2)}</div>
+                                    <div className="bc-payment-ticket-scan">请使用微信或支付宝扫码付款</div>
+                                    {paymentExpiryLabel ? (
+                                        <div className="bc-payment-ticket-expiry">
+                                            请在 {paymentExpiryLabel} 前完成支付，过期请联系客服重新生成
+                                        </div>
+                                    ) : null}
+                                    <div className="bc-payment-ticket-notice">
+                                        派单系统已升级为实时流程。支付成功后系统会自动通知服务者接单，客服无法手动修改付款及派单状态，感谢您的理解与配合。
+                                    </div>
+                                </div>
+                            </div>
+                            {paymentConfirmed ? (
+                                <Alert
+                                    type="success"
+                                    showIcon
+                                    message="客户已支付，订单状态已更新"
+                                    description="付款链接已停止使用，可直接查看订单及自动派单结果。"
+                                />
+                            ) : paymentCodeInvalid ? (
+                                <Alert
+                                    type="warning"
+                                    showIcon
+                                    message={paymentCodeStale ? '订单信息已变化，当前付款码已失效' : '当前付款码已过期'}
+                                    description="请重新核对左侧内容并生成新付款码，勿继续发送旧图或链接。"
+                                />
+                            ) : paymentTicketImage ? (
+                                <img className="bc-payment-ticket-image" src={paymentTicketImage} alt="蓝猫爽打订单付款码，可右键复制图片" />
+                            ) : <div className="bc-payment-ticket-rendering">正在生成完整付款图…</div>}
+                            {!paymentConfirmed && !paymentCodeInvalid ? <Typography.Text type="secondary" style={{ textAlign: 'center' }}>可直接右键复制整张付款图发送给客户</Typography.Text> : null}
+                            {!paymentConfirmed ? <Space wrap style={{ justifyContent: 'center' }}>
+                                <Button disabled={paymentCodeInvalid} onClick={async () => {
+                                    await navigator.clipboard.writeText(String(paymentResult?.paymentUrl || ''));
+                                    message.success('付款链接已复制');
+                                }}>复制付款链接</Button>
+                                <Button type={paymentCodeInvalid ? 'primary' : 'default'} loading={submitting} onClick={confirmAndSubmitOrder}>
+                                    {paymentCodeInvalid ? '重新生成有效付款码' : '重新生成付款码'}
+                                </Button>
+                            </Space> : null}
+                        </>
+                    ) : paymentResult?.error ? (
+                        <div className="bc-payment-preview-empty error">
+                            <strong>订单草稿已保存，但付款码生成失败</strong>
+                            <span>{paymentResult.error}</span>
+                            <Space wrap style={{ justifyContent: 'center' }}>
+                                <Button type="primary" loading={submitting} onClick={confirmAndSubmitOrder}>在此重新生成</Button>
+                                <Button onClick={() => onViewCreatedOrder?.(Number(paymentResult?.orderId || 0))}>查看订单草稿</Button>
+                            </Space>
+                        </div>
+                    ) : (
+                        <div className="bc-payment-preview-empty">
+                            <div className="bc-payment-preview-placeholder">付</div>
+                            <strong>确认左侧信息后生成</strong>
+                            <span>点击一次即创建订单并生成付款码，不会再打开第二个弹窗。</span>
+                            <Button type="primary" size="large" loading={submitting} onClick={confirmAndSubmitOrder}>
+                                核对并生成付款码
+                            </Button>
+                        </div>
+                    )}
+                    {paymentResult?.orderId ? (
+                        <Space style={{ width: '100%', justifyContent: 'center' }}>
+                            <Button onClick={onCancel}>关闭</Button>
+                            <Button type="primary" onClick={() => onViewCreatedOrder?.(Number(paymentResult.orderId))}>查看订单</Button>
+                        </Space>
+                    ) : <Button block onClick={onCancel}>取消</Button>}
+                </aside>
+            ) : watchedPaymentChannel === 'MANUAL' ? (
+                <aside className={`bc-order-liability-panel ${watchedIsPaid ? 'is-paid' : ''}`}>
+                    <div className="bc-order-liability-icon">{watchedIsPaid ? '✓' : '48h'}</div>
+                    <Typography.Title level={5} style={{ margin: 0 }}>
+                        {watchedIsPaid ? '已标记线下收款' : '未收款责任提醒'}
+                    </Typography.Title>
+                    {watchedIsPaid ? (
+                        <Typography.Text type="secondary">
+                            订单将按已收款创建，不进入 48 小时未收款追责流程。请确保款项已实际到账。
+                        </Typography.Text>
+                    ) : (
+                        <>
+                            <Typography.Text>
+                                允许先派单后收款，但未收款状态将对后续所有流程参与者可见。
+                            </Typography.Text>
+                            <div className="bc-order-liability-amount">
+                                待收金额 <strong>¥{watchedPaidAmount.toFixed(2)}</strong>
+                            </div>
+                            <ul>
+                                <li>责任归属创建并派单的客服</li>
+                                <li>系统会定期提醒责任客服完成收款</li>
+                                <li>超过 48 小时仍未收款，将自动从责任客服余额扣除订单金额</li>
+                            </ul>
+                            <Typography.Text type="danger" strong>
+                                请确认责任可承担后再派单。
+                            </Typography.Text>
+                        </>
+                    )}
+                </aside>
+            ) : <aside className="bc-order-create-side-placeholder" aria-hidden="true" />}
+            </div>
 
             {isMobile ? (
                 <Drawer

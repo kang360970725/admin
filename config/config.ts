@@ -6,7 +6,8 @@ import path from 'node:path';
 // 环境配置映射
 const envConfig = {
   development: {
-    API_BASE: 'http://localhost:3000',
+    // 固定 IPv4，避免部分 macOS 环境将 localhost 解析为 ::1，而后端仅监听 IPv4。
+    API_BASE: 'http://127.0.0.1:3000',
     APP_NAME: '蓝猫陪玩管理系统-开发',
   },
   test: {

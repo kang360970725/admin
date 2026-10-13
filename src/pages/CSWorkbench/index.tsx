@@ -54,6 +54,8 @@ const { Text } = Typography;
 const MAX_PLAYERS = 2;
 
 const statusText: Record<string, { text: string; color?: string }> = {
+    DRAFT: { text: '订单草稿', color: 'default' },
+    WAIT_PAYMENT: { text: '待在线支付', color: 'processing' },
     WAIT_ASSIGN: { text: '待派单', color: 'default' },
     WAIT_ACCEPT: { text: '待接单', color: 'orange' },
     ACCEPTED: { text: '已接单', color: 'blue' },
@@ -1285,6 +1287,7 @@ export default function CSWorkbenchPage() {
                                                 </Text>
                                                 {renderStatus(row.status)}
                                                 {row.paidAmount != null ? <Tag color="geekblue">实付 ¥{row.paidAmount}</Tag> : null}
+                                                {row.isGifted ? <Tag>赠送</Tag> : row.isPaid === false ? <Tag color="red">未收款·当前客服负责</Tag> : <Tag color="green">已收款</Tag>}
                                             </Space>
 
                                             <Space size={10} wrap>

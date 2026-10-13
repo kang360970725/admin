@@ -1131,6 +1131,21 @@ export async function markOrderPaid(data: { id: number; paidAmount?: number; rem
     });
 }
 
+/**
+ * 创建收钱吧收款尝试。补收必须使用 purpose=SUPPLEMENT，后端会生成新的唯一 client_sn。
+ * 正式开通前接口返回 WAITING_FOR_SHOUQIANBA_CREDENTIALS，开通后同一返回结构补充支付链接和二维码内容。
+ */
+export async function createShouqianbaPaymentRequest(data: {
+    orderId: number;
+    amount?: number;
+    purpose?: 'ORDER' | 'SUPPLEMENT';
+}) {
+    return request(`${API_BASE}/orders/shouqianba/payment-request`, {
+        method: 'POST',
+        data,
+    });
+}
+
 
 // ---------------------- Settlement Batch API (POST style) ----------------------
 

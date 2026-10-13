@@ -84,9 +84,12 @@ const MyOrdersPage: React.FC = () => {
                 valueType: 'select',
                 render: (_: any, row: any) => {
                     const v = row?.order?.status;
-                    return  <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
-                        {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
-                    </Tag>;
+                    return <Space size={4} wrap>
+                        <Tag color={pickStatusColor({ group: 'OrderStatus', key: v })}>
+                            {pickStatusText({ dicts, group: 'OrderStatus', key: v, fallback: String(v ?? '-') })}
+                        </Tag>
+                        {row?.order?.isGifted ? <Tag>赠送</Tag> : row?.order?.isPaid === false ? <Tag color="red">未收款</Tag> : <Tag color="green">已收款</Tag>}
+                    </Space>;
                 },
             },
             {

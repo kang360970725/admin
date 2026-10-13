@@ -19,6 +19,16 @@ import {
     Watermark,
 } from 'antd';
 import {PageContainer} from '@ant-design/pro-components';
+import {
+    CheckCircleFilled,
+    ClockCircleOutlined,
+    CoffeeOutlined,
+    DollarOutlined,
+    ReloadOutlined,
+    SafetyCertificateOutlined,
+    ThunderboltOutlined,
+    TrophyOutlined,
+} from '@ant-design/icons';
 import {useModel} from '@umijs/max';
 import dayjs from 'dayjs';
 import {
@@ -38,6 +48,7 @@ import {
     usersWorkStatus,
 } from '@/services/api';
 import { maskPhone } from '@/utils/privacy';
+import './index.less';
 
 type DictMap = Record<string, Record<string, string>>;
 
@@ -93,6 +104,7 @@ const WorkbenchPage: React.FC = () => {
     // 统计
     const [statsLoading, setStatsLoading] = useState(false);
     const [todayCount, setTodayCount] = useState(0);
+    const [todayIncome, setTodayIncome] = useState(0);
     const [monthCount, setMonthCount] = useState(0);
     const [monthIncome, setMonthIncome] = useState(0);
     const [monthRank, setMonthRank] = useState(0);
@@ -260,6 +272,7 @@ const WorkbenchPage: React.FC = () => {
         try {
             const res = await ordersMyStats({});
             setTodayCount(Number(res?.todayCount ?? 0));
+            setTodayIncome(Number(res?.todayIncome ?? 0));
             setMonthCount(Number(res?.monthCount ?? 0));
             setMonthIncome(Number(res?.monthIncome ?? 0));
             setMonthRank(Number(res?.monthRank ?? 0));
@@ -786,68 +799,46 @@ const WorkbenchPage: React.FC = () => {
         const isIdle = workStatus === 'IDLE';
         const isResting = workStatus === 'RESTING';
 
-        const bg =
-            isWorking
-                ? 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(16,185,129,0.10))'
-                : isIdle
-                ? 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(37,99,235,0.10))'
-                : 'linear-gradient(135deg, rgba(148,163,184,0.18), rgba(100,116,139,0.10))';
-
-        const border =
-            isWorking ? 'rgba(34,197,94,0.35)'
-                : isIdle ? 'rgba(59,130,246,0.35)'
-                : 'rgba(148,163,184,0.35)';
-
         return (
-            <Card
-                title="当前接单状态"
-                style={{
-                    background: bg,
-                    border: `1px solid ${border}`,
-                }}
-                bodyStyle={{padding: isMobile ? 14 : 16}}
-            >
-                <Space direction="vertical" style={{width: '100%'}} size={10}>
-                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12}}>
-                        <div style={{fontSize: isMobile ? 13 : 14, color: 'rgba(0,0,0,0.65)'}}>状态</div>
-                        <Tag
-                            color={statusMeta.color as any}
-                            style={{
-                                fontSize: isMobile ? 14 : 16,
-                                padding: isMobile ? '6px 12px' : '8px 14px',
-                                borderRadius: 999,
-                                fontWeight: 700,
-                                letterSpacing: 0.5,
-                            }}
-                        >
+            <Card className={`staff-status-card staff-status-card--${workStatus.toLowerCase()}`} bordered={false}>
+                <div className="staff-status-card__head">
+                    <div>
+                        <div className="staff-eyebrow">当前状态</div>
+                        <div className="staff-status-card__value">
+                            <span className="staff-status-card__dot" />
                             {statusMeta.text}
-                        </Tag>
+                        </div>
                     </div>
-
-                    <Space wrap>
+                    <div className="staff-status-card__icon">
+                        {isWorking ? <ThunderboltOutlined /> : isResting ? <CoffeeOutlined /> : <ClockCircleOutlined />}
+                    </div>
+                </div>
+                <div className="staff-status-card__hint">
+                    {isWorking ? '当前有进行中订单，完成后将自动恢复等待。'
+                        : isIdle ? '你已在线，新派单到达后会出现在右侧任务区。'
+                            : '休息期间不会接收新派单，可随时恢复接单。'}
+                </div>
+                <Space wrap className="staff-status-card__actions">
                         <Button
                             type="primary"
+                            icon={<ThunderboltOutlined />}
                             disabled={isWorking || isIdle}
                             onClick={() => updateMyWorkStatus('IDLE')}
                         >
-                            开始接单
+                            {isIdle ? '正在接单' : '开始接单'}
                         </Button>
 
                         <Button
+                            icon={<CoffeeOutlined />}
                             disabled={isWorking || isResting}
                             onClick={() => updateMyWorkStatus('RESTING')}
                         >
                             休息一下
                         </Button>
 
-                        <Button onClick={() => refreshPool()} loading={poolLoading}>
-                            刷新订单池
+                        <Button icon={<ReloadOutlined />} onClick={() => refreshPool()} loading={poolLoading}>
+                            刷新
                         </Button>
-                    </Space>
-
-                    <div style={{color: 'rgba(0,0,0,.55)', fontSize: 12, lineHeight: 1.6}}>
-                        等待中会接收派单；接单中不会被再次派单；休息中不会接收新派单。
-                    </div>
                 </Space>
             </Card>
         );
@@ -855,7 +846,7 @@ const WorkbenchPage: React.FC = () => {
 
     const renderPoolCard = () => {
         const extraBtns = (
-            <Button onClick={() => refreshPool()} loading={poolLoading}>
+            <Button type="text" icon={<ReloadOutlined />} onClick={() => refreshPool()} loading={poolLoading}>
                 刷新
             </Button>
         );
@@ -863,9 +854,11 @@ const WorkbenchPage: React.FC = () => {
         // 休息中
         if (workStatus === 'RESTING') {
             return (
-                <Card title="订单池" extra={extraBtns} bodyStyle={{padding: isMobile ? 14 : 16}}>
-                    <div style={{color: 'rgba(0,0,0,.55)'}}>当前为休息中，不会接收新派单。</div>
-                    <div style={{marginTop: 12}}>
+                <Card className="staff-task-card" title="当前任务" extra={extraBtns} bordered={false}>
+                    <div className="staff-task-empty">
+                        <CoffeeOutlined />
+                        <strong>正在休息</strong>
+                        <span>恢复接单后，新派单会立即出现在这里。</span>
                         <Button type="primary" onClick={() => updateMyWorkStatus('IDLE')}>
                             开始接单
                         </Button>
@@ -878,12 +871,15 @@ const WorkbenchPage: React.FC = () => {
         if (!poolDispatch) {
             return (
                 <Card
-                    title={workStatus === 'WORKING' ? '订单池（进行中）' : '订单池（待接单）'}
+                    className="staff-task-card"
+                    title={workStatus === 'WORKING' ? '当前任务 · 进行中' : '当前任务'}
                     extra={extraBtns}
-                    bodyStyle={{padding: isMobile ? 14 : 16}}
+                    bordered={false}
                 >
-                    <div style={{color: 'rgba(0,0,0,.55)'}}>暂未派单。</div>
-                    <div style={{marginTop: 12}}>
+                    <div className="staff-task-empty">
+                        <CheckCircleFilled />
+                        <strong>暂无待处理任务</strong>
+                        <span>保持页面开启，有新派单时可在此处理。</span>
                         <Button onClick={() => updateMyWorkStatus('RESTING')}>休息一下</Button>
                     </div>
                 </Card>
@@ -914,7 +910,7 @@ const WorkbenchPage: React.FC = () => {
         // 待接单
         if (workStatus === 'IDLE') {
             return (
-                <Card title="订单池（待接单）" extra={extraBtns} bodyStyle={{padding: isMobile ? 14 : 16}}>
+                <Card className="staff-task-card staff-task-card--waiting" title="新派单" extra={extraBtns} bordered={false}>
                     <Descriptions size="small" column={isMobile ? 1 : 2} bordered>
                         <Descriptions.Item label="订单号">{orderNo}</Descriptions.Item>
                         <Descriptions.Item label="项目">{projectName}</Descriptions.Item>
@@ -937,8 +933,8 @@ const WorkbenchPage: React.FC = () => {
                         </Space>
                     ) : (
                         <Space wrap>
-                            <Button type="primary" onClick={submitAccept} loading={poolLoading}>
-                                接单
+                            <Button type="primary" size="large" icon={<ThunderboltOutlined />} onClick={submitAccept} loading={poolLoading}>
+                                确认接单
                             </Button>
                             {/*<Button danger onClick={openReject}>*/}
                             {/*    拒单*/}
@@ -965,7 +961,7 @@ const WorkbenchPage: React.FC = () => {
         const extra = buildAcceptedExtraInfo(poolDispatch);
 
         return (
-            <Card title="订单池（进行中）" extra={extraBtns} bodyStyle={{padding: isMobile ? 14 : 16}}>
+            <Card className="staff-task-card staff-task-card--working" title="当前任务 · 进行中" extra={extraBtns} bordered={false}>
                 <Watermark
                     content={wmText}
                     gap={[110, 88]}
@@ -1052,78 +1048,61 @@ const WorkbenchPage: React.FC = () => {
     };
 
     return (
-        <PageContainer title="服务者工作台" loading={false}>
-            {/* ✅ 移动端：收窄边距，避免两侧过宽 */}
+        <PageContainer title={false} loading={false} className="staff-workbench-page">
             <div className="bc-workbench-wrap">
-                <div
-                    style={{
-                        width: '100%',
-                        maxWidth: isMobile ? '100%' : 1200,
-                        margin: '0 auto',
-                        padding: isMobile ? '0' : 0,
-                    }}
-                >
-                    {/* 顶部看板 */}
-                    <Row gutter={[12, 12]}>
-                        <Col xs={12} md={12} lg={6}>
-                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
-                                <Statistic title="今日接单" value={todayCount}/>
-                            </Card>
-                        </Col>
-                        <Col xs={12} md={12} lg={6}>
-                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
-                                <Statistic title="本月收入" value={monthIncome} precision={2} prefix="¥"/>
-                            </Card>
-                        </Col>
-                        <Col xs={12} md={12} lg={6}>
-                            <Card loading={statsLoading} bodyStyle={{padding: isMobile ? 12 : 16}}>
-                                <Statistic title="本月接单" value={monthCount}/>
-                            </Card>
-                        </Col>
-                        <Col xs={12} md={12} lg={6}>
-                            <Card
-                                loading={statsLoading}
-                                bodyStyle={{padding: isMobile ? 12 : 16}}
-                                style={{background: 'linear-gradient(135deg, #eff6ff 0%, #ecfeff 100%)', borderColor: '#91caff'}}
-                            >
-                                <Statistic
-                                    title="本月接单排名"
-                                    value={monthRank > 0 ? monthRank : '-'}
-                                    prefix={monthRank > 0 ? '第' : undefined}
-                                    suffix={monthRank > 0 ? '名' : undefined}
-                                    valueStyle={{color: monthRank === 1 ? '#d48806' : '#1677ff'}}
-                                />
-                                <div style={{marginTop: 4, minHeight: 22, color: 'rgba(0,0,0,.58)', fontSize: 12}}>
-                                    {monthRank === 1
-                                        ? '本月暂居第一，继续保持！'
-                                        : monthRank > 1 && gapToPreviousOrders === 0
-                                            ? `与上一名同为 ${monthCount} 单，再完成 1 单有机会反超`
-                                            : monthRank > 1
-                                                ? `距上一名 ${gapToPreviousOrders} 单，再完成 ${ordersToOvertake} 单有机会反超`
-                                                : '完成首单后即可参与本月排名'}
-                                    {monthRankParticipantCount > 0 ? ` · 共 ${monthRankParticipantCount} 人` : ''}
-                                </div>
-                            </Card>
-                        </Col>
-                    </Row>
+                <div className="staff-workbench-shell">
+                    <section className="staff-workbench-hero">
+                        <div className="staff-workbench-hero__copy">
+                            <div className="staff-workbench-hero__date">{dayjs().format('M月D日 dddd')}</div>
+                            <h1>{currentUser?.name ? `${currentUser.name}，` : ''}工作顺利</h1>
+                            <p>今日收入按已入账钱包流水净额统计，包含冻结与可用收益。</p>
+                        </div>
+                        <div className="staff-income-primary">
+                            <div className="staff-income-primary__label"><DollarOutlined /> 今日收入</div>
+                            <Statistic value={todayIncome} precision={2} prefix="¥" />
+                            <div className="staff-income-primary__foot">今日已完成 {todayCount} 单</div>
+                        </div>
+                    </section>
 
-                    <Row gutter={[12, 12]} style={{marginTop: 12}}>
+                    <section className="staff-metric-grid">
+                        <Card bordered={false} loading={statsLoading} className="staff-metric-card">
+                            <div className="staff-metric-card__icon staff-metric-card__icon--blue"><DollarOutlined /></div>
+                            <Statistic title="本月收入" value={monthIncome} precision={2} prefix="¥" />
+                            <span>本月钱包收益净额</span>
+                        </Card>
+                        <Card bordered={false} loading={statsLoading} className="staff-metric-card">
+                            <div className="staff-metric-card__icon staff-metric-card__icon--green"><CheckCircleFilled /></div>
+                            <Statistic title="本月完成" value={monthCount} suffix=" 单" />
+                            <span>按已结算业绩订单去重</span>
+                        </Card>
+                        <Card bordered={false} loading={statsLoading} className="staff-metric-card staff-metric-card--rank">
+                            <div className="staff-metric-card__icon staff-metric-card__icon--gold"><TrophyOutlined /></div>
+                            <Statistic title="本月接单排名" value={monthRank > 0 ? monthRank : '-'} prefix={monthRank > 0 ? '第 ' : undefined} suffix={monthRank > 0 ? ' 名' : undefined} />
+                            <span>
+                                {monthRank === 1 ? '暂居第一，继续保持'
+                                    : monthRank > 1 && gapToPreviousOrders === 0 ? '再完成 1 单有机会反超'
+                                        : monthRank > 1 ? `距上一名 ${gapToPreviousOrders} 单，再完成 ${ordersToOvertake} 单反超`
+                                            : '完成首单后参与排名'}
+                                {monthRankParticipantCount > 0 ? ` · ${monthRankParticipantCount}人` : ''}
+                            </span>
+                        </Card>
+                    </section>
+
+                    <Row gutter={[16, 16]} className="staff-workbench-main">
                         <Col xs={24} lg={8}>
                             {renderStatusCard()}
-                            <Card title="罚单中心" style={{ marginTop: 12 }} bodyStyle={{padding: isMobile ? 14 : 16}}>
+                            <Card title={<span><SafetyCertificateOutlined /> 罚单中心</span>} className="staff-penalty-card" bordered={false}>
                                 <Space direction="vertical" style={{ width: '100%' }} size={10}>
-                                    <div style={{ color: 'rgba(0,0,0,.65)' }}>
-                                        当前待处理罚单：<Tag color={penaltyPendingCount > 0 ? 'red' : 'default'}>{penaltyPendingCount}</Tag>
+                                    <div className="staff-penalty-card__count">
+                                        <strong>{penaltyPendingCount}</strong><span>张待处理</span>
                                     </div>
                                     <Space>
                                         <Button type="primary" danger={penaltyPendingCount > 0} onClick={() => { setPenaltyOpen(true); void loadMyPenalties(); }}>
-                                            立即处理罚单
+                                            {penaltyPendingCount > 0 ? '立即处理' : '查看记录'}
                                         </Button>
-                                        <Button onClick={() => void loadMyPenalties()} loading={penaltyLoading}>刷新</Button>
+                                        <Button type="text" icon={<ReloadOutlined />} onClick={() => void loadMyPenalties()} loading={penaltyLoading}>刷新</Button>
                                     </Space>
-                                    <div style={{ color: 'rgba(0,0,0,.45)', fontSize: 12 }}>
-                                        罚单需优先处理：可确认或发起申诉（每张罚单仅一次申诉机会）。
-                                    </div>
+                                    <div className="staff-card-note">可确认或发起申诉，每张罚单仅有一次申诉机会。</div>
                                 </Space>
                             </Card>
                         </Col>

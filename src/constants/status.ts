@@ -22,6 +22,8 @@ export type StatusMeta = { text: string; color?: TagColor };
 
 // 订单状态（OrderStatus）
 export const ORDER_STATUS_META: Record<string, StatusMeta> = {
+    DRAFT: { text: '订单草稿', color: 'default' },
+    WAIT_PAYMENT: { text: '待在线支付', color: 'processing' },
     WAIT_ASSIGN: { text: '待派单', color: 'default' },
     WAIT_ACCEPT: { text: '待接单', color: 'orange' },
     ACCEPTED: { text: '已接单', color: 'blue' },

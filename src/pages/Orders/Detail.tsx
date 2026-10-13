@@ -1,5 +1,5 @@
 // src/pages/Orders/Detail.tsx
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {PageContainer} from '@ant-design/pro-components';
 import {
     Alert,
@@ -19,6 +19,7 @@ import {
     message,
     Modal,
     Radio,
+    QRCode,
     Row,
     Select,
     Space,
@@ -53,6 +54,7 @@ import {
     archiveDispatch,
     completeDispatch,
     confirmCompleteOrder,
+    createShouqianbaPaymentRequest,
     getEnumDicts,
     getOrderDetail,
     getPlayerOptions,
@@ -69,6 +71,7 @@ import {
     updateOrderPaidAmount,
 } from '@/services/api';
 import dayjs from 'dayjs';
+import html2canvas from 'html2canvas';
 import {useIsMobile} from '@/utils/useIsMobile';
 import {generateReceiptImage} from '@/utils/receiptImage';
 import {useOrderReconcile} from "@/hooks/useOrderReconcile";
@@ -1510,12 +1513,86 @@ const OrderDetailPage: React.FC = () => {
     const canFixArchivedProgress = hasOrderPermission('orders:detail:archived-progress-fix:button');
     const canRecalculateSettlements = hasOrderPermission('orders:detail:recalculate-settlements:button');
     const canUseDetailTools = canFixArchivedProgress || canAdjustSettlement || canRecalculateSettlements;
+    const isShouqianbaOrder = String(order?.latestPayment?.channel || order?.paymentChannel || '')
+        .trim().toUpperCase().startsWith('SHOUQIANBA');
+    const canShowManualMarkPaid = canMarkPaid && !isShouqianbaOrder && !order?.isGifted && order?.isPaid === false;
+    const canShowRefund = canRefund && order?.isPaid === true && order?.status !== 'REFUNDED';
+    const showPaymentCodeInsteadOfReceipt = canUseReceipt && isShouqianbaOrder && order?.isPaid === false;
 
     const [receiptOpen, setReceiptOpen] = useState(false);
     const [receiptType, setReceiptType] = useState<'customer' | 'staff'>('customer');
     const [receiptTextCustomer, setReceiptTextCustomer] = useState('');
     const [receiptTextStaff, setReceiptTextStaff] = useState('');
     const [receiptImgCustomer, setReceiptImgCustomer] = useState<string | null>(null);
+    const [paymentCodeOpen, setPaymentCodeOpen] = useState(false);
+    const [paymentCodeLoading, setPaymentCodeLoading] = useState(false);
+    const [paymentCode, setPaymentCode] = useState<any>(null);
+    const paymentCodeTicketRef = useRef<HTMLDivElement | null>(null);
+    const [paymentCodeImage, setPaymentCodeImage] = useState('');
+
+    const openPaymentCode = async (forceRegenerate = false) => {
+        const existingCode = order?.latestPayment?.qrCode || order?.latestPayment?.qrCodeContent;
+        const existingNotExpired = !order?.latestPayment?.expiresAt || dayjs().isBefore(dayjs(order.latestPayment.expiresAt));
+        if (!forceRegenerate && existingCode && existingNotExpired && ['PENDING', 'PROCESSING', 'UNKNOWN'].includes(String(order?.latestPayment?.status || ''))) {
+            setPaymentCode({
+                orderId: order?.id,
+                autoSerial: order?.autoSerial,
+                amount: Number(order?.latestPayment?.amount ?? order?.finalPayableAmount ?? order?.paidAmount ?? 0),
+                paymentUrl: existingCode,
+                qrCodeContent: existingCode,
+                expiresAt: order?.latestPayment?.expiresAt,
+            });
+            setPaymentCodeOpen(true);
+            return;
+        }
+        try {
+            setPaymentCodeLoading(true);
+            const result: any = await createShouqianbaPaymentRequest({
+                orderId: Number(order?.id),
+                amount: Number(order?.finalPayableAmount ?? order?.paidAmount ?? order?.receivableAmount ?? 0),
+                purpose: 'ORDER',
+            });
+            setPaymentCode({ ...result, autoSerial: order?.autoSerial });
+            setPaymentCodeOpen(true);
+            await loadDetail();
+        } catch (error: any) {
+            message.error(error?.response?.data?.message || error?.message || '付款码生成失败');
+        } finally {
+            setPaymentCodeLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!paymentCodeOpen || !(paymentCode?.qrCodeContent || paymentCode?.paymentUrl)) {
+            setPaymentCodeImage('');
+            return;
+        }
+        let cancelled = false;
+        const timer = window.setTimeout(async () => {
+            if (!paymentCodeTicketRef.current) return;
+            try {
+                const canvas = await html2canvas(paymentCodeTicketRef.current, { backgroundColor: '#fff', scale: 2, useCORS: true });
+                if (!cancelled) setPaymentCodeImage(canvas.toDataURL('image/png'));
+            } catch {
+                if (!cancelled) setPaymentCodeImage('');
+            }
+        }, 120);
+        return () => { cancelled = true; window.clearTimeout(timer); };
+    }, [paymentCodeOpen, paymentCode, order?.updatedAt]);
+
+    useEffect(() => {
+        if (!paymentCodeOpen || !paymentCode?.expiresAt) return undefined;
+        setTick(Date.now());
+        const timer = window.setInterval(() => setTick(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [paymentCodeOpen, paymentCode?.expiresAt]);
+
+    const paymentCodeExpiryLabel = paymentCode?.expiresAt
+        ? dayjs(paymentCode.expiresAt).format('HH:mm')
+        : '';
+    const detailPaymentCodeExpired = Boolean(
+        paymentCode?.expiresAt && dayjs(tick).isAfter(dayjs(paymentCode.expiresAt)),
+    );
 
     const getParticipantRatingName = (player: any) => {
         const userId = Number(player?.userId ?? player?.user?.id);
@@ -2366,10 +2443,17 @@ const OrderDetailPage: React.FC = () => {
                         </Tag>
                     )}
                     {order?.isGifted ? <Tag style={{borderRadius: 999}}>赠送</Tag> : order?.isPaid === false ? (
-                        <Tag color="red" style={{borderRadius: 999}}>未收款</Tag>
+                        <Tag color="red" style={{borderRadius: 999}}>
+                            未收款{order?.unpaidSince ? ' · 48小时责任倒计时中' : ''}
+                        </Tag>
                     ) : (
                         <Tag color="green" style={{borderRadius: 999}}>已收款</Tag>
                     )}
+                    {order?.unpaidAutoDeductedAt ? (
+                        <Tag color="volcano" style={{borderRadius: 999}}>
+                            已由派单客服余额承担 ¥{Number(order?.unpaidAutoDeductedAmount || 0).toFixed(2)}
+                        </Tag>
+                    ) : null}
                 </Space>
 
                 <Space direction="vertical" size={4} style={{width: '100%'}}>
@@ -2379,6 +2463,12 @@ const OrderDetailPage: React.FC = () => {
                     <Typography.Text type="secondary" style={{fontSize: 13}}>
                         客户游戏ID：{displayCustomerGameId()}
                     </Typography.Text>
+                    {order?.isPaid === false && order?.unpaidResponsibleUserId ? (
+                        <Typography.Text type="danger" style={{fontSize: 13}}>
+                            未收款责任客服：{order?.dispatcher?.name || `#${order.unpaidResponsibleUserId}`}；首次未付款派单时间：
+                            {order?.unpaidSince ? new Date(order.unpaidSince).toLocaleString() : '-'}
+                        </Typography.Text>
+                    ) : null}
                 </Space>
             </Space>
         </Card>
@@ -2405,13 +2495,14 @@ const OrderDetailPage: React.FC = () => {
                             icon={<FileImageOutlined/>}
                             block
                             style={{height: 44, borderRadius: 14}}
-                            onClick={() => openReceipt('customer')}
+                            loading={paymentCodeLoading}
+                            onClick={() => showPaymentCodeInsteadOfReceipt ? void openPaymentCode() : openReceipt('customer')}
                         >
-                            订单小票
+                            {showPaymentCodeInsteadOfReceipt ? '生成付款码' : '订单小票'}
                         </Button>
                     </Col>
                     ) : null}
-                    {canMarkPaid && !order?.isGifted && order?.isPaid === false ? (
+                    {canShowManualMarkPaid ? (
                         <Col span={12}>
                             <Button
                                 type="primary"
@@ -3009,15 +3100,17 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         ) : null}
 
-                        {canUseReceipt ? <Button onClick={() => openReceipt('staff')}>订单小票</Button> : null}
-                        {canMarkPaid && !order?.isGifted && order?.isPaid === false ? (
+                        {canUseReceipt ? <Button loading={paymentCodeLoading} onClick={() => showPaymentCodeInsteadOfReceipt ? void openPaymentCode() : openReceipt('staff')}>
+                            {showPaymentCodeInsteadOfReceipt ? '生成付款码' : '订单小票'}
+                        </Button> : null}
+                        {canShowManualMarkPaid ? (
                             <Button
                                 type="primary"
                                 onClick={openMarkPaidModal}>
                                 确认收款
                             </Button>
                         ) : null}
-                        {canRefund && order?.status !== 'REFUNDED' && <Button danger onClick={openRefundModal}>退款</Button>}
+                        {canShowRefund && <Button danger onClick={openRefundModal}>退款</Button>}
                         {canEditOrder ? <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button> : null}
 
                         {canDispatchOrder ? <Tooltip title={!canDispatch ? dispatchDisabledReason : ''}>
@@ -3363,12 +3456,13 @@ const OrderDetailPage: React.FC = () => {
                                     <Card style={cardStyleMobile} bodyStyle={cardBodyMobile}>
                                         <Space direction="vertical" size={10} style={{width: '100%'}}>
                                             {canUseReceipt ? <Button block icon={<FileImageOutlined/>}
-                                                    onClick={() => openReceipt('customer')}
+                                                    loading={paymentCodeLoading}
+                                                    onClick={() => showPaymentCodeInsteadOfReceipt ? void openPaymentCode() : openReceipt('customer')}
                                                     style={{borderRadius: 14, height: 44}}>
-                                                订单小票
+                                                {showPaymentCodeInsteadOfReceipt ? '生成付款码' : '订单小票'}
                                             </Button> : null}
 
-                                            {canRefund && order?.status !== 'REFUNDED' ? (
+                                            {canShowRefund ? (
                                                 <>
                                                     <Button danger block onClick={openRefundModal}
                                                             style={{borderRadius: 14, height: 44}}>
@@ -5013,6 +5107,62 @@ const OrderDetailPage: React.FC = () => {
             </Modal>
 
 
+            <Modal
+                open={paymentCodeOpen}
+                title="订单付款码"
+                centered
+                width={isMobile ? '94vw' : 420}
+                onCancel={() => setPaymentCodeOpen(false)}
+                footer={null}
+            >
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <div className="bc-payment-ticket-capture" aria-hidden="true">
+                        <div className="bc-payment-ticket" ref={paymentCodeTicketRef}>
+                            <div className="bc-payment-ticket-brand">蓝猫爽打</div>
+                            <div className="bc-payment-ticket-subtitle">订单在线付款</div>
+                            <div className="bc-payment-ticket-info">
+                                <span>订单</span><strong>{order?.autoSerial || `#${order?.id}`}</strong>
+                                <span>项目</span><strong>{order?.project?.name || order?.projectSnapshot?.name || '-'}</strong>
+                                <span>客户</span><strong>{order?.customerOriginalIdentifier || displayCustomerGameId() || '未填写'}</strong>
+                            </div>
+                            <QRCode value={String(paymentCode?.qrCodeContent || paymentCode?.paymentUrl || '')} size={220} bordered={false}/>
+                            <div className="bc-payment-ticket-amount">¥{Number(paymentCode?.amount || order?.finalPayableAmount || 0).toFixed(2)}</div>
+                            <div className="bc-payment-ticket-scan">请使用微信或支付宝扫码付款</div>
+                            {paymentCodeExpiryLabel ? (
+                                <div className="bc-payment-ticket-expiry">
+                                    请在 {paymentCodeExpiryLabel} 前完成支付，过期请联系客服重新生成
+                                </div>
+                            ) : null}
+                            <div className="bc-payment-ticket-notice">派单系统已升级为实时流程。支付成功后系统会自动通知服务者接单，客服无法手动修改付款及派单状态，感谢您的理解与配合。</div>
+                        </div>
+                    </div>
+                    {detailPaymentCodeExpired ? (
+                        <Alert
+                            type="warning"
+                            showIcon
+                            message="当前付款码已过期"
+                            description="请生成新付款码，勿继续发送旧图或链接。"
+                        />
+                    ) : paymentCodeImage
+                        ? <img className="bc-payment-ticket-image" src={paymentCodeImage} alt="蓝猫爽打订单付款码，可右键复制图片" />
+                        : <div className="bc-payment-ticket-rendering">正在生成完整付款图…</div>}
+                    {!detailPaymentCodeExpired ? <Typography.Text type="secondary" style={{ textAlign: 'center' }}>可直接右键复制整张付款图发送给客户</Typography.Text> : null}
+                    <Button block disabled={detailPaymentCodeExpired} onClick={async () => {
+                        await navigator.clipboard.writeText(String(paymentCode?.paymentUrl || ''));
+                        message.success('付款链接已复制');
+                    }}>复制付款链接</Button>
+                    <Button type={detailPaymentCodeExpired ? 'primary' : 'default'} block loading={paymentCodeLoading} onClick={() => {
+                        Modal.confirm({
+                            title: '重新生成付款码？',
+                            content: '系统会撤销当前付款码，并按订单最新金额生成新码。',
+                            okText: '确认重新生成',
+                            cancelText: '取消',
+                            onOk: () => openPaymentCode(true),
+                        });
+                    }}>{detailPaymentCodeExpired ? '重新生成有效付款码' : '重新生成付款码'}</Button>
+                </Space>
+            </Modal>
+
             {/* 小票：移动端更贴合 */}
             <Modal
                 open={receiptOpen}
@@ -5096,7 +5246,7 @@ const OrderDetailPage: React.FC = () => {
                     <FloatButton icon={<ProfileOutlined/>} tooltip="订单列表" onClick={() => history.push('/orders')}/>
                     <FloatButton icon={<WalletOutlined/>} tooltip="钱包"
                                  onClick={() => history.push('/wallet/overview')}/>
-                    {canUseReceipt ? <FloatButton icon={<FileImageOutlined/>} tooltip="订单小票" onClick={() => openReceipt('customer')}/> : null}
+                    {canUseReceipt ? <FloatButton icon={<FileImageOutlined/>} tooltip={showPaymentCodeInsteadOfReceipt ? '生成付款码' : '订单小票'} onClick={() => showPaymentCodeInsteadOfReceipt ? void openPaymentCode() : openReceipt('customer')}/> : null}
                 </FloatButton.Group>
             ) : null}
 
