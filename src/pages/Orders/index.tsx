@@ -324,7 +324,6 @@ const OrdersPage: React.FC = () => {
                         </div>
 
                         <Space size={6} wrap>
-                            {row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : null}
                             <Tag>客户：{renderCustomerIdentifier(row)}</Tag>
                             {players.length ? players.map((name: string, idx: number) => <Tag key={`${name}-${idx}`}>{name}</Tag>) : <Tag>未派单</Tag>}
                         </Space>
@@ -409,7 +408,7 @@ const OrdersPage: React.FC = () => {
             width: 150,
             valueType: 'select',
             valueEnum: orderSourceValueEnum,
-            hideInTable: isMobile,
+            hideInTable: true,
             render: (_: any, row: any) => row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : '-',
         },
         {

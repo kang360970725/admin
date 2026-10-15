@@ -1608,6 +1608,12 @@ export interface FinanceReconciliationDetailRow {
     dispatcherUserType: string;
     orderSource: string;
     orderSourceLabel: string;
+    dispatcherLabel?: string;
+    channel?: string;
+    channelLabel?: string;
+    reconciliationType?: 'OFFLINE' | 'ONLINE' | 'RECHARGE' | 'OTHER';
+    reconciliationLabel?: string;
+    cashAmount?: number;
 }
 
 export interface FinanceReconciliationDispatcherRow {
@@ -1625,6 +1631,11 @@ export interface FinanceReconciliationDayRow {
     allPaidAmountTotal: number;
     manualReceiptOrderCount: number;
     manualReceiptAmountTotal: number;
+    offlineReceiptOrderCount?: number;
+    offlineReceiptAmountTotal?: number;
+    onlineReceiptOrderCount?: number;
+    onlineReceiptAmountTotal?: number;
+    offlineDispatcherItems?: FinanceReconciliationDispatcherRow[];
     dispatcherItems: FinanceReconciliationDispatcherRow[];
     detailRows: FinanceReconciliationDetailRow[];
 }
@@ -1636,6 +1647,10 @@ export interface FinanceReconciliationRes {
         allPaidAmountTotal: number;
         manualReceiptOrderCount: number;
         manualReceiptAmountTotal: number;
+        offlineReceiptOrderCount?: number;
+        offlineReceiptAmountTotal?: number;
+        onlineReceiptOrderCount?: number;
+        onlineReceiptAmountTotal?: number;
     };
     rows: FinanceReconciliationDayRow[];
     data?: {
