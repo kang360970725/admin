@@ -1494,6 +1494,8 @@ export default function OrderUpsertModal(props: {
                             className="bc-order-settlement-adjust"
                             items={[{
                                 key: 'settlement',
+                                // 保持默认收起，但预先挂载字段；否则 validateFields 不会提交未展开过的保底/结算金额。
+                                forceRender: true,
                                 label: showQtyForHourly
                                     ? `高级金额设置 · 结算 ¥${watchedSettlementAmount.toFixed(2)}${memberDiscountActive ? '（已锁定）' : ''}`
                                     : `高级金额设置 · 保底 ${watchedBaseAmountWan} 万 · 结算 ¥${watchedSettlementAmount.toFixed(2)}`,
