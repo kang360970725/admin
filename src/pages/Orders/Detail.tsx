@@ -130,8 +130,9 @@ const OrderDetailPage: React.FC = () => {
     const [refundOpen, setRefundOpen] = useState(false);
     const [refundRemark, setRefundRemark] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
-    const [refundStaffLiable, setRefundStaffLiable] = useState(false);
+    const [refundStaffLiable, setRefundStaffLiable] = useState<boolean | null>(null);
     const [refundLiableUserIds, setRefundLiableUserIds] = useState<number[]>([]);
+    const [refundAmount, setRefundAmount] = useState<number | null>(null);
     const [refundHasCompensation, setRefundHasCompensation] = useState(false);
     const [refundCompensationAmount, setRefundCompensationAmount] = useState<number | null>(null);
 
@@ -1449,6 +1450,16 @@ const OrderDetailPage: React.FC = () => {
 
     const submitRefund = async () => {
         try {
+            const amount = Number(refundAmount || 0);
+            if (!(amount > 0) || amount > refundMaxAmount) {
+                message.warning(`退款金额必须大于0且不超过 ¥${refundMaxAmount.toFixed(2)}`);
+                return;
+            }
+            const isPartialRefund = amount < refundMaxAmount - 0.009;
+            if (isPartialRefund && typeof refundStaffLiable !== 'boolean') {
+                message.warning('部分退款必须明确选择打手有责或无责');
+                return;
+            }
             const liableUserIdsForSubmit = refundStaffLiable ? refundRequiredLiableUserIds : [];
             if (refundStaffLiable && liableUserIdsForSubmit.length === 0) {
                 message.warning('请至少选择一名有责打手');
@@ -1462,12 +1473,13 @@ const OrderDetailPage: React.FC = () => {
             await refundOrder({
                 id: Number(order?.id),
                 remark: refundRemark || undefined,
-                staffLiable: refundStaffLiable,
+                staffLiable: refundStaffLiable === null ? undefined : refundStaffLiable,
                 liableUserIds: refundStaffLiable ? liableUserIdsForSubmit : undefined,
                 hasCompensation: refundHasCompensation,
                 compensationAmount: refundHasCompensation ? Number(refundCompensationAmount) : undefined,
+                refundAmount: amount,
             });
-            message.success('退款成功');
+            message.success(isPartialRefund ? '部分退款成功，已按剩余金额重算结算' : '全额退款成功');
             setRefundOpen(false);
             await loadDetail();
         } catch (e: any) {
@@ -2296,11 +2308,20 @@ const OrderDetailPage: React.FC = () => {
         () => refundStaffOptions.map((x) => Number(x.value)).filter((n) => Number.isFinite(n) && n > 0),
         [refundStaffOptions],
     );
+    const refundMaxAmount = useMemo(() => {
+        const paid = toNum(order?.latestPayment?.amount ?? order?.paidAmount ?? order?.finalPayableAmount ?? 0);
+        const refunded = (Array.isArray(order?.refunds) ? order.refunds : []).reduce(
+            (sum: number, item: any) => sum + toNum(item?.amount),
+            0,
+        );
+        return Math.max(0, Number((paid - refunded).toFixed(2)));
+    }, [order]);
 
     const openRefundModal = () => {
         setRefundRemark('');
-        setRefundStaffLiable(false);
+        setRefundStaffLiable(null);
         setRefundLiableUserIds(refundRequiredLiableUserIds);
+        setRefundAmount(refundMaxAmount);
         setRefundHasCompensation(false);
         setRefundCompensationAmount(null);
         setRefundOpen(true);
@@ -3947,20 +3968,48 @@ const OrderDetailPage: React.FC = () => {
                 title="订单退款"
             >
                 <Space direction="vertical" size={12} style={{width: '100%'}}>
-                    <Checkbox
-                        checked={refundStaffLiable}
-                        onChange={(e) => {
-                            const checked = Boolean(e.target.checked);
-                            setRefundStaffLiable(checked);
-                            if (checked) {
-                                setRefundLiableUserIds(refundRequiredLiableUserIds);
-                            }
+                    <Typography.Text strong>退款金额</Typography.Text>
+                    <InputNumber
+                        style={{width: '100%'}}
+                        min={0.01}
+                        max={refundMaxAmount}
+                        precision={2}
+                        addonBefore="¥"
+                        value={refundAmount as any}
+                        onChange={(value) => setRefundAmount(value == null ? null : Number(value))}
+                    />
+                    <Typography.Text type="secondary">
+                        当前最多可退 ¥{refundMaxAmount.toFixed(2)}；小于该金额即为部分退款。
+                    </Typography.Text>
+
+                    <Typography.Text strong>打手责任判定（部分退款必选）</Typography.Text>
+                    <Radio.Group
+                        value={refundStaffLiable}
+                        onChange={(event) => {
+                            const liable = Boolean(event.target.value);
+                            setRefundStaffLiable(liable);
+                            if (liable) setRefundLiableUserIds(refundRequiredLiableUserIds);
                         }}
                     >
-                        打手有责（触发额外处罚）
-                    </Checkbox>
+                        <Space direction={isMobile ? 'vertical' : 'horizontal'}>
+                            <Radio value={false}>打手无责</Radio>
+                            <Radio value={true}>打手有责</Radio>
+                        </Space>
+                    </Radio.Group>
 
-                    {refundStaffLiable ? (
+                    {Number(refundAmount || 0) > 0 && Number(refundAmount || 0) < refundMaxAmount - 0.009 ? (
+                        <Alert
+                            showIcon
+                            type="warning"
+                            message={refundStaffLiable === true
+                                ? `退款后剩余 ¥${(refundMaxAmount - Number(refundAmount || 0)).toFixed(2)}；打手最终服务收益归零，其他分佣按剩余金额重算。`
+                                : refundStaffLiable === false
+                                  ? `退款后剩余 ¥${(refundMaxAmount - Number(refundAmount || 0)).toFixed(2)}；打手及其他分佣均按剩余金额重算。`
+                                  : '请先选择打手有责或无责，才能执行部分退款。'}
+                        />
+                    ) : null}
+
+                    {refundStaffLiable === true ? (
                         <Space direction="vertical" size={8} style={{width: '100%'}}>
                             <Typography.Text type="secondary">有责打手固定为本单全部打手（不可编辑）</Typography.Text>
                             <Select

@@ -1224,6 +1224,7 @@ export async function refundOrder(
               liableUserIds?: number[];
               hasCompensation?: boolean;
               compensationAmount?: number;
+              refundAmount?: number;
           },
     payload?: {
         remark?: string;
@@ -1231,6 +1232,7 @@ export async function refundOrder(
         liableUserIds?: number[];
         hasCompensation?: boolean;
         compensationAmount?: number;
+        refundAmount?: number;
     },
 ) {
     // 兼容：refundOrder(orderId, { remark })
@@ -1245,6 +1247,7 @@ export async function refundOrder(
                 liableUserIds: payload?.liableUserIds,
                 hasCompensation: payload?.hasCompensation,
                 compensationAmount: payload?.compensationAmount,
+                refundAmount: payload?.refundAmount,
             },
         });
     }
@@ -1259,6 +1262,7 @@ export async function refundOrder(
             liableUserIds: idOrDto.liableUserIds,
             hasCompensation: idOrDto.hasCompensation,
             compensationAmount: idOrDto.compensationAmount,
+            refundAmount: idOrDto.refundAmount,
         },
     });
 }
@@ -1944,6 +1948,40 @@ export interface SystemConfigItem {
     enabled: boolean;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface ShouqianbaTerminalStatus {
+    configured: boolean;
+    vendorSnConfigured: boolean;
+    vendorKeyConfigured: boolean;
+    appIdConfigured: boolean;
+    notifyUrlConfigured: boolean;
+    credentialEncryptionKeyConfigured: boolean;
+    deviceId: string;
+    apiBase: string;
+    terminal?: {
+        id: number;
+        deviceId: string;
+        terminalSn: string;
+        status: string;
+        activatedAt: string;
+        lastCheckedInAt?: string | null;
+    } | null;
+}
+
+export async function getShouqianbaStatus() {
+    return request<ShouqianbaTerminalStatus>(`${API_BASE}/shouqianba/status`);
+}
+
+export async function activateShouqianbaTerminal(code: string) {
+    return request(`${API_BASE}/shouqianba/activate`, {
+        method: 'POST',
+        data: { code, confirm: true },
+    });
+}
+
+export async function checkinShouqianbaTerminal() {
+    return request(`${API_BASE}/shouqianba/checkin`, { method: 'POST', data: {} });
 }
 
 export async function getStaffRuleEngineConfig() {

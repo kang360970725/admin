@@ -1,8 +1,18 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, Divider, Form, Input, InputNumber, message, Modal, Segmented, Select, Space, Switch, Tag, Typography } from 'antd';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { listSystemConfigs, StaffRuleEngineConfig, SystemConfigItem, upsertStaffRuleEngineConfig, upsertSystemConfig } from '@/services/api';
+import {
+  activateShouqianbaTerminal,
+  checkinShouqianbaTerminal,
+  getShouqianbaStatus,
+  listSystemConfigs,
+  ShouqianbaTerminalStatus,
+  StaffRuleEngineConfig,
+  SystemConfigItem,
+  upsertStaffRuleEngineConfig,
+  upsertSystemConfig,
+} from '@/services/api';
 
 const { Text } = Typography;
 
@@ -440,7 +450,26 @@ const SystemConfigsPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('ALL');
   const [dataSource, setDataSource] = useState<SystemConfigItem[]>([]);
+  const [shouqianbaStatus, setShouqianbaStatus] = useState<ShouqianbaTerminalStatus | null>(null);
+  const [shouqianbaLoading, setShouqianbaLoading] = useState(false);
+  const [activationOpen, setActivationOpen] = useState(false);
+  const [activationCode, setActivationCode] = useState('');
   const [form] = Form.useForm();
+
+  const refreshShouqianbaStatus = async () => {
+    setShouqianbaLoading(true);
+    try {
+      setShouqianbaStatus(await getShouqianbaStatus());
+    } catch (error: any) {
+      message.error(error?.data?.message || error?.message || '收钱吧状态获取失败');
+    } finally {
+      setShouqianbaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshShouqianbaStatus();
+  }, []);
 
   const visibleData = useMemo(() => {
     const filtered = dataSource.filter((item) => !hiddenKeys.has(String(item.key || '').trim()));
@@ -570,6 +599,54 @@ const SystemConfigsPage: React.FC = () => {
 
   return (
     <>
+      <Card
+        title="收钱吧 C扫B-PRO"
+        loading={shouqianbaLoading && !shouqianbaStatus}
+        style={{ marginBottom: 16 }}
+        extra={<Button onClick={() => void refreshShouqianbaStatus()} loading={shouqianbaLoading}>刷新状态</Button>}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            showIcon
+            type={shouqianbaStatus?.terminal ? 'success' : shouqianbaStatus?.configured ? 'warning' : 'error'}
+            message={shouqianbaStatus?.terminal ? '终端已激活' : shouqianbaStatus?.configured ? '开发者参数已配置，等待激活' : '收钱吧服务端参数不完整'}
+            description={shouqianbaStatus?.terminal
+              ? `device_id：${shouqianbaStatus.terminal.deviceId}；最后签到：${shouqianbaStatus.terminal.lastCheckedInAt ? new Date(shouqianbaStatus.terminal.lastCheckedInAt).toLocaleString() : '未签到'}`
+              : '激活会消耗激活码次数，必须确认目标门店后再执行。'}
+          />
+          <Space wrap>
+            <Tag color={shouqianbaStatus?.configured ? 'success' : 'error'}>开发者参数 {shouqianbaStatus?.configured ? '已配置' : '未完整'}</Tag>
+            <Tag color={shouqianbaStatus?.notifyUrlConfigured ? 'success' : 'error'}>回调地址 {shouqianbaStatus?.notifyUrlConfigured ? '已配置' : '未配置'}</Tag>
+            <Tag color={shouqianbaStatus?.credentialEncryptionKeyConfigured ? 'success' : 'error'}>凭据加密密钥 {shouqianbaStatus?.credentialEncryptionKeyConfigured ? '已配置' : '未配置'}</Tag>
+          </Space>
+          <Space wrap>
+            {!shouqianbaStatus?.terminal ? (
+              <Button type="primary" danger onClick={() => setActivationOpen(true)} disabled={!shouqianbaStatus?.configured}>
+                激活终端
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                onClick={async () => {
+                  setShouqianbaLoading(true);
+                  try {
+                    await checkinShouqianbaTerminal();
+                    message.success('签到成功，终端密钥已更新');
+                    await refreshShouqianbaStatus();
+                  } catch (error: any) {
+                    message.error(error?.data?.message || error?.message || '签到失败');
+                  } finally {
+                    setShouqianbaLoading(false);
+                  }
+                }}
+              >
+                手动签到
+              </Button>
+            )}
+          </Space>
+        </Space>
+      </Card>
+
       <ProTable<SystemConfigItem>
         rowKey="id"
         actionRef={actionRef}
@@ -612,6 +689,37 @@ const SystemConfigsPage: React.FC = () => {
           };
         }}
       />
+
+      <Modal
+        title="激活收钱吧终端"
+        open={activationOpen}
+        okText="确认激活"
+        okButtonProps={{ danger: true, disabled: !/^\d{8}$/.test(activationCode) }}
+        confirmLoading={shouqianbaLoading}
+        onCancel={() => { setActivationOpen(false); setActivationCode(''); }}
+        onOk={async () => {
+          setShouqianbaLoading(true);
+          try {
+            await activateShouqianbaTerminal(activationCode);
+            message.success('终端激活成功');
+            setActivationOpen(false);
+            setActivationCode('');
+            await refreshShouqianbaStatus();
+          } catch (error: any) {
+            message.error(error?.data?.message || error?.message || '终端激活失败');
+          } finally {
+            setShouqianbaLoading(false);
+          }
+        }}
+      >
+        <Alert type="warning" showIcon message="激活会消耗次数，且终端与当前 device_id 绑定。请确认激活码所属门店无误。" style={{ marginBottom: 16 }} />
+        <Input
+          value={activationCode}
+          onChange={(event) => setActivationCode(event.target.value.replace(/\D/g, '').slice(0, 8))}
+          placeholder="请输入8位激活码"
+          maxLength={8}
+        />
+      </Modal>
 
       <Modal
         title="编辑基础配置"
