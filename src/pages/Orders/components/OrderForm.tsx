@@ -1086,10 +1086,64 @@ export default function OrderUpsertModal(props: {
         if (!paymentReceiptImage) return;
         try {
             const blob = await (await fetch(paymentReceiptImage)).blob();
+            if (!navigator?.clipboard?.write || typeof ClipboardItem === 'undefined') throw new Error('IMAGE_CLIPBOARD_UNSUPPORTED');
             await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
             message.success('订单小票已复制，可直接粘贴发送给客户');
         } catch {
-            message.warning('当前浏览器不支持直接复制图片，请右键或长按小票图片复制');
+            message.warning('当前浏览器不支持图片剪贴板，请使用“分享订单小票”或长按图片');
+        }
+    };
+
+    const sharePaymentReceiptImage = async () => {
+        if (!paymentReceiptImage) return;
+        try {
+            const blob = await (await fetch(paymentReceiptImage)).blob();
+            const orderNo = String(paidOrderDetail?.autoSerial || paymentResult?.autoSerial || paymentResult?.orderId || '订单');
+            const file = new File([blob], `蓝猫爽打-${orderNo}-订单小票.png`, {type: 'image/png'});
+            const shareData = {
+                title: '蓝猫爽打订单小票',
+                text: `订单 ${orderNo} 已支付`,
+                files: [file],
+            };
+            if (navigator?.share && (!navigator.canShare || navigator.canShare(shareData))) {
+                await navigator.share(shareData);
+                return;
+            }
+            const imageWindow = window.open('', '_blank');
+            if (!imageWindow) throw new Error('POPUP_BLOCKED');
+            imageWindow.document.title = `订单小票-${orderNo}`;
+            imageWindow.document.body.style.cssText = 'margin:0;background:#111;display:flex;min-height:100vh;align-items:center;justify-content:center;';
+            const img = imageWindow.document.createElement('img');
+            img.src = paymentReceiptImage;
+            img.alt = `订单 ${orderNo} 小票`;
+            img.style.cssText = 'display:block;max-width:100%;height:auto;';
+            imageWindow.document.body.appendChild(img);
+            message.info('当前浏览器不支持系统分享，已打开小票原图，请长按图片发送');
+        } catch (error: any) {
+            if (String(error?.name || '') === 'AbortError') return;
+            message.warning('当前浏览器无法直接分享，请长按小票图片保存或发送');
+        }
+    };
+
+    const copyPaymentReceiptText = async () => {
+        try {
+            if (navigator?.clipboard?.writeText) {
+                await navigator.clipboard.writeText(paymentReceiptText);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = paymentReceiptText;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                const copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (!copied) throw new Error('TEXT_COPY_FAILED');
+            }
+            message.success('小票文字已复制');
+        } catch {
+            message.warning('当前浏览器不允许自动复制，请长按选择小票文字');
         }
     };
 
@@ -1839,11 +1893,13 @@ export default function OrderUpsertModal(props: {
                                                 可点击按钮复制，或直接右键/长按整张小票发送给客户
                                             </Typography.Text>
                                             <Space wrap style={{ justifyContent: 'center' }}>
-                                                <Button type="primary" onClick={() => void copyPaymentReceiptImage()}>复制订单小票</Button>
-                                                <Button onClick={async () => {
-                                                    await navigator.clipboard.writeText(paymentReceiptText);
-                                                    message.success('小票文字已复制');
-                                                }}>复制小票文字</Button>
+                                                {isMobile ? (
+                                                    <Button type="primary" onClick={() => void sharePaymentReceiptImage()}>分享订单小票</Button>
+                                                ) : (
+                                                    <Button type="primary" onClick={() => void copyPaymentReceiptImage()}>复制订单小票</Button>
+                                                )}
+                                                <Button onClick={() => void copyPaymentReceiptText()}>复制小票文字</Button>
+                                                {isMobile ? <Button onClick={() => void copyPaymentReceiptImage()}>尝试复制图片</Button> : null}
                                             </Space>
                                         </>
                                     ) : (
