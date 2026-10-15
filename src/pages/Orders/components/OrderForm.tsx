@@ -36,6 +36,7 @@ import html2canvas from 'html2canvas';
 import { getGameProjectOptions, getMemberOrderContext, getOrderDetail, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import { maskPhone } from '@/utils/privacy';
+import { generateReceiptImage } from '@/utils/receiptImage';
 
 type ProjectItem = {
     id: number;
@@ -244,6 +245,10 @@ export default function OrderUpsertModal(props: {
     const [paymentTicketImage, setPaymentTicketImage] = useState('');
     const [paymentClock, setPaymentClock] = useState(() => Date.now());
     const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+    const [paidOrderDetail, setPaidOrderDetail] = useState<any>(null);
+    const [paymentReceiptText, setPaymentReceiptText] = useState('');
+    const [paymentReceiptImage, setPaymentReceiptImage] = useState('');
+    const [paymentReceiptLoading, setPaymentReceiptLoading] = useState(false);
     const [generatedPaymentSignature, setGeneratedPaymentSignature] = useState('');
 
     // 项目下拉
@@ -1008,6 +1013,7 @@ export default function OrderUpsertModal(props: {
                 if (cancelled) return;
                 const paid = detail?.isPaid === true || String(detail?.payStatus || '').toUpperCase() === 'SUCCESS';
                 setPaymentConfirmed(paid);
+                if (paid) setPaidOrderDetail(detail);
                 if (!paid) timer = window.setTimeout(checkPaid, 3000);
             } catch {
                 if (!cancelled) timer = window.setTimeout(checkPaid, 5000);
@@ -1021,6 +1027,77 @@ export default function OrderUpsertModal(props: {
     }, [open, paymentResult?.orderId, paymentResult?.paymentId]);
 
     useEffect(() => {
+        if (!open || !paymentConfirmed || !paidOrderDetail) return;
+        let cancelled = false;
+        const buildReceipt = async () => {
+            setPaymentReceiptLoading(true);
+            try {
+                const detail = paidOrderDetail || {};
+                const projectName = detail?.project?.name || detail?.projectSnapshot?.name || paymentResult?.projectName || '-';
+                const dispatches = Array.isArray(detail?.dispatches) ? detail.dispatches : [];
+                const participants = detail?.currentDispatch?.participants || dispatches[dispatches.length - 1]?.participants || [];
+                const playerNames = (Array.isArray(participants) ? participants : [])
+                    .filter((item: any) => item?.isActive !== false)
+                    .map((item: any) => item?.user?.name || item?.user?.nickname || item?.userId)
+                    .filter(Boolean);
+                const amount = Number(detail?.paidAmount ?? detail?.finalPayableAmount ?? paymentResult?.amount ?? 0);
+                const originalAmount = Number(detail?.originalAmount ?? detail?.receivableAmount ?? amount);
+                const billingMode = String(detail?.projectSnapshot?.billingMode ?? detail?.project?.billingMode ?? '');
+                const unitPrice = Number(detail?.projectSnapshot?.price ?? detail?.project?.price ?? 0);
+                const hours = billingMode === 'HOURLY' && unitPrice > 0 ? originalAmount / unitPrice : null;
+                const baseWan = Number(detail?.baseAmountWan || 0);
+                const orderTime = dayjs(detail?.orderTime || detail?.createdAt || new Date());
+                const text = [
+                    `订单编号：${detail?.autoSerial || paymentResult?.autoSerial || detail?.id || paymentResult?.orderId || '-'}`,
+                    `下单项目：${projectName}`,
+                    `订单${hours != null ? '时长' : '保底'}：${hours != null ? `${hours.toFixed(2)} 小时` : (baseWan > 0 ? `${baseWan} 万` : '无保底')}`,
+                    `接待客服：${detail?.dispatcher?.name || '客服'}`,
+                    '接待陪玩：',
+                    ...(playerNames.length ? playerNames : ['（待派单/待接单）']).map((name: any) => `  ${name}`),
+                    `派单方式：${detail?.orderSourceLabel || detail?.orderSource || '客服手动派单'}`,
+                    `商品小计：¥${originalAmount.toFixed(2)}`,
+                    `实付金额：¥${amount.toFixed(2)}`,
+                    '支付方式：收钱吧在线收款',
+                    `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
+                    '预计等待时间：5-10分钟',
+                    '',
+                    '温馨提醒：',
+                    '消费过程中如遇任何问题，请随时联系本单客服处理～',
+                    '订单完结24小时内支持售后，客服为售后唯一渠道；',
+                    '请勿相信其他任何人，谨防上当受骗。',
+                ].join('\n');
+                const image = await generateReceiptImage('蓝猫爽打 · 萌爪订单', text, {
+                    width: 800,
+                    theme: {accent: '#f55f8b', accent2: '#5599df'},
+                });
+                if (!cancelled) {
+                    setPaymentReceiptText(text);
+                    setPaymentReceiptImage(image || '');
+                }
+            } finally {
+                if (!cancelled) setPaymentReceiptLoading(false);
+            }
+        };
+        void buildReceipt();
+        return () => { cancelled = true; };
+    }, [open, paymentConfirmed, paidOrderDetail, paymentResult]);
+
+    const copyPaymentReceiptImage = async () => {
+        if (!paymentReceiptImage) return;
+        try {
+            const blob = await (await fetch(paymentReceiptImage)).blob();
+            await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+            message.success('订单小票已复制，可直接粘贴发送给客户');
+        } catch {
+            message.warning('当前浏览器不支持直接复制图片，请右键或长按小票图片复制');
+        }
+    };
+
+    useEffect(() => {
+        setPaidOrderDetail(null);
+        setPaymentReceiptText('');
+        setPaymentReceiptImage('');
+        setPaymentReceiptLoading(false);
         if (paymentResult?.paymentId) setGeneratedPaymentSignature(currentPaymentSignature);
         else setGeneratedPaymentSignature('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1746,12 +1823,33 @@ export default function OrderUpsertModal(props: {
                                 </div>
                             </div>
                             {paymentConfirmed ? (
-                                <Alert
-                                    type="success"
-                                    showIcon
-                                    message="客户已支付，订单状态已更新"
-                                    description="付款链接已停止使用，可直接查看订单及自动派单结果。"
-                                />
+                                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                                    <Alert
+                                        type="success"
+                                        showIcon
+                                        message="客户已支付，订单状态已更新"
+                                        description="小票已在当前窗口生成，可直接复制图片发给客户，无需关闭弹窗或进入订单详情。"
+                                    />
+                                    {paymentReceiptLoading ? (
+                                        <div className="bc-payment-ticket-rendering">正在生成订单小票…</div>
+                                    ) : paymentReceiptImage ? (
+                                        <>
+                                            <img className="bc-payment-ticket-image" src={paymentReceiptImage} alt="蓝猫爽打订单小票，可右键复制图片" />
+                                            <Typography.Text type="secondary" style={{ textAlign: 'center' }}>
+                                                可点击按钮复制，或直接右键/长按整张小票发送给客户
+                                            </Typography.Text>
+                                            <Space wrap style={{ justifyContent: 'center' }}>
+                                                <Button type="primary" onClick={() => void copyPaymentReceiptImage()}>复制订单小票</Button>
+                                                <Button onClick={async () => {
+                                                    await navigator.clipboard.writeText(paymentReceiptText);
+                                                    message.success('小票文字已复制');
+                                                }}>复制小票文字</Button>
+                                            </Space>
+                                        </>
+                                    ) : (
+                                        <Alert type="warning" showIcon message="小票图片生成失败" description="可复制小票文字，或进入订单详情重新生成。" />
+                                    )}
+                                </Space>
                             ) : paymentCodeInvalid ? (
                                 <Alert
                                     type="warning"
@@ -1795,7 +1893,7 @@ export default function OrderUpsertModal(props: {
                     {paymentResult?.orderId ? (
                         <Space style={{ width: '100%', justifyContent: 'center' }}>
                             <Button onClick={onCancel}>关闭</Button>
-                            <Button type="primary" onClick={() => onViewCreatedOrder?.(Number(paymentResult.orderId))}>查看订单</Button>
+                            <Button type={paymentConfirmed ? 'default' : 'primary'} onClick={() => onViewCreatedOrder?.(Number(paymentResult.orderId))}>查看订单</Button>
                         </Space>
                     ) : <Button block onClick={onCancel}>取消</Button>}
                 </aside>
