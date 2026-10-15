@@ -9,6 +9,7 @@
 /.umi-production
 /.umi-test
 /dist
+/outputs
 /.mfsu
 .swc
 .idea
