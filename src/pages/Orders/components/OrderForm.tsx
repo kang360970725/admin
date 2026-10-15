@@ -427,12 +427,6 @@ export default function OrderUpsertModal(props: {
                 const payable = toMoney(Math.max(0, toMoney(discount.payableAmount) - couponDiscount));
                 form?.setFieldsValue?.({ paidAmount: payable, settlementAmount: payable, manualAdjustAmount: 0 } as any);
             }
-            const primary = context?.primaryGameCard;
-            const currentIdentifier = String(form?.getFieldValue?.('customerGameId') || '').trim();
-            if (primary?.gameUniqueId && !currentIdentifier) {
-                autoSelectedCardRef.current = String(primary.gameUniqueId);
-                form?.setFieldsValue?.({ customerGameId: String(primary.gameUniqueId), customerIdentifierIsGameId: true } as any);
-            }
             return context;
         } catch (error) {
             console.error(error);
@@ -1396,7 +1390,11 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
                     <Col {...fullColProps}>
-                        <Form.Item name="customerUserId" label="关联会员">
+                        <Form.Item
+                            name="customerUserId"
+                            label="关联会员（可选）"
+                            extra="订单将直接归属该会员，用于消费记录、会员权益、积分和售后；与本次游戏ID是否填写无关。"
+                        >
                             <Select
                                 placeholder="可选：搜索会员编码、手机号或姓名"
                                 showSearch
