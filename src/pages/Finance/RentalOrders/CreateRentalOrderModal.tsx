@@ -20,6 +20,7 @@ export default function CreateRentalOrderModal({ staff, onClose, onSuccess }: {
   const isMobile = useIsMobile(768);
   const { token } = theme.useToken();
   const [saving, setSaving] = React.useState(false);
+  const savingRef = React.useRef(false);
   const prepaid = Form.useWatch('prepaidAmount', form);
   const deposit = Form.useWatch('depositAmount', form);
   const total = Math.round((Number(prepaid || 0) + Number(deposit || 0)) * 100) / 100;
@@ -32,7 +33,9 @@ export default function CreateRentalOrderModal({ staff, onClose, onSuccess }: {
   return <Modal className="rental-modal" width={640} title={`创建租号订单 · ${staff?.nickname || staff?.name || ''}`} open={!!staff}
     onCancel={onClose} confirmLoading={saving} okText="确认扣款并创建" destroyOnClose
     onOk={async () => {
-      if (saving) return;
+      // state 更新前也要同步拦截，避免快速连点发出多个创建请求。
+      if (savingRef.current) return;
+      savingRef.current = true;
       try {
         const values = await form.validateFields();
         setSaving(true);
@@ -40,7 +43,7 @@ export default function CreateRentalOrderModal({ staff, onClose, onSuccess }: {
           forcedSettlementDate: values.forcedSettlementDate.format('YYYY-MM-DD') });
         message.success('租号订单已创建，租金与押金已扣除'); onSuccess(); onClose();
       } catch (e: any) { if (!e?.errorFields) message.error(apiError(e)); }
-      finally { setSaving(false); }
+      finally { savingRef.current = false; setSaving(false); }
     }}>
     <Row style={{ marginBottom: 20, padding: 16, background: token.colorFillAlter, borderRadius: token.borderRadiusLG }}>
       <Col span={12}><Statistic title="参考资产" value={assets} precision={2} prefix="¥" valueStyle={{ fontSize: 22 }} /></Col>
@@ -51,7 +54,8 @@ export default function CreateRentalOrderModal({ staff, onClose, onSuccess }: {
         <Col xs={24} sm={12}><Form.Item name="prepaidAmount" label="预扣租金（不含押金）" rules={[{ required: true }]}><InputNumber min={0.01} max={99999999.99} precision={2} addonBefore="¥" /></Form.Item></Col>
         <Col xs={24} sm={12}><Form.Item name="depositAmount" label="租号订单押金（可不填）"><InputNumber min={0} max={99999999.99} precision={2} addonBefore="¥" /></Form.Item></Col>
       </Row>
-      <Form.Item name="accountSourceNo" label="号源编号" rules={[{ required: true, whitespace: true }]}><Input maxLength={100} /></Form.Item>
+      <Form.Item name="accountSourceNo" label="号源编号" extra="号源编号全局唯一，已有订单数据的编号不能再次创建。"
+        rules={[{ required: true, whitespace: true }]}><Input maxLength={100} /></Form.Item>
       <Row gutter={16}>
         <Col xs={24} sm={12}><Form.Item label="开始日期（自动）" extra="上海时间14:00后顺延至次日。"><Input value={start} disabled /></Form.Item></Col>
         <Col xs={24} sm={12}><Form.Item name="forcedSettlementDate" label="强制结算日期" rules={[{ required: true }]}>
