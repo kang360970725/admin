@@ -43,7 +43,6 @@ import {
     getOrders,
     getPlayerOptions,
     getUserCoupons,
-    updatePlayerWorkMode,
 } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import { maskPhone } from '@/utils/privacy';
@@ -79,6 +78,8 @@ type PlayerManageItem = {
     workMode?: 'ONLINE' | 'OFFLINE';
     offlineJoinedAt?: string | null;
     workStatus?: string;
+    averageResponseTimeText?: string;
+    responseSampleCount?: number;
 };
 
 type OrderRow = {
@@ -115,9 +116,6 @@ const normalizeList = (res: any): any[] => {
 };
 
 const getPlayerWorkStateMeta = (player: PlayerManageItem) => {
-    if (player.workMode === 'OFFLINE') {
-        return { text: '离线', color: 'default' as const };
-    }
     if (String(player.workStatus || '').toUpperCase() === 'WORKING') {
         return { text: '接单中', color: 'blue' as const };
     }
@@ -278,6 +276,8 @@ export default function CSWorkbenchPage() {
                 workMode: u.workMode === 'OFFLINE' ? 'OFFLINE' : 'ONLINE',
                 offlineJoinedAt: u.offlineJoinedAt ?? null,
                 workStatus: String(u.workStatus || 'IDLE'),
+                averageResponseTimeText: String(u.averageResponseTimeText || '暂无数据'),
+                responseSampleCount: Number(u.responseSampleCount || 0),
             }));
             setOnlinePlayers(items);
             setOnlinePlayerPage(Number(res?.page ?? queryPage));
@@ -328,7 +328,7 @@ export default function CSWorkbenchPage() {
     const visibleOnlinePlayers = useMemo(
         () => {
             const rows = Array.isArray(onlinePlayers) ? onlinePlayers : [];
-            return rows.filter((player) => player.workMode === 'ONLINE');
+            return rows;
         },
         [onlinePlayers],
     );
@@ -381,19 +381,6 @@ export default function CSWorkbenchPage() {
             return;
         }
         updatePlayerSelection(dispatchForm, exists ? current.filter((id) => id !== playerId) : [...current, playerId]);
-    };
-
-    const handleTogglePlayerWorkMode = async (playerId: number, nextMode: 'ONLINE' | 'OFFLINE') => {
-        try {
-            await updatePlayerWorkMode(playerId, { workMode: nextMode });
-            message.success(nextMode === 'ONLINE' ? '已设为在线' : '已设为离线');
-            void fetchOnlinePlayers(onlinePlayerKeyword, onlinePlayerPage);
-            void fetchPlayers(playerKeywordCreate || '');
-            void fetchPlayers(playerKeywordDispatch || '');
-        } catch (e: any) {
-            console.error(e);
-            message.error(e?.response?.data?.message || e?.message || '状态更新失败');
-        }
     };
 
     const fetchOrders = async (nextPage?: number) => {
@@ -1628,7 +1615,7 @@ export default function CSWorkbenchPage() {
         <PageContainer title="服务者在线看板" className="cs-workbench-release-20260904">
             <Space direction="vertical" size={12} style={{ width: '100%', maxWidth: 960, margin: '0 auto' }}>
                 <Card
-                    title="服务者在线管理"
+                    title="服务者接单状态"
                     extra={
                         <Space>
                             {canCreateWorkbenchOrder ? (
@@ -1670,18 +1657,17 @@ export default function CSWorkbenchPage() {
                             <Col xs={24} md={12}>
                                 <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                                     <Text type="secondary">
-                                        在线 {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => p.workMode === 'ONLINE').length : 0} / 服务中{' '}
+                                        可派单 {Array.isArray(onlinePlayers) ? onlinePlayers.length : 0} / 服务中{' '}
                                         {Array.isArray(onlinePlayers) ? onlinePlayers.filter((p) => String(p.workStatus || '').toUpperCase() === 'WORKING').length : 0} / 总数{' '}
                                         {Array.isArray(onlinePlayers) ? onlinePlayers.length : 0}
                                     </Text>
-                                    <Text type="secondary">可上下线、可刷新状态</Text>
+                                    <Text type="secondary">正常在职服务者默认在线</Text>
                                 </Space>
                             </Col>
                         </Row>
 
                         <Row gutter={[12, 12]}>
                             {visibleOnlinePlayers.map((player) => {
-                                const isOnline = player.workMode !== 'OFFLINE';
                                 const workStateMeta = getPlayerWorkStateMeta(player);
                                 return (
                                     <Col key={player.id} xs={24} md={12} lg={8}>
@@ -1689,8 +1675,8 @@ export default function CSWorkbenchPage() {
                                             size="small"
                                             style={{
                                                 borderRadius: 14,
-                                                border: isOnline ? '1px solid rgba(82,196,26,0.25)' : '1px solid rgba(0,0,0,0.06)',
-                                                background: isOnline ? 'rgba(82,196,26,0.04)' : '#fff',
+                                                border: '1px solid rgba(82,196,26,0.25)',
+                                                background: 'rgba(82,196,26,0.04)',
                                             }}
                                             bodyStyle={{ padding: 12 }}
                                         >
@@ -1707,30 +1693,8 @@ export default function CSWorkbenchPage() {
 
                                                 <Space size={8} wrap>
                                                     <Tag>今日接单 {player.todayHandledCount ?? 0}</Tag>
-                                                    {player.workMode === 'OFFLINE' && player.offlineJoinedAt ? (
-                                                        <Tag color="default">
-                                                            离线 {dayjs(player.offlineJoinedAt).format('MM-DD HH:mm')}
-                                                        </Tag>
-                                                    ) : null}
-                                                </Space>
-
-                                                <Space wrap>
-                                                    <Button
-                                                        size="small"
-                                                        type={isOnline ? 'default' : 'primary'}
-                                                        onClick={() => void handleTogglePlayerWorkMode(player.id, 'ONLINE')}
-                                                        loading={onlinePlayerLoading}
-                                                    >
-                                                        设为在线
-                                                    </Button>
-                                                    <Button
-                                                        size="small"
-                                                        danger={isOnline}
-                                                        onClick={() => void handleTogglePlayerWorkMode(player.id, 'OFFLINE')}
-                                                        loading={onlinePlayerLoading}
-                                                    >
-                                                        设为离线
-                                                    </Button>
+                                                    <Tag color="blue">平均响应 {player.averageResponseTimeText || '暂无数据'}</Tag>
+                                                    {player.responseSampleCount ? <Tag>样本 {player.responseSampleCount}</Tag> : null}
                                                 </Space>
                                             </Space>
                                         </Card>
@@ -1741,7 +1705,7 @@ export default function CSWorkbenchPage() {
 
                         {!visibleOnlinePlayers.length ? (
                             <Card size="small" style={{ borderRadius: 14, border: '1px dashed rgba(0,0,0,0.12)' }}>
-                                <Text type="secondary">暂无服务者在线数据。</Text>
+                                <Text type="secondary">暂无可派单服务者数据。</Text>
                             </Card>
                         ) : null}
 

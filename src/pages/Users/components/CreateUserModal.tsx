@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Form, Input, Select, InputNumber, message, DatePicker } from 'antd';
-import dayjs from 'dayjs';
+import { Modal, Form, Input, Select, InputNumber, message } from 'antd';
 import { createUser } from '@/services/api';
 
 const { Option } = Select;
@@ -28,17 +27,13 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
     const [loading, setLoading] = React.useState(false);
     const initialUserType = useMemo(() => defaultUserType || 'REGISTERED_USER', [defaultUserType]);
     const [userType, setUserType] = useState(initialUserType);
-    const [workMode, setWorkMode] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
 
     useEffect(() => {
         if (!visible) return;
         setUserType(initialUserType);
-        setWorkMode('ONLINE');
         form.setFieldsValue({
             userType: initialUserType,
             balance: 0,
-            workMode: 'ONLINE',
-            offlineJoinedAt: null,
         });
     }, [visible, initialUserType, form]);
 
@@ -47,19 +42,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
         // 非服务者时不再保留线下相关字段，避免误传
         if (value !== 'STAFF') {
-            setWorkMode('ONLINE');
             form.setFieldsValue({ workMode: 'ONLINE', offlineJoinedAt: null });
-        } else {
-            form.setFieldsValue({ workMode: 'ONLINE' });
-        }
-    };
-
-    const handleWorkModeChange = (value: 'ONLINE' | 'OFFLINE') => {
-        setWorkMode(value);
-
-        // 切回线上时清空线下入职时间
-        if (value === 'ONLINE') {
-            form.setFieldsValue({ offlineJoinedAt: null });
         }
     };
 
@@ -72,11 +55,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
             if (values.userType === 'STAFF') {
                 payload.staffTags = values.staffTags ? [values.staffTags] : [];
-                payload.workMode = (values.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
-                payload.offlineJoinedAt =
-                    payload.workMode === 'OFFLINE' && values.offlineJoinedAt
-                        ? dayjs(values.offlineJoinedAt).startOf('day').toISOString()
-                        : null;
+                payload.workMode = 'ONLINE';
+                payload.offlineJoinedAt = null;
             } else {
                 delete payload.workMode;
                 delete payload.offlineJoinedAt;
@@ -85,7 +65,6 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
             await createUser(payload);
             form.resetFields();
             setUserType(initialUserType);
-            setWorkMode('ONLINE');
             onSuccess();
         } catch (error: any) {
             if (error.errorFields) {
@@ -112,16 +91,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                             const retryValues = await form.validateFields();
                             const retryPayload: any = { ...retryValues, forceRejoin: true };
                             retryPayload.staffTags = retryValues.staffTags ? [retryValues.staffTags] : [];
-                            retryPayload.workMode = (retryValues.workMode || 'ONLINE') as 'ONLINE' | 'OFFLINE';
-                            retryPayload.offlineJoinedAt =
-                                retryPayload.workMode === 'OFFLINE' && retryValues.offlineJoinedAt
-                                    ? dayjs(retryValues.offlineJoinedAt).startOf('day').toISOString()
-                                    : null;
+                            retryPayload.workMode = 'ONLINE';
+                            retryPayload.offlineJoinedAt = null;
                             await createUser(retryPayload);
                             message.success('服务者已重新入驻');
                             form.resetFields();
                             setUserType(initialUserType);
-                            setWorkMode('ONLINE');
                             onSuccess();
                         },
                     });
@@ -137,7 +112,6 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
     const handleCancel = () => {
         form.resetFields();
         setUserType(initialUserType);
-        setWorkMode('ONLINE');
         onCancel();
     };
 
@@ -319,37 +293,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                     <div className="bc-admin-form-section">
                         <div className="bc-admin-form-section-title">服务者信息</div>
                     <div className="bc-admin-form-grid">
-                        <Form.Item
-                            label="服务者工作模式"
-                            name="workMode"
-                            rules={[{ required: true, message: '请选择服务者工作模式' }]}
-                        >
-                            <Select onChange={handleWorkModeChange}>
-                                <Option value="ONLINE">线上</Option>
-                                <Option value="OFFLINE">线下</Option>
-                            </Select>
-                        </Form.Item>
-
-                        <Form.Item
-                            label="线下入驻时间"
-                            name="offlineJoinedAt"
-                            rules={[
-                                {
-                                    validator: async (_, value) => {
-                                        const mode = form.getFieldValue('workMode');
-                                        if (mode === 'OFFLINE' && !value) {
-                                            throw new Error('线下服务者必须填写入驻时间');
-                                        }
-                                    },
-                                },
-                            ]}
-                        >
-                            <DatePicker
-                                style={{ width: '100%' }}
-                                placeholder="请选择线下入职时间"
-                                disabled={workMode !== 'OFFLINE'}
-                                allowClear
-                            />
+                        <Form.Item label="接单状态">
+                            <Input value="正常在职服务者默认在线" disabled />
                         </Form.Item>
                     </div>
                     </div>

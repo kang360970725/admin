@@ -272,6 +272,14 @@ export default function StaffCardsPage() {
     },
     { title: '标语', dataIndex: 'slogan', search: false, ellipsis: true },
     {
+      title: '平均响应时间',
+      dataIndex: 'averageResponseTimeText',
+      search: false,
+      render: (_: any, r: any) => (
+        <span>{r.averageResponseTimeText || '暂无数据'}{r.responseSampleCount ? `（${r.responseSampleCount}单）` : ''}</span>
+      ),
+    },
+    {
       title: '游戏',
       dataIndex: 'gameTags',
       search: false,

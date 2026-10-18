@@ -1053,7 +1053,7 @@ export default function OrderUpsertModal(props: {
                     `实付金额：¥${amount.toFixed(2)}`,
                     '支付方式：收钱吧在线收款',
                     `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
-                    '预计等待时间：5-10分钟',
+                    `预计等待时间：${detail?.estimatedWaitTimeText || '5-10分钟'}`,
                     '',
                     '温馨提醒：',
                     '消费过程中如遇任何问题，请随时联系本单客服处理～',

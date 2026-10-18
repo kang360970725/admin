@@ -1792,7 +1792,7 @@ const OrderDetailPage: React.FC = () => {
             ...financeLines,
             isHourlyLocal ? `预计结单时间：${endTime ? endTime.format('YYYY-MM-DD HH:mm') : '-'}` : '',
             `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
-            `预计等待时间：5-10分钟`,
+            `预计等待时间：${o?.estimatedWaitTimeText || '5-10分钟'}`,
             ``,
             `温馨提醒：`,
             `消费过程中如遇任何问题，请随时联系本单客服处理～`,
