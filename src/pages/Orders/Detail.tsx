@@ -1742,6 +1742,7 @@ const OrderDetailPage: React.FC = () => {
         const isMemberBalancePayment =
             String(o?.paymentChannel || '').trim().toUpperCase() === 'BALANCE' ||
             String(o?.latestPayment?.channel || '').trim().toUpperCase() === 'BALANCE' ||
+            receiptMeta?.memberBalanceReserved !== undefined ||
             receiptMeta?.memberBalanceDeducted !== undefined ||
             receiptMeta?.memberBalanceAfter !== undefined;
         const paymentChannelText = isMemberBalancePayment
@@ -1762,10 +1763,20 @@ const OrderDetailPage: React.FC = () => {
         financeLines.push(`实付金额：¥${Number.isFinite(paidAmount) ? paidAmount.toFixed(2) : finalPayableAmount.toFixed(2)}`);
         financeLines.push(`支付方式：${paymentChannelText}`);
         if (isMemberBalancePayment) {
-            const deducted = Number(o?.balanceCapturedAmount ?? receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
-            const balanceAfter = Number(receiptMeta?.memberBalanceAfter ?? 0);
-            financeLines.push(`储值扣除：¥${deducted.toFixed(2)}`);
-            financeLines.push(`储值余额：¥${balanceAfter.toFixed(2)}`);
+            const reservationHeld =
+                String(o?.balanceSettlementMode || '') === 'RESERVE_CAPTURE' &&
+                String(o?.balanceReservationStatus || '') === 'HELD';
+            const balanceAfter = Number(receiptMeta?.memberBalanceAfter);
+            if (reservationHeld) {
+                const reserved = Number(
+                    o?.balanceReservedAmount ?? receiptMeta?.memberBalanceReserved ?? (notifyRaw as any)?.reservedAmount ?? paidAmount ?? 0,
+                );
+                financeLines.push(`储值预占：¥${Number.isFinite(reserved) ? reserved.toFixed(2) : '0.00'}`);
+            } else {
+                const deducted = Number(o?.balanceCapturedAmount ?? receiptMeta?.memberBalanceDeducted ?? paidAmount ?? 0);
+                financeLines.push(`储值扣除：¥${Number.isFinite(deducted) ? deducted.toFixed(2) : '0.00'}`);
+            }
+            financeLines.push(`储值余额：${Number.isFinite(balanceAfter) ? `¥${balanceAfter.toFixed(2)}` : '待结算后确认'}`);
         }
 
         const customerText = [

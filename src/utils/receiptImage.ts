@@ -95,14 +95,15 @@ const parseReceipt = (text: string): ParsedReceipt => {
                 label === '会员折扣' ||
                 label === '优惠券抵扣' ||
                 label === '实付金额' ||
+                label === '储值预占' ||
                 label === '储值扣除' ||
                 label === '储值余额'
             ) {
                 model.financeItems.push({
                     label,
                     value,
-                    isBold: label === '实付金额' || label === '储值扣除',
-                    color: label === '实付金额' || label === '储值扣除' ? '#ec4899' : undefined,
+                    isBold: label === '实付金额' || label === '储值预占' || label === '储值扣除',
+                    color: label === '实付金额' || label === '储值预占' || label === '储值扣除' ? '#ec4899' : undefined,
                 });
                 continue;
             }
