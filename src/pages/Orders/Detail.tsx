@@ -59,7 +59,6 @@ import {
     getOrderDetail,
     getPlayerOptions,
     markOrderPaid,
-    payMemberBalanceSupplement,
     previewMemberBalanceHourlySettlement,
     recalculateOrderSettlements,
     refundOrder, rollbackWrongSettlementReversals,
@@ -157,7 +156,6 @@ const OrderDetailPage: React.FC = () => {
     // ✅ 客服确认结单（两段式结单第二步）
     const [confirmCompleteOpen, setConfirmCompleteOpen] = useState(false);
     const [confirmCompleteLoading, setConfirmCompleteLoading] = useState(false);
-    const [balanceSupplementLoading, setBalanceSupplementLoading] = useState(false);
     const [confirmActualHours, setConfirmActualHours] = useState<number>(0.5);
     const [balancePricingPreview, setBalancePricingPreview] = useState<any>(null);
     const [balancePricingLoading, setBalancePricingLoading] = useState(false);
@@ -167,6 +165,9 @@ const OrderDetailPage: React.FC = () => {
     const [confirmRenewalInvalidReason, setConfirmRenewalInvalidReason] = useState('');
     const [toolsInvalidateRenewal, setToolsInvalidateRenewal] = useState(false);
     const [toolsRenewalInvalidateReason, setToolsRenewalInvalidateReason] = useState('');
+    const [toolsRenewalAction, setToolsRenewalAction] = useState<'KEEP' | 'ADJUST' | 'INVALIDATE'>('KEEP');
+    const [toolsRenewalAttributionType, setToolsRenewalAttributionType] = useState<'RENEWAL' | 'DESIGNATED'>('RENEWAL');
+    const [toolsRenewalUserIds, setToolsRenewalUserIds] = useState<number[]>([]);
 
     const renewalGroup = useMemo(() => {
         const groups = Array.isArray(order?.renewalGroups) ? order.renewalGroups : [];
@@ -185,6 +186,17 @@ const OrderDetailPage: React.FC = () => {
         const userIds = Array.isArray(renewalGroup?.memberUserIds) ? renewalGroup.memberUserIds : [];
         return userIds.map((id: any) => `#${id}`).filter(Boolean);
     }, [renewalGroup]);
+    const renewalAttributionOptions = useMemo(() => {
+        const map = new Map<number, string>();
+        (Array.isArray(order?.dispatches) ? order.dispatches : []).forEach((dispatch: any) => {
+            (Array.isArray(dispatch?.participants) ? dispatch.participants : []).forEach((participant: any) => {
+                const id = Number(participant?.userId || participant?.user?.id || 0);
+                if (!(id > 0) || participant?.rejectedAt) return;
+                map.set(id, participant?.user?.name || participant?.name || `#${id}`);
+            });
+        });
+        return Array.from(map.entries()).map(([value, label]) => ({value, label}));
+    }, [order?.dispatches]);
     const RenewalInfo = (
         <Space size={[4, 4]} wrap>
             {renewalGroup ? (
@@ -225,6 +237,9 @@ const OrderDetailPage: React.FC = () => {
                 });
                 if (cancelled) return;
                 setBalancePricingPreview(result);
+                if (result?.pricingLocked && Number(result.actualHours) >= 0.5) {
+                    setConfirmActualHours(Number(result.actualHours));
+                }
             } catch (e: any) {
                 if (!cancelled) {
                     setBalancePricingPreview(null);
@@ -673,6 +688,15 @@ const OrderDetailPage: React.FC = () => {
         setRecalcResult(null);
         setWalletPreview(null);
         setWalletApplyResult(null);
+        setToolsRenewalAction('KEEP');
+        setToolsInvalidateRenewal(false);
+        setToolsRenewalInvalidateReason('');
+        setToolsRenewalAttributionType(renewalAttributionType === 'DESIGNATED' ? 'DESIGNATED' : 'RENEWAL');
+        setToolsRenewalUserIds(
+            Array.isArray(renewalGroup?.memberUserIds)
+                ? renewalGroup.memberUserIds.map((id: any) => Number(id)).filter((id: number) => id > 0)
+                : [],
+        );
         setPlayerEvalRows(buildConfirmPlayerEvalRowsFromOrder(order));
         const storedEvaluations = Array.isArray(order?.playerEvaluations) ? order.playerEvaluations : [];
         const firstBadEval = storedEvaluations.find((item: any) => Number(item?.score ?? 0) <= 2 && Boolean(item?.afterSaleHandled));
@@ -1033,9 +1057,9 @@ const OrderDetailPage: React.FC = () => {
                 settlementBaseAmount: repairSettlementBaseAmount,
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
-                playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
-                orderTipEnabled: Boolean(orderTip.enabled),
-                orderTipUserIds: orderTip.enabled ? orderTip.tippedUserIds : [],
+                renewalAttributionAction: toolsRenewalAction,
+                renewalAttributionType: toolsRenewalAttributionType,
+                renewalAttributionUserIds: toolsRenewalAction === 'ADJUST' ? toolsRenewalUserIds : [],
             } as any);
 
             setRepairPreview(res);
@@ -1109,8 +1133,16 @@ const OrderDetailPage: React.FC = () => {
             setToolsLoading(true);
             setToolsResult(null);
 
-            if (toolsInvalidateRenewal && !toolsRenewalInvalidateReason.trim()) {
+            if (toolsRenewalAction === 'INVALIDATE' && !toolsRenewalInvalidateReason.trim()) {
                 message.warning('请填写分红归因置无效原因');
+                return;
+            }
+            if (toolsRenewalAction === 'ADJUST' && !toolsRenewalUserIds.length) {
+                message.warning('请选择新的分红归因人员');
+                return;
+            }
+            if (toolsRenewalAction === 'ADJUST' && !toolsRenewalInvalidateReason.trim()) {
+                message.warning('请填写分红归因调整原因');
                 return;
             }
 
@@ -1123,11 +1155,12 @@ const OrderDetailPage: React.FC = () => {
                 settlementBaseAmount: repairSettlementBaseAmount,
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
-                playerEvaluations: buildExpandedPlayerEvaluations(playerEvalRows),
-                orderTipEnabled: Boolean(orderTip.enabled),
-                orderTipUserIds: orderTip.enabled ? orderTip.tippedUserIds : [],
-                invalidateRenewal: Boolean(toolsInvalidateRenewal),
-                renewalInvalidateReason: toolsInvalidateRenewal ? toolsRenewalInvalidateReason.trim() : undefined,
+                renewalAttributionAction: toolsRenewalAction,
+                renewalAttributionType: toolsRenewalAttributionType,
+                renewalAttributionUserIds: toolsRenewalAction === 'ADJUST' ? toolsRenewalUserIds : [],
+                renewalAttributionReason: toolsRenewalAction === 'ADJUST' ? toolsRenewalInvalidateReason.trim() : undefined,
+                invalidateRenewal: toolsRenewalAction === 'INVALIDATE',
+                renewalInvalidateReason: toolsRenewalAction === 'INVALIDATE' ? toolsRenewalInvalidateReason.trim() : undefined,
             } as any);
 
             setToolsResult(res);
@@ -1253,7 +1286,14 @@ const OrderDetailPage: React.FC = () => {
         setConfirmCompleteSettlementBaseMode(reservedHourlyOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
         const dispatchHours = (Array.isArray(order?.dispatches) ? order.dispatches : [])
             .reduce((sum: number, item: any) => sum + Number(item?.billableHours || 0), 0);
-        setConfirmActualHours(dispatchHours > 0 ? dispatchHours : Math.max(0.5, Number(order?.orderQuantity || 0.5)));
+        const storedFinalHours = Number(order?.orderQuantity || 0);
+        setConfirmActualHours(
+            order?.balanceReservationStatus !== 'HELD' && storedFinalHours > 0
+                ? storedFinalHours
+                : dispatchHours > 0
+                    ? dispatchHours
+                    : Math.max(0.5, storedFinalHours || 0.5),
+        );
         setBalancePricingPreview(null);
 
         // ✅ 玩法单：在打开弹窗前一次性初始化分轮表格
@@ -1406,42 +1446,28 @@ const OrderDetailPage: React.FC = () => {
             payload.settlementBaseMode = confirmCompleteSettlementBaseMode;
 
             const confirmResult: any = await confirmCompleteOrder(payload);
-            if (confirmResult?.supplementRequired) {
-                message.warning(confirmResult.message || `尚需补款 ¥${Number(confirmResult.pendingSupplementAmount || 0).toFixed(2)}`);
-                setConfirmCompleteOpen(false);
-                await loadDetail();
-                return;
-            }
-
-            const settlementAmountChanged = reservedHourlyOrder && Math.abs(Number(balancePricingPreview?.differenceAmount || 0)) >= 0.01;
-            message.success(settlementAmountChanged ? '已确认结单，结算金额已更新' : '已确认结单');
+            const settlementAmountChanged = reservedHourlyOrder && (
+                Math.abs(Number(balancePricingPreview?.differenceAmount || 0)) >= 0.01
+                || Boolean(confirmResult?.receiptRefreshRequired)
+            );
+            const supplementedAmount = Number(confirmResult?.memberBalanceSupplementAmount || 0);
+            message.success(supplementedAmount > 0
+                ? `已补收 ¥${supplementedAmount.toFixed(2)} 并确认结单`
+                : settlementAmountChanged ? '已确认结单，结算金额已更新' : '已确认结单');
             setConfirmCompleteOpen(false);
             setConfirmRenewalInvalid(false);
             setConfirmRenewalInvalidReason('');
             const refreshedOrder = await loadDetail();
+            if (settlementAmountChanged) {
+                message.info('结算信息已变化，请将新小票同步给客户');
+            }
             if (settlementAmountChanged && canUseReceipt && refreshedOrder) {
-                message.info('结算信息发生变化，已生成最新订单小票，请补发给客户');
                 await openReceipt('customer', refreshedOrder);
             }
         } catch (e: any) {
             message.error(e?.response?.data?.message || '确认结单失败');
         } finally {
             setConfirmCompleteLoading(false);
-        }
-    };
-
-    const submitMemberBalanceSupplement = async () => {
-        if (!order?.id) return;
-        try {
-            setBalanceSupplementLoading(true);
-            const idempotencyKey = `${order.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const result: any = await payMemberBalanceSupplement({ id: Number(order.id), idempotencyKey });
-            message.success(`储值补款成功 ¥${Number(result?.amount || order?.balancePendingSupplementAmount || 0).toFixed(2)}`);
-            await loadDetail();
-        } catch (e: any) {
-            message.error(e?.response?.data?.message || '储值补款失败');
-        } finally {
-            setBalanceSupplementLoading(false);
         }
     };
 
@@ -3140,16 +3166,6 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         </Tooltip> : null}
 
-                        {canUpdatePaid && Number(order?.balancePendingSupplementAmount || 0) > 0 ? (
-                            <Button
-                                type="primary"
-                                danger
-                                loading={balanceSupplementLoading}
-                                onClick={submitMemberBalanceSupplement}
-                            >
-                                储值补款 ¥{Number(order?.balancePendingSupplementAmount || 0).toFixed(2)}
-                            </Button>
-                        ) : null}
                         {canUpdatePaid ? <Button
                             disabled={!isHourly || order?.balanceSettlementMode === 'RESERVE_CAPTURE'}
                             onClick={openPaidModal}
@@ -4207,7 +4223,7 @@ const OrderDetailPage: React.FC = () => {
                                     addonAfter="¥"
                                 />
                             </div>
-                            {renewalGroupPending ? (
+                            {renewalGroup ? (
                                 <Card size="small" style={{borderRadius: 12, border: '1px solid #bae0ff', background: '#f0f5ff'}}>
                                     <Space direction="vertical" size={8} style={{width: '100%'}}>
                                         <Space wrap>
@@ -4216,24 +4232,62 @@ const OrderDetailPage: React.FC = () => {
                                                 <Tag key={`${name}-${idx}`}>{name}</Tag>
                                             ))}
                                         </Space>
-                                        <Checkbox
-                                            checked={toolsInvalidateRenewal}
+                                        <Radio.Group
+                                            value={toolsRenewalAction}
                                             onChange={(e) => {
-                                                setToolsInvalidateRenewal(e.target.checked);
+                                                const action = e.target.value as 'KEEP' | 'ADJUST' | 'INVALIDATE';
+                                                setToolsRenewalAction(action);
+                                                setToolsInvalidateRenewal(action === 'INVALIDATE');
                                                 setRepairPreview(null);
                                                 setRecalcResult(null);
                                                 setToolsResult(null);
                                                 setToolsStep('INIT');
                                             }}
                                         >
-                                            确认应用重算时将分红归因置为无效
-                                        </Checkbox>
-                                        {toolsInvalidateRenewal ? (
+                                            <Space wrap>
+                                                <Radio value="KEEP">保持归因不变</Radio>
+                                                <Radio value="ADJUST">调整归因人员</Radio>
+                                                <Radio value="INVALIDATE">置为无效</Radio>
+                                            </Space>
+                                        </Radio.Group>
+                                        {toolsRenewalAction === 'ADJUST' ? (
+                                            <>
+                                                <Radio.Group
+                                                    value={toolsRenewalAttributionType}
+                                                    onChange={(e) => {
+                                                        setToolsRenewalAttributionType(e.target.value);
+                                                        setRepairPreview(null);
+                                                        setRecalcResult(null);
+                                                        setToolsStep('INIT');
+                                                    }}
+                                                >
+                                                    <Radio value="RENEWAL">续单归因</Radio>
+                                                    <Radio value="DESIGNATED">指定归因</Radio>
+                                                </Radio.Group>
+                                                <Select
+                                                    mode="multiple"
+                                                    allowClear
+                                                    value={toolsRenewalUserIds}
+                                                    options={renewalAttributionOptions}
+                                                    onChange={(ids) => {
+                                                        setToolsRenewalUserIds(ids.map(Number).filter((id) => id > 0));
+                                                        setRepairPreview(null);
+                                                        setRecalcResult(null);
+                                                        setToolsStep('INIT');
+                                                    }}
+                                                    placeholder="选择本订单实际参与服务者"
+                                                    style={{width: '100%'}}
+                                                />
+                                            </>
+                                        ) : null}
+                                        {toolsRenewalAction !== 'KEEP' ? (
                                             <Input.TextArea
                                                 rows={2}
                                                 value={toolsRenewalInvalidateReason}
                                                 onChange={(e) => setToolsRenewalInvalidateReason(e.target.value)}
-                                                placeholder="请填写置无效原因；已产生续单分红时后端会冲正"
+                                                placeholder={toolsRenewalAction === 'ADJUST'
+                                                    ? '请填写调整原因；已到账的旧分红会先冲正，再按新归因重新发放'
+                                                    : '请填写置无效原因；已产生续单分红时后端会冲正'}
                                             />
                                         ) : null}
                                     </Space>
@@ -4373,7 +4427,7 @@ const OrderDetailPage: React.FC = () => {
                                 </Card>
                             ) : null}
 
-                            <div style={{
+                            {false ? <div style={{
                                 border: '1px solid #e5e7eb',
                                 background: '#fafafa',
                                 borderRadius: 12,
@@ -4538,7 +4592,7 @@ const OrderDetailPage: React.FC = () => {
                                         </Space>
                                     </div>
                                 ) : null}
-                            </div>
+                            </div> : null}
 
                             <Space wrap>
                                 {canRecalculateSettlements ? <Button
@@ -4666,7 +4720,7 @@ const OrderDetailPage: React.FC = () => {
                             <Space direction="vertical" size={8} style={{width: '100%'}}>
                                 <Typography.Text strong>储值订单最终结算</Typography.Text>
                                 <Typography.Text type="secondary">
-                                    下单预占 ¥{Number(order?.balanceReservedAmount || 0).toFixed(2)}。请按实际服务时长填写最终消费；少于预占会自动释放差额，超出预占会先进入待补款，补齐后再确认结单。
+                                    下单预占 ¥{Number(order?.balanceReservedAmount || 0).toFixed(2)}。请按实际服务时长填写最终消费；少于预占会自动释放差额，超出预占会在本次确认中直接补收并完成结单。
                                 </Typography.Text>
                                 <InputNumber
                                     min={0.5}
@@ -4710,7 +4764,7 @@ const OrderDetailPage: React.FC = () => {
                                         type={Number(balancePricingPreview.differenceAmount) > 0 ? 'warning' : 'success'}
                                         showIcon
                                         message={Number(balancePricingPreview.differenceAmount) > 0
-                                            ? `超出预占，需补款 ¥${Number(balancePricingPreview.differenceAmount).toFixed(2)}`
+                                            ? `确认后将直接补收 ¥${Number(balancePricingPreview.differenceAmount).toFixed(2)} 并完成结单`
                                             : `少于预占，将释放 ¥${Math.abs(Number(balancePricingPreview.differenceAmount)).toFixed(2)}`}
                                     />
                                 ) : null}
