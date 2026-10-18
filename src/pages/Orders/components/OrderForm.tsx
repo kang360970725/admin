@@ -1455,7 +1455,7 @@ export default function OrderUpsertModal(props: {
                                 label="下单小时"
                                 rules={[{ required: true, message: '请输入下单小时' }]}
                             >
-                                <InputNumber min={1} max={24} step={1} style={{ width: '100%' }} placeholder="例如：1 / 2 / 3 ..." />
+                                <InputNumber min={0.5} max={24} step={0.5} precision={1} style={{ width: '100%' }} placeholder="例如：0.5 / 1 / 1.5 ..." />
                             </Form.Item>
                         </Col>
                     ) : null}
