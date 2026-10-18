@@ -5,6 +5,7 @@ import {
     createOrder,
     createShouqianbaPaymentRequest,
     deleteOrder,
+    getGameProjectOptions,
     getOrderSourceOptions,
     getOrders,
     markOrderPaid,
@@ -43,6 +44,22 @@ const statusText: Record<string, { text: string; color?: string }> = {
 };
 
 const { Text } = Typography;
+
+const paymentChannelText: Record<string, string> = {
+    BALANCE: '会员储值',
+    MANUAL: '人工线下收款',
+    MANUAL_SHOUQIANBA: '线下收款',
+    MANUAL_CONFIRMED: '人工确认收款',
+    SHOUQIANBA_WAP: '收钱吧在线收款',
+    MINIAPP_WECHAT: '小程序微信支付',
+    WECHAT: '微信支付',
+    TUTU_PLATFORM: '突突平台',
+    THIRD_PARTY_CHANNEL: '第三方渠道',
+};
+
+const paymentChannelValueEnum = Object.fromEntries(
+    Object.entries(paymentChannelText).map(([value, text]) => [value, { text }]),
+);
 
 const OrdersPage: React.FC = () => {
     const actionRef = useRef<ActionType>();
@@ -100,6 +117,7 @@ const OrdersPage: React.FC = () => {
     const [markPaidOrder, setMarkPaidOrder] = useState<any>(null);
     const [markPaidForm] = Form.useForm();
     const [orderSourceOptions, setOrderSourceOptions] = useState<Array<{ label: string; value: string }>>([]);
+    const [projectOptions, setProjectOptions] = useState<Array<{ label: string; value: number }>>([]);
     const [mobileLoading, setMobileLoading] = useState(false);
     const [mobileOrders, setMobileOrders] = useState<any[]>([]);
     const [mobileTotal, setMobileTotal] = useState(0);
@@ -108,6 +126,8 @@ const OrdersPage: React.FC = () => {
         keyword?: string;
         status?: string;
         isPaid?: boolean;
+        paymentChannel?: string;
+        projectId?: number;
         customerGameId?: string;
         orderMonth?: string;
         orderSource?: string;
@@ -129,6 +149,23 @@ const OrdersPage: React.FC = () => {
             } catch (e) {
                 console.error(e);
                 setOrderSourceOptions([]);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res: any = await getGameProjectOptions({});
+                const list = Array.isArray(res) ? res : (res?.data ?? []);
+                setProjectOptions(
+                    list
+                        .map((item: any) => ({ label: String(item?.name || '').trim(), value: Number(item?.id) }))
+                        .filter((item: any) => item.label && item.value),
+                );
+            } catch (e) {
+                console.error(e);
+                setProjectOptions([]);
             }
         })();
     }, []);
@@ -248,6 +285,8 @@ const OrdersPage: React.FC = () => {
                 orderMonth: filters.orderMonth,
                 keyword: filters.keyword,
                 isPaid: filters.isPaid,
+                paymentChannel: filters.paymentChannel,
+                projectId: filters.projectId,
                 orderSource: filters.orderSource,
             });
             const customerGameId = String(filters.customerGameId || '').trim();
@@ -390,6 +429,7 @@ const OrdersPage: React.FC = () => {
             title: '搜索',
             dataIndex: 'keyword',
             hideInTable: true, // ✅ 只出现在搜索区
+            order: 80,
             renderFormItem: () => (
                 <Input
                     allowClear
@@ -399,8 +439,12 @@ const OrdersPage: React.FC = () => {
         },
         {
             title: '项目',
-            dataIndex: ['project', 'name'],
+            dataIndex: 'projectId',
             ellipsis: true,
+            order: 40,
+            valueType: 'select',
+            valueEnum: Object.fromEntries(projectOptions.map((item) => [item.value, { text: item.label }])),
+            render: (_: any, row: any) => row?.project?.name || '-',
         },
         {
             title: '渠道来源',
@@ -409,6 +453,7 @@ const OrdersPage: React.FC = () => {
             valueType: 'select',
             valueEnum: orderSourceValueEnum,
             hideInTable: true,
+            order: 30,
             render: (_: any, row: any) => row?.orderSourceLabel ? <Tag>{row.orderSourceLabel}</Tag> : '-',
         },
         {
@@ -416,6 +461,7 @@ const OrdersPage: React.FC = () => {
             dataIndex: 'status',
             width: 130,
             hideInTable: false,
+            order: 70,
             render: (_: any, row: any) => {
                 const s = statusText[row.status] || {text: row.status};
                 return <Tag color={s?.color}>{s.text}</Tag>;
@@ -430,6 +476,7 @@ const OrdersPage: React.FC = () => {
             dataIndex: 'isPaid',
             width: 110,
             hideInTable: false,
+            order: 60,
             valueType: 'select',
             valueEnum: {
                 true: {text: '已收款'},
@@ -441,6 +488,15 @@ const OrdersPage: React.FC = () => {
                 if (row?.isPaid === false) return <Tag color="red">未收款</Tag>;
                 return <Tag color="green">已收款</Tag>;
             },
+        },
+
+        {
+            title: '收款方式',
+            dataIndex: 'paymentChannel',
+            hideInTable: true,
+            order: 50,
+            valueType: 'select',
+            valueEnum: paymentChannelValueEnum,
         },
 
         {
@@ -462,6 +518,7 @@ const OrdersPage: React.FC = () => {
             dataIndex: 'customerGameId',
             width: 210,
             hideInTable: isMobile,
+            order: 20,
             render: (_: any, row: any) => {
                 if (String(row?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS') {
                     return renderCustomerIdentifier(row);
@@ -483,6 +540,7 @@ const OrdersPage: React.FC = () => {
             title: '查询月份',
             dataIndex: 'orderMonth',
             hideInTable: true,
+            order: 10,
             renderFormItem: () => <DatePicker picker="month" allowClear style={{ width: '100%' }} />,
         },
 
@@ -716,6 +774,26 @@ const OrdersPage: React.FC = () => {
                                 <Col span={12}>
                                     <Select
                                         allowClear
+                                        placeholder="收款方式"
+                                        value={mobileFilters.paymentChannel}
+                                        options={Object.entries(paymentChannelText).map(([value, label]) => ({ value, label }))}
+                                        onChange={(value) => setMobileFilters((prev) => ({ ...prev, paymentChannel: value }))}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Col>
+                                <Col span={12}>
+                                    <Select
+                                        allowClear
+                                        placeholder="项目"
+                                        value={mobileFilters.projectId}
+                                        options={projectOptions}
+                                        onChange={(value) => setMobileFilters((prev) => ({ ...prev, projectId: value }))}
+                                        style={{ width: '100%' }}
+                                    />
+                                </Col>
+                                <Col span={12}>
+                                    <Select
+                                        allowClear
                                         placeholder="渠道"
                                         value={mobileFilters.orderSource}
                                         options={orderSourceOptions}
@@ -724,24 +802,24 @@ const OrdersPage: React.FC = () => {
                                     />
                                 </Col>
                                 <Col span={12}>
+                                    <Input
+                                        allowClear
+                                        placeholder="客户标识"
+                                        value={mobileFilters.customerGameId}
+                                        onChange={(e) => setMobileFilters((prev) => ({ ...prev, customerGameId: e.target.value }))}
+                                    />
+                                </Col>
+                                <Col span={12}>
                                     <DatePicker
                                         picker="month"
                                         allowClear
-                                        placeholder="月份"
+                                        placeholder="查询月份"
                                         value={mobileFilters.orderMonth ? dayjs(mobileFilters.orderMonth, 'YYYY-MM') : undefined}
                                         style={{ width: '100%' }}
                                         onChange={(value) => setMobileFilters((prev) => ({
                                             ...prev,
                                             orderMonth: value ? dayjs(value).format('YYYY-MM') : undefined,
                                         }))}
-                                    />
-                                </Col>
-                                <Col span={24}>
-                                    <Input
-                                        allowClear
-                                        placeholder="客户游戏ID"
-                                        value={mobileFilters.customerGameId}
-                                        onChange={(e) => setMobileFilters((prev) => ({ ...prev, customerGameId: e.target.value }))}
                                     />
                                 </Col>
                             </Row>
@@ -838,9 +916,9 @@ const OrdersPage: React.FC = () => {
                         keyword: params.keyword,
                         // ✅ 收款筛选
                         isPaid: isPaidParam,
+                        paymentChannel: params.paymentChannel,
+                        projectId: params.projectId ? Number(params.projectId) : undefined,
                         orderSource: params.orderSource,
-
-                        // projectId/playerId/dispatcherId 你后续加筛选控件后再传
                     });
                     if (customerGameId) {
                         setConsumptionSummary({

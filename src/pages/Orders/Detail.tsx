@@ -3257,7 +3257,7 @@ const OrderDetailPage: React.FC = () => {
                     <Descriptions.Item label="渠道来源">
                         {order?.orderSourceLabel || order?.orderSource || '-'}
                     </Descriptions.Item>
-                    <Descriptions.Item label="收款方式">
+                    <Descriptions.Item label="订单支付类型">
                         {resolvePaymentChannelLabel(order?.latestPayment?.channel || order?.paymentChannel, order?.paymentChannelLabel)}
                     </Descriptions.Item>
                     <Descriptions.Item label="客户提供内容">
