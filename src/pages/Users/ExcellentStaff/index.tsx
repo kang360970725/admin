@@ -19,7 +19,6 @@ type ExcellentStaffRow = {
   phone?: string;
   staffEmploymentStatus?: string;
   accountStatus?: string;
-  workMode?: string;
   ratingName?: string;
   excellentStatus?: string;
   assignedAt?: string;
@@ -127,14 +126,11 @@ const ExcellentStaffPage: React.FC = () => {
       ),
     },
     {
-      title: '评级/模式',
+      title: '评级',
       width: 140,
       search: false,
       render: (_, row) => (
-        <Space direction="vertical" size={2}>
-          <Tag>{row.ratingName || '未评级'}</Tag>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{row.workMode || '-'}</Typography.Text>
-        </Space>
+        <Tag>{row.ratingName || '未评级'}</Tag>
       ),
     },
     {
