@@ -151,6 +151,7 @@ const OrderDetailPage: React.FC = () => {
     const [refundAmount, setRefundAmount] = useState<number | null>(null);
     const [refundHasCompensation, setRefundHasCompensation] = useState(false);
     const [refundCompensationAmount, setRefundCompensationAmount] = useState<number | null>(null);
+    const [manualOfflineRefundCompleted, setManualOfflineRefundCompleted] = useState(false);
 
     // ✅ 修复工具（重新结算 / 钱包对齐）
     const [toolsOpen, setToolsOpen] = useState(false);
@@ -1512,6 +1513,10 @@ const OrderDetailPage: React.FC = () => {
                 message.warning('请输入大于 0 的赔付金额');
                 return;
             }
+            if (manualOfflineRefundCompleted && !refundRemark.trim()) {
+                message.warning('已线下退款必须填写退款凭证或备注');
+                return;
+            }
             setRefundLoading(true);
             await refundOrder({
                 id: Number(order?.id),
@@ -1521,6 +1526,7 @@ const OrderDetailPage: React.FC = () => {
                 hasCompensation: refundHasCompensation,
                 compensationAmount: refundHasCompensation ? Number(refundCompensationAmount) : undefined,
                 refundAmount: amount,
+                manualOfflineRefundCompleted,
             });
             message.success(isPartialRefund ? '部分退款成功，已按剩余金额重算结算' : '全额退款成功');
             setRefundOpen(false);
@@ -2378,6 +2384,7 @@ const OrderDetailPage: React.FC = () => {
         setRefundAmount(refundMaxAmount);
         setRefundHasCompensation(false);
         setRefundCompensationAmount(null);
+        setManualOfflineRefundCompleted(false);
         setRefundOpen(true);
     };
 
@@ -4084,11 +4091,25 @@ const OrderDetailPage: React.FC = () => {
                         />
                     ) : null}
 
+                    <Checkbox
+                        checked={manualOfflineRefundCompleted}
+                        onChange={(e) => setManualOfflineRefundCompleted(Boolean(e.target.checked))}
+                    >
+                        客户款项已由财务线下退回（不再调用原支付渠道）
+                    </Checkbox>
+                    {manualOfflineRefundCompleted ? (
+                        <Alert
+                            showIcon
+                            type="warning"
+                            message="确认后将直接结案退款并冲正本单收益，不会向支付渠道发起退款。"
+                        />
+                    ) : null}
+
                     <Input.TextArea
                         rows={3}
                         value={refundRemark}
                         onChange={(e) => setRefundRemark(e.target.value)}
-                        placeholder="退款备注（可选）"
+                        placeholder={manualOfflineRefundCompleted ? '请填写线下退款凭证或备注（必填）' : '退款备注（可选）'}
                     />
                 </Space>
             </Modal>

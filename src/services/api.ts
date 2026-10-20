@@ -1225,6 +1225,7 @@ export async function refundOrder(
               hasCompensation?: boolean;
               compensationAmount?: number;
               refundAmount?: number;
+              manualOfflineRefundCompleted?: boolean;
           },
     payload?: {
         remark?: string;
@@ -1233,6 +1234,7 @@ export async function refundOrder(
         hasCompensation?: boolean;
         compensationAmount?: number;
         refundAmount?: number;
+        manualOfflineRefundCompleted?: boolean;
     },
 ) {
     // 兼容：refundOrder(orderId, { remark })
@@ -1248,6 +1250,7 @@ export async function refundOrder(
                 hasCompensation: payload?.hasCompensation,
                 compensationAmount: payload?.compensationAmount,
                 refundAmount: payload?.refundAmount,
+                manualOfflineRefundCompleted: payload?.manualOfflineRefundCompleted,
             },
         });
     }
@@ -1263,6 +1266,7 @@ export async function refundOrder(
             hasCompensation: idOrDto.hasCompensation,
             compensationAmount: idOrDto.compensationAmount,
             refundAmount: idOrDto.refundAmount,
+            manualOfflineRefundCompleted: idOrDto.manualOfflineRefundCompleted,
         },
     });
 }
