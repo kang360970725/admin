@@ -89,6 +89,7 @@ type UserCouponOption = {
 
 const MAX_PLAYERS = 2;
 const ONLINE_QR_PAYMENT_PAUSED = true;
+const LIVE_LUCKY_BAG_GIFT_SOURCE = 'LIVE_LUCKY_BAG_GIFT';
 
 const toMoney = (value: any) => {
     const n = Number(value ?? 0);
@@ -630,6 +631,29 @@ export default function OrderUpsertModal(props: {
             form?.setFieldValue?.('paymentChannel' as any, 'MANUAL');
             return;
         }
+        if (Object.prototype.hasOwnProperty.call(changed || {}, 'orderSource')) {
+            const isLiveLuckyBagGift = String(changed?.orderSource || '').trim() === LIVE_LUCKY_BAG_GIFT_SOURCE;
+            if (isLiveLuckyBagGift) {
+                form?.setFieldsValue?.({
+                    paymentChannel: 'MANUAL',
+                    isGifted: true,
+                    isPaid: true,
+                    paidAmount: 0,
+                    manualAdjustAmount: 0,
+                    paymentTime: undefined,
+                } as any);
+            } else {
+                const payable = toMoney(
+                    Number(form?.getFieldValue?.('settlementAmount') ?? form?.getFieldValue?.('receivableAmount') ?? 0),
+                );
+                form?.setFieldsValue?.({
+                    isGifted: false,
+                    isPaid: false,
+                    paidAmount: payable,
+                    manualAdjustAmount: 0,
+                } as any);
+            }
+        }
         if (Object.prototype.hasOwnProperty.call(changed || {}, 'projectId')) {
             form?.setFieldValue?.('userCouponId' as any, undefined);
             const currentIdentifier = String(form?.getFieldValue?.('customerGameId') || '').trim();
@@ -791,9 +815,10 @@ export default function OrderUpsertModal(props: {
             const pid = Number(v?.projectId);
             const hourly = isHourlyProject(pid);
             const orderSource = String(v?.orderSource || '').trim();
-            const isGifted = Boolean(v?.isGifted);
+            const isLiveLuckyBagGift = orderSource === LIVE_LUCKY_BAG_GIFT_SOURCE;
+            const isGifted = isLiveLuckyBagGift || Boolean(v?.isGifted);
             const paymentChannel = String(v?.paymentChannel || '').trim().toUpperCase();
-            const isPaid = paymentChannel === 'BALANCE' ? true : Boolean(v?.isPaid);
+            const isPaid = isLiveLuckyBagGift || paymentChannel === 'BALANCE' ? true : Boolean(v?.isPaid);
             const canDispatchBeforePaid = isGifted || orderSource === 'CUSTOMER_SERVICE_MANUAL';
 
             // 小时单：必须有下单小时（orderQuantity）
@@ -825,7 +850,7 @@ export default function OrderUpsertModal(props: {
                 }
             }
             const selectedMemberBalance = Number(memberMetaMap?.[Number(v?.customerUserId || 0)]?.balance ?? 0);
-            const nextPaidAmount = toMoney(Number(v?.paidAmount ?? 0));
+            const nextPaidAmount = isLiveLuckyBagGift ? 0 : toMoney(Number(v?.paidAmount ?? 0));
             if (paymentChannel === 'BALANCE' && selectedMemberBalance < nextPaidAmount) {
                 message.error(`会员储值余额不足：当前可用 ¥${selectedMemberBalance.toFixed(2)}，本单需扣 ¥${nextPaidAmount.toFixed(2)}`);
                 return;
@@ -876,10 +901,12 @@ export default function OrderUpsertModal(props: {
                 projectId: Number(v?.projectId),
 
                 receivableAmount: Number(v?.receivableAmount),
-                paidAmount: Number(receiptLocked ? initialValues?.paidAmount : v?.paidAmount),
+                paidAmount: isLiveLuckyBagGift ? 0 : Number(receiptLocked ? initialValues?.paidAmount : v?.paidAmount),
                 settlementAmount: v?.settlementAmount != null ? Number(v?.settlementAmount) : Number(v?.paidAmount),
                 manualAdjustAmount:
-                    v?.userCouponId != null && v?.userCouponId !== ''
+                    isLiveLuckyBagGift
+                        ? 0
+                        : v?.userCouponId != null && v?.userCouponId !== ''
                         ? 0
                         : toMoney(Math.max(0, Number(v?.receivableAmount ?? 0) - Number(v?.paidAmount ?? 0))),
 
@@ -920,7 +947,7 @@ export default function OrderUpsertModal(props: {
                 isDesignated,
                 designatedPlayerIds: isDesignated ? designatedPlayerIds : undefined,
 
-                isGifted: Boolean(v?.isGifted),
+                isGifted,
 
                 /**
                  * isPaid 由前端勾选决定；不再从 paymentTime 推断
