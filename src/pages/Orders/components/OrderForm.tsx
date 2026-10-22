@@ -88,6 +88,7 @@ type UserCouponOption = {
 };
 
 const MAX_PLAYERS = 2;
+const ONLINE_QR_PAYMENT_PAUSED = true;
 
 const toMoney = (value: any) => {
     const n = Number(value ?? 0);
@@ -578,8 +579,11 @@ export default function OrderUpsertModal(props: {
             isDesignated: Boolean(initialValues?.isDesignated ?? false),
             designatedPlayerIds: Array.isArray(initialValues?.designatedPlayerIds) ? initialValues?.designatedPlayerIds : [],
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
-            paymentChannel: initialValues?.paymentChannel || 'SHOUQIANBA',
-            isPaid: String(initialValues?.paymentChannel || 'SHOUQIANBA').trim().toUpperCase() === 'BALANCE'
+            paymentChannel:
+                ONLINE_QR_PAYMENT_PAUSED && String(initialValues?.paymentChannel || '').trim().toUpperCase() === 'SHOUQIANBA'
+                    ? 'MANUAL'
+                    : initialValues?.paymentChannel || 'MANUAL',
+            isPaid: String(initialValues?.paymentChannel || 'MANUAL').trim().toUpperCase() === 'BALANCE'
                 ? true
                 : Boolean(initialValues?.isPaid ?? false),
             settlementAmount:
@@ -619,6 +623,13 @@ export default function OrderUpsertModal(props: {
 
     // 值变化：项目变更 + 数量变更 + 限制打手数量
     const onValuesChange = (changed: any) => {
+        if (
+            ONLINE_QR_PAYMENT_PAUSED &&
+            String(changed?.paymentChannel || '').trim().toUpperCase() === 'SHOUQIANBA'
+        ) {
+            form?.setFieldValue?.('paymentChannel' as any, 'MANUAL');
+            return;
+        }
         if (Object.prototype.hasOwnProperty.call(changed || {}, 'projectId')) {
             form?.setFieldValue?.('userCouponId' as any, undefined);
             const currentIdentifier = String(form?.getFieldValue?.('customerGameId') || '').trim();
@@ -677,7 +688,7 @@ export default function OrderUpsertModal(props: {
             setMemberOrderContext(null);
             form?.setFieldsValue?.({
                 userCouponId: undefined,
-                paymentChannel: 'SHOUQIANBA',
+                paymentChannel: 'MANUAL',
                 isPaid: false,
                 paymentTime: undefined,
                 manualAdjustAmount: 0,
@@ -1039,19 +1050,30 @@ export default function OrderUpsertModal(props: {
                 const billingMode = String(detail?.projectSnapshot?.billingMode ?? detail?.project?.billingMode ?? '');
                 const unitPrice = Number(detail?.projectSnapshot?.price ?? detail?.project?.price ?? 0);
                 const hours = billingMode === 'HOURLY' && unitPrice > 0 ? originalAmount / unitPrice : null;
-                const baseWan = Number(detail?.baseAmountWan || 0);
                 const orderTime = dayjs(detail?.orderTime || detail?.createdAt || new Date());
+                const payment = detail?.latestPayment || {};
+                const paymentNo = String(payment?.paymentNo || '').trim();
+                const clientSn = String(payment?.clientSn || '').trim();
+                const providerSn = String(payment?.providerSn || '').trim();
+                const transactionId = String(payment?.transactionId || '').trim();
+                const paymentIdentifierLines = [
+                    paymentNo ? `商户支付单号：${paymentNo}` : '',
+                    clientSn && clientSn !== paymentNo ? `收钱吧请求号：${clientSn}` : '',
+                    providerSn ? `收钱吧流水号：${providerSn}` : '',
+                    transactionId ? `微信支付单号：${transactionId}` : '',
+                ].filter(Boolean);
                 const text = [
                     `订单编号：${detail?.autoSerial || paymentResult?.autoSerial || detail?.id || paymentResult?.orderId || '-'}`,
-                    `下单项目：${projectName}`,
-                    `订单${hours != null ? '时长' : '保底'}：${hours != null ? `${hours.toFixed(2)} 小时` : (baseWan > 0 ? `${baseWan} 万` : '无保底')}`,
-                    `接待客服：${detail?.dispatcher?.name || '客服'}`,
-                    '接待陪玩：',
+                    `商品名称：${projectName}`,
+                    `服务规格：${hours != null ? `${hours.toFixed(2)} 小时` : '按商品约定'}`,
+                    `接待人员：${detail?.dispatcher?.name || '客服'}`,
+                    '服务人员：',
                     ...(playerNames.length ? playerNames : ['（待派单/待接单）']).map((name: any) => `  ${name}`),
-                    `派单方式：${detail?.orderSourceLabel || detail?.orderSource || '客服手动派单'}`,
+                    `订单来源：${detail?.orderSourceLabel || detail?.orderSource || '人工创建'}`,
                     `商品小计：¥${originalAmount.toFixed(2)}`,
                     `实付金额：¥${amount.toFixed(2)}`,
                     '支付方式：收钱吧在线收款',
+                    ...paymentIdentifierLines,
                     `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
                     `预计等待时间：${detail?.estimatedWaitTimeText || '5-10分钟'}`,
                     '',
@@ -1364,14 +1386,14 @@ export default function OrderUpsertModal(props: {
                                 buttonStyle="solid"
                                 disabled={Boolean(paymentResult?.orderId)}
                             >
-                                <Radio.Button value="SHOUQIANBA">在线收款</Radio.Button>
+                                <Radio.Button value="SHOUQIANBA" disabled={ONLINE_QR_PAYMENT_PAUSED}>在线二维码支付（暂停）</Radio.Button>
                                 <Radio.Button value="BALANCE">会员储值</Radio.Button>
-                                <Radio.Button value="MANUAL" className="bc-order-payment-manual">特殊线下</Radio.Button>
+                                <Radio.Button value="MANUAL" className="bc-order-payment-manual">线下确认收款</Radio.Button>
                             </Radio.Group>
                         </Form.Item>
                         {watchedPaymentChannel === 'MANUAL' ? (
                             <div className="bc-order-manual-channel-note">
-                                仅用于客户已转账、现金收款、在线支付失败/限额或历史订单补录。
+                                当前默认方式。支持先创建未收款订单，结单待确认后开始计算48小时收款责任期。
                             </div>
                         ) : null}
                         {paymentResult?.orderId ? (

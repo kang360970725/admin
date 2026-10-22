@@ -80,7 +80,7 @@ const parseReceipt = (text: string): ParsedReceipt => {
                 continue;
             }
 
-            if (label === '接待陪玩' || label === '接单陪玩') {
+            if (label === '服务人员' || label === '接待陪玩' || label === '接单陪玩') {
                 collectingPlayers = true;
                 if (value) model.players.push(value);
                 continue;
@@ -97,7 +97,11 @@ const parseReceipt = (text: string): ParsedReceipt => {
                 label === '实付金额' ||
                 label === '储值预占' ||
                 label === '储值扣除' ||
-                label === '储值余额'
+                label === '储值余额' ||
+                label === '商户支付单号' ||
+                label === '收钱吧请求号' ||
+                label === '收钱吧流水号' ||
+                label === '微信支付单号'
             ) {
                 model.financeItems.push({
                     label,
@@ -115,14 +119,17 @@ const parseReceipt = (text: string): ParsedReceipt => {
                     model.orderNo = value;
                     break;
                 case '下单项目':
+                case '商品名称':
                     model.project = value;
                     break;
                 case '订单保底':
                 case '订单时长':
+                case '服务规格':
                     model.orderMetricLabel = label;
                     model.orderMetricValue = value;
                     break;
                 case '接待客服':
+                case '接待人员':
                     model.serviceName = value;
                     break;
                 case '下单时间':
@@ -216,7 +223,7 @@ const generateReceiptImageLegacy = async (title: string, text: string, opts: Gen
     const parsed = parseReceipt(text);
     const orderNo = parsed.orderNo || '-';
     const project = parsed.project || '-';
-    const orderMetricLabel = parsed.orderMetricLabel || '订单保底';
+    const orderMetricLabel = parsed.orderMetricLabel || '服务规格';
     const orderMetricValue = parsed.orderMetricValue || '-';
     const financeItems = parsed.financeItems.length
         ? parsed.financeItems
@@ -233,7 +240,7 @@ const generateReceiptImageLegacy = async (title: string, text: string, opts: Gen
         '消费过程中如遇任何问题，请随时联系本单客服处理~',
         '订单完结24小时内支持售后，客服为售后唯一渠道；',
         '请勿相信其他任何人，谨防上当受骗。',
-        '本店通过各类渠道收集客服或打手私联接单证据，',
+        '本店通过各类渠道收集工作人员私联交易证据，',
         '举报查实私加联系方式及私单奖 500-2000R',
     ];
 
@@ -341,10 +348,10 @@ const generateReceiptImageLegacy = async (title: string, text: string, opts: Gen
         C.textAlign = 'left';
         C.fillStyle = COLORS.textMain;
         C.font = 'bold 18px sans-serif';
-        C.fillText('下单项目：', margin + 20, startY + 35);
+        C.fillText('商品名称：', margin + 20, startY + 35);
         C.fillText(`${orderMetricLabel}：`, margin + 20, startY + 80);
-        C.fillText('接待客服：', margin + 20, startY + 125);
-        C.fillText('接待陪玩：', margin + 20, startY + 170);
+        C.fillText('接待人员：', margin + 20, startY + 125);
+        C.fillText('服务人员：', margin + 20, startY + 170);
 
         roundRect(C, margin + 110, startY + 13, 230, 32, 8, COLORS.accent);
         C.fillStyle = '#ffffff';
@@ -680,10 +687,10 @@ const generateReceiptImageBlueDraft = async (_title: string, text: string, opts:
     const projectLines = getLines(parsed.project || '-', infoValueWidth, font(600, 16));
     const infoRows = [
         {icon: '▣', label: '订单编号', lines: getLines(parsed.orderNo || '-', infoValueWidth, font(400, 14)), mono: true},
-        {icon: '▤', label: '下单项目', lines: projectLines, strong: true},
-        {icon: '◇', label: parsed.orderMetricLabel || '订单保底', lines: [parsed.orderMetricValue || '-'], strong: true},
-        {icon: '♙', label: '接待客服', lines: [parsed.serviceName || '-']},
-        {icon: '♧', label: '接待陪玩', lines: playerLines},
+        {icon: '▤', label: '商品名称', lines: projectLines, strong: true},
+        {icon: '◇', label: parsed.orderMetricLabel || '服务规格', lines: [parsed.orderMetricValue || '-'], strong: true},
+        {icon: '♙', label: '接待人员', lines: [parsed.serviceName || '-']},
+        {icon: '♧', label: '服务人员', lines: playerLines},
         {icon: '◷', label: '预计等待', lines: [parsed.waitTime || '5-10分钟'], strong: true},
         ...(parsed.estimatedEndTime ? [{icon: '◴', label: '预计结单', lines: [parsed.estimatedEndTime]}] : []),
         {icon: '▦', label: '下单时间', lines: [parsed.orderTime || '-']},
@@ -829,7 +836,7 @@ const generateReceiptImageBlueDraft = async (_title: string, text: string, opts:
     y += financeH + gap;
     section(y, noticeH, '📣  售后与投诉须知', '', true);
     tipLines.forEach((line, index) => label(line, side + 20 * scale, y + (80 + index * 22) * scale, 13, index >= Math.max(0, tipLines.length - 2) ? blueDark : '#596474', index >= Math.max(0, tipLines.length - 2) ? 600 : 400));
-    label('本店通过各类渠道收集客服或打手私联接单证据，', side + 20 * scale, y + noticeH - 42 * scale, 12, blueDark, 600);
+    label('本店通过各类渠道收集工作人员私联交易证据，', side + 20 * scale, y + noticeH - 42 * scale, 12, blueDark, 600);
     label('举报查实私加联系方式及私单奖 500-2000R', side + 20 * scale, y + noticeH - 20 * scale, 12, blue, 700);
 
     y += noticeH + gap;
@@ -980,10 +987,10 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     fitText(`订单编号：${parsed.orderNo || '-'}`, 1430, 1341, 520, 27, 22, '#765f67', 600, 'right');
     drawText('订单信息', 876, 1303, 50, '#ffffff', 700, 'center');
     const orderRows = [
-        {label: '下单项目', value: parsed.project || '-', strong: false},
-        {label: parsed.orderMetricLabel || '订单保底', value: parsed.orderMetricValue || '-', strong: true},
-        {label: '接待客服', value: parsed.serviceName || '-', strong: false},
-        {label: '接待陪玩', value: parsed.players.length ? parsed.players.join('  ') : '（待派单/待接单）', strong: false},
+        {label: '商品名称', value: parsed.project || '-', strong: false},
+        {label: parsed.orderMetricLabel || '服务规格', value: parsed.orderMetricValue || '-', strong: true},
+        {label: '接待人员', value: parsed.serviceName || '-', strong: false},
+        {label: '服务人员', value: parsed.players.length ? parsed.players.join('  ') : '（待分配/待接单）', strong: false},
         {label: '预计等待时间', value: parsed.waitTime || '5-10分钟', strong: false},
         {label: '下单时间', value: parsed.orderTime || '-', strong: false},
     ];
@@ -1005,27 +1012,13 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     const paidItem = [...parsed.financeItems].reverse().find((item) => item.label === '实付金额') ||
         parsed.financeItems[parsed.financeItems.length - 1] || {label: '实付金额', value: '¥0.00', isBold: true};
     const ordinaryFinance = parsed.financeItems.filter((item) => item !== paidItem);
-    if (ordinaryFinance.length > 3) {
-        const rowsPerColumn = Math.ceil(ordinaryFinance.length / 2);
-        const columnStarts = [420, 920];
-        const valueEnds = [850, 1390];
-        const financeGap = rowsPerColumn > 3 ? 39 : 51;
-        ordinaryFinance.forEach((item, index) => {
-            const column = Math.floor(index / rowsPerColumn);
-            const row = index % rowsPerColumn;
-            const fy = 2114 + row * financeGap;
-            const labelX = columnStarts[column];
-            const valueX = valueEnds[column];
-            drawText(`${item.label}：`, labelX, fy, rowsPerColumn > 3 ? 27 : 30, ink, 600);
-            fitText(item.value, valueX, fy, 220, rowsPerColumn > 3 ? 27 : 30, 21, valueBlue, 600, 'right');
-        });
-    } else {
-        ordinaryFinance.forEach((item, index) => {
-            const fy = 2118 + index * 55;
-            drawText(`${item.label}：`, 420, fy, 35, ink, 600);
-            fitText(item.value, 1385, fy, 650, 37, 26, valueBlue, 600, 'right');
-        });
-    }
+    const financeGap = ordinaryFinance.length > 6 ? 31 : ordinaryFinance.length > 3 ? 39 : 55;
+    ordinaryFinance.forEach((item, index) => {
+        const fy = 2118 + index * financeGap;
+        const compact = ordinaryFinance.length > 3;
+        drawText(`${item.label}：`, 420, fy, compact ? 27 : 35, ink, 600);
+        fitText(item.value, 1385, fy, 760, compact ? 29 : 37, 20, valueBlue, 600, 'right');
+    });
     drawText(`${paidItem.label}：`, 420, 2350, 38, blue, 700);
     fitText(paidItem.value, 1365, 2366, 560, 72, 48, pinkDark, 800, 'right');
 
@@ -1036,7 +1029,7 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
         '请勿相信其他任何人，谨防上当受骗。',
     ]).flatMap((line) => wrapped(line, 860, 34, 500));
     tipLines.slice(0, 3).forEach((line, index) => drawText(line, 348, 2665 + index * 54, 34, '#332d30', 500));
-    drawText('本店通过各类渠道收集客服或打手私联接单证据，', 348, 2864, 32, '#332d30', 500);
+    drawText('本店通过各类渠道收集工作人员私联交易证据，', 348, 2864, 32, '#332d30', 500);
     drawText('举报查实私加联系方式及私单奖 500-2000R', 348, 2910, 33, '#d92f68', 800);
 
     drawText('感谢你的选择，喵～ 期待下次陪你一起玩！', 876, 3047, 41, pink, 700, 'center');

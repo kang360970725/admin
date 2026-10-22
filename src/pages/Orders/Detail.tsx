@@ -1736,8 +1736,6 @@ const OrderDetailPage: React.FC = () => {
         const orderTime = o?.orderTime ? dayjs(o.orderTime) : dayjs(o?.createdAt || new Date());
         const endTime = isHourlyLocal && estHours != null ? orderTime.add(estHours, 'hour').add(20, 'minute') : null;
 
-        const baseWan = Number(o?.baseAmountWan);
-        const baseWanText = Number.isFinite(baseWan) && baseWan > 0 ? `${baseWan} 万` : '无保底';
         const originalAmount = Number(o?.originalAmount ?? o?.receivableAmount ?? o?.finalPayableAmount ?? o?.paidAmount ?? 0);
         const discountAmount = Number(o?.discountAmount ?? 0);
         const couponDiscountAmount = Number(o?.couponDiscountAmount ?? 0);
@@ -1771,6 +1769,15 @@ const OrderDetailPage: React.FC = () => {
         const paymentChannelText = isMemberBalancePayment
             ? '会员储值'
             : resolvePaymentChannelLabel(o?.latestPayment?.channel || o?.paymentChannel, o?.paymentChannelLabel);
+        const paymentIdentifierLines: string[] = [];
+        const paymentNo = String(o?.latestPayment?.paymentNo || '').trim();
+        const clientSn = String(o?.latestPayment?.clientSn || '').trim();
+        const providerSn = String(o?.latestPayment?.providerSn || '').trim();
+        const transactionId = String(o?.latestPayment?.transactionId || '').trim();
+        if (paymentNo) paymentIdentifierLines.push(`商户支付单号：${paymentNo}`);
+        if (clientSn && clientSn !== paymentNo) paymentIdentifierLines.push(`收钱吧请求号：${clientSn}`);
+        if (providerSn) paymentIdentifierLines.push(`收钱吧流水号：${providerSn}`);
+        if (transactionId) paymentIdentifierLines.push(`微信支付单号：${transactionId}`);
         const financeLines = [
             `商品小计：¥${Number.isFinite(originalAmount) ? originalAmount.toFixed(2) : '0.00'}`,
         ];
@@ -1785,6 +1792,7 @@ const OrderDetailPage: React.FC = () => {
         }
         financeLines.push(`实付金额：¥${Number.isFinite(paidAmount) ? paidAmount.toFixed(2) : finalPayableAmount.toFixed(2)}`);
         financeLines.push(`支付方式：${paymentChannelText}`);
+        financeLines.push(...paymentIdentifierLines);
         if (isMemberBalancePayment) {
             const reservationHeld =
                 String(o?.balanceSettlementMode || '') === 'RESERVE_CAPTURE' &&
@@ -1804,14 +1812,12 @@ const OrderDetailPage: React.FC = () => {
 
         const customerText = [
             `订单编号：${orderNo}`,
-            `下单项目：${projectName}`,
-            `订单${estHours != null ? '时长' : '保底'}：${
-                isHourlyLocal ? `${estHours != null ? estHours.toFixed(2) : '-'} 小时` : baseWanText
-            }`,
-            `接待客服：${csName}`,
-            `接待陪玩：`,
+            `商品名称：${projectName}`,
+            `服务规格：${isHourlyLocal ? `${estHours != null ? estHours.toFixed(2) : '-'} 小时` : '按商品约定'}`,
+            `接待人员：${csName}`,
+            `服务人员：`,
             ...playerLines.map((line) => `  ${line}`),
-            `派单方式：${orderSourceLabel}`,
+            `订单来源：${orderSourceLabel}`,
             ...financeLines,
             isHourlyLocal ? `预计结单时间：${endTime ? endTime.format('YYYY-MM-DD HH:mm') : '-'}` : '',
             `下单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
@@ -1828,11 +1834,11 @@ const OrderDetailPage: React.FC = () => {
         const staffText = [
             `订单编号：${orderNo}`,
             `客户ID：${customerId}`,
-            `接单陪玩：`,
+            `服务人员：`,
             ...playerLines.map((line) => `  ${line}`),
             ...financeLines,
             `开单时间：${orderTime.format('YYYY-MM-DD HH:mm')}`,
-            `派单客服：${csName}`,
+            `接待人员：${csName}`,
             `实时单，请在 3 分钟内完成对接。`,
         ].join('\n');
 
