@@ -62,16 +62,26 @@ const FinanceDashboardPage: React.FC = () => {
     ];
 
     const detailColumns = [
-        { title: '收款时间（北京）', dataIndex: 'paymentTime', width: 180, render: chinaTime },
-        { title: '订单 / 充值编号', dataIndex: 'autoSerial', width: 200 },
-        { title: '派单客服', dataIndex: 'dispatcherLabel', width: 120 },
-        { title: '类型', dataIndex: 'receiptTypeLabel', width: 100 },
-        { title: '渠道', dataIndex: 'channelLabel', width: 170 },
-        { title: '对账属性', dataIndex: 'reconciliationLabel', width: 140, render: (v: any, row: any) => (
+        { title: '收款时间（北京）', dataIndex: 'paymentTime', width: 180, fixed: 'left' as const, render: chinaTime },
+        { title: '交易金额', dataIndex: 'paidAmount', width: 120, render: (v: any) => `¥${money(v)}` },
+        { title: '计入营收', dataIndex: 'cashAmount', width: 120, render: (v: any, row: any) => (
+            <Typography.Text strong={Number(v || 0) > 0} type={row?.channel === 'BALANCE' ? 'secondary' : undefined}>
+                ¥{money(v)}
+            </Typography.Text>
+        ) },
+        { title: '派单客服', dataIndex: 'dispatcherLabel', width: 130 },
+        { title: '订单 / 充值编号', dataIndex: 'autoSerial', width: 190 },
+        { title: '商户支付单号', dataIndex: 'paymentNo', width: 220, render: (v: any) => v || '--' },
+        { title: '收钱吧 / 微信单号', key: 'externalPaymentNo', width: 240, render: (_: any, row: any) => (
+            row?.providerSn || row?.transactionId || row?.clientSn || (
+                <Typography.Text type="warning">未绑定外部流水</Typography.Text>
+            )
+        ) },
+        { title: '渠道', dataIndex: 'channelLabel', width: 160 },
+        { title: '对账属性', dataIndex: 'reconciliationLabel', width: 150, render: (v: any, row: any) => (
             <Tag color={row?.reconciliationType === 'OFFLINE' ? 'orange' : row?.reconciliationType === 'ONLINE' ? 'green' : 'default'}>{v || '其他'}</Tag>
         ) },
-        { title: '交易金额', dataIndex: 'paidAmount', width: 120, render: (v: any) => `¥${money(v)}` },
-        { title: '计入营收', dataIndex: 'cashAmount', width: 120, render: (v: any) => `¥${money(v)}` },
+        { title: '类型', dataIndex: 'receiptTypeLabel', width: 100 },
         { title: '操作', dataIndex: 'orderId', width: 90, fixed: 'right' as const, render: (orderId: any) => orderId ? (
             <Typography.Link href={`/orders/${orderId}`} target="_blank">查看订单</Typography.Link>
         ) : '--' },
@@ -86,7 +96,7 @@ const FinanceDashboardPage: React.FC = () => {
                         onChange={(val) => setFilters((prev: any) => ({ ...prev, dateRange: val }))}
                     />
                     <Typography.Text type="secondary">
-                        按北京时间实际收款日统计。收钱吧在线支付由系统验证；人工确认的线下收款单独列出，供财务与实际到账流水核对。
+                        按北京时间实际收款日统计。现金实收用于核对收钱吧等外部到账；会员储值消费单独展示，不重复计入现金实收。
                     </Typography.Text>
                 </Space>
             </Card>
@@ -99,7 +109,7 @@ const FinanceDashboardPage: React.FC = () => {
                 </Col>
                 <Col xs={12} lg={6}>
                     <Card loading={loading}>
-                        <Statistic title="总营收（实收）" value={money(summary.allPaidAmountTotal)} prefix="¥" />
+                        <Statistic title="现金实收（含会员充值）" value={money(summary.allPaidAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
                 <Col xs={12} lg={6}>
@@ -112,13 +122,28 @@ const FinanceDashboardPage: React.FC = () => {
                         <Statistic title={`线下登记收款 · ${Number(summary.offlineReceiptOrderCount || 0)} 笔`} value={money(summary.offlineReceiptAmountTotal)} prefix="¥" valueStyle={{ color: Number(summary.offlineReceiptAmountTotal || 0) > 0 ? '#d46b08' : undefined }} />
                     </Card>
                 </Col>
+                <Col xs={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic title="会员储值消费" value={money(summary.memberBalanceAmountTotal)} prefix="¥" />
+                    </Card>
+                </Col>
+                <Col xs={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic title="订单消费总额" value={money(summary.orderPaidAmountTotal)} prefix="¥" />
+                    </Card>
+                </Col>
+                <Col xs={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic title={`会员充值实收 · ${Number(summary.rechargeCount || 0)} 笔`} value={money(summary.rechargeAmountTotal)} prefix="¥" />
+                    </Card>
+                </Col>
             </Row>
 
             <Card title="线下收款统计（需人工与实际到账核对）" style={{ marginTop: 16 }} loading={loading}>
                 <Alert
                     type="warning"
                     showIcon
-                    message="这里展示客服人工登记的线下收款，不代表第三方支付平台已自动验证到账。发现账目差异后，应及时检查对应订单和登记客服。"
+                    message="这里展示客服人工登记的线下收款，不代表收钱吧已自动验证到账。没有收钱吧/微信单号的记录只能按时间、金额、订单号和客服人工核对。"
                     style={{ marginBottom: 16 }}
                 />
                 <Table
@@ -143,6 +168,8 @@ const FinanceDashboardPage: React.FC = () => {
                                     <Typography.Text strong>{item.axis}</Typography.Text>
                                     <Typography.Text type="secondary">线上 ¥{money(item.onlineReceiptAmountTotal)}</Typography.Text>
                                     <Typography.Text type="warning">线下 ¥{money(item.offlineReceiptAmountTotal)}</Typography.Text>
+                                    <Typography.Text type="secondary">储值消费 ¥{money(item.memberBalanceAmountTotal)}</Typography.Text>
+                                    <Typography.Text type="secondary">订单消费 ¥{money(item.orderPaidAmountTotal)}</Typography.Text>
                                     <Typography.Text type="secondary">充值实收 ¥{money(item.rechargeAmountTotal)}</Typography.Text>
                                     <Typography.Text type="secondary">收款订单 {Number(item.allOrderCount || 0)}</Typography.Text>
                                 </Space>
@@ -154,13 +181,22 @@ const FinanceDashboardPage: React.FC = () => {
                                             <Card size="small"><Statistic title="收款订单数（去重）" value={Number(item.allOrderCount || 0)} /></Card>
                                         </Col>
                                         <Col xs={24} sm={12} lg={6}>
-                                            <Card size="small"><Statistic title="总营收（实收）" value={money(item.allPaidAmountTotal)} prefix="¥" /></Card>
+                                            <Card size="small"><Statistic title="现金实收（含会员充值）" value={money(item.allPaidAmountTotal)} prefix="¥" /></Card>
                                         </Col>
                                         <Col xs={24} sm={12} lg={6}>
                                             <Card size="small"><Statistic title="线上自动验证" value={money(item.onlineReceiptAmountTotal)} prefix="¥" /></Card>
                                         </Col>
                                         <Col xs={24} sm={12} lg={6}>
                                             <Card size="small"><Statistic title={`线下登记 · ${Number(item.offlineReceiptOrderCount || 0)} 笔`} value={money(item.offlineReceiptAmountTotal)} prefix="¥" valueStyle={{ color: Number(item.offlineReceiptAmountTotal || 0) > 0 ? '#d46b08' : undefined }} /></Card>
+                                        </Col>
+                                        <Col xs={24} sm={12} lg={6}>
+                                            <Card size="small"><Statistic title="会员储值消费" value={money(item.memberBalanceAmountTotal)} prefix="¥" /></Card>
+                                        </Col>
+                                        <Col xs={24} sm={12} lg={6}>
+                                            <Card size="small"><Statistic title="订单消费总额" value={money(item.orderPaidAmountTotal)} prefix="¥" /></Card>
+                                        </Col>
+                                        <Col xs={24} sm={12} lg={6}>
+                                            <Card size="small"><Statistic title={`会员充值实收 · ${Number(item.rechargeCount || 0)} 笔`} value={money(item.rechargeAmountTotal)} prefix="¥" /></Card>
                                         </Col>
                                     </Row>
 
@@ -181,7 +217,7 @@ const FinanceDashboardPage: React.FC = () => {
                                             columns={detailColumns as any}
                                             dataSource={(Array.isArray(item.detailRows) ? item.detailRows : []).filter((row: any) => row?.reconciliationType === 'OFFLINE')}
                                             pagination={false}
-                                            scroll={{ x: 1130 }}
+                                            scroll={{ x: 1800 }}
                                             size="small"
                                             locale={{ emptyText: '当日没有线下收款' }}
                                         />
@@ -193,7 +229,7 @@ const FinanceDashboardPage: React.FC = () => {
                                             columns={detailColumns as any}
                                             dataSource={Array.isArray(item.detailRows) ? item.detailRows : []}
                                             pagination={false}
-                                            scroll={{ x: 1130 }}
+                                            scroll={{ x: 1800 }}
                                             size="small"
                                         />
                                     </Card>
