@@ -53,6 +53,7 @@ import {
     assignDispatch,
     archiveDispatch,
     completeDispatch,
+    confirmManualOrderRefund,
     confirmCompleteOrder,
     createShouqianbaPaymentRequest,
     getEnumDicts,
@@ -152,6 +153,9 @@ const OrderDetailPage: React.FC = () => {
     const [refundHasCompensation, setRefundHasCompensation] = useState(false);
     const [refundCompensationAmount, setRefundCompensationAmount] = useState<number | null>(null);
     const [manualOfflineRefundCompleted, setManualOfflineRefundCompleted] = useState(false);
+    const [manualRefundConfirmOpen, setManualRefundConfirmOpen] = useState(false);
+    const [manualRefundConfirmLoading, setManualRefundConfirmLoading] = useState(false);
+    const [manualRefundConfirmRemark, setManualRefundConfirmRemark] = useState('');
 
     // ✅ 修复工具（重新结算 / 钱包对齐）
     const [toolsOpen, setToolsOpen] = useState(false);
@@ -1538,6 +1542,31 @@ const OrderDetailPage: React.FC = () => {
         }
     };
 
+    const submitManualRefundConfirmation = async () => {
+        if (!pendingManualRefund?.id) {
+            message.warning('未找到待人工退款记录，请刷新后重试');
+            return;
+        }
+        if (!manualRefundConfirmRemark.trim()) {
+            message.warning('请填写退款凭证或确认备注');
+            return;
+        }
+        try {
+            setManualRefundConfirmLoading(true);
+            await confirmManualOrderRefund(Number(pendingManualRefund.id), {
+                remark: manualRefundConfirmRemark.trim(),
+            });
+            message.success('已确认线下退款完成，财务退款流水已入账');
+            setManualRefundConfirmOpen(false);
+            setManualRefundConfirmRemark('');
+            await loadDetail();
+        } catch (e: any) {
+            message.error(e?.response?.data?.message || e?.data?.message || e?.message || '确认退款失败');
+        } finally {
+            setManualRefundConfirmLoading(false);
+        }
+    };
+
     // 创建订单后、复制相关功能模块
     const {initialState} = useModel('@@initialState');
     const currentUser = initialState?.currentUser;
@@ -2382,6 +2411,15 @@ const OrderDetailPage: React.FC = () => {
         );
         return Math.max(0, Number((paid - refunded).toFixed(2)));
     }, [order]);
+    const pendingManualRefund = useMemo(
+        () => (Array.isArray(order?.refunds) ? order.refunds : []).find((item: any) => String(item?.status || '') === 'MANUAL_REQUIRED') || null,
+        [order],
+    );
+
+    const openManualRefundConfirmation = () => {
+        setManualRefundConfirmRemark('');
+        setManualRefundConfirmOpen(true);
+    };
 
     const openRefundModal = () => {
         setRefundRemark('');
@@ -3199,6 +3237,9 @@ const OrderDetailPage: React.FC = () => {
                             </Button>
                         ) : null}
                         {canShowRefund && <Button danger onClick={openRefundModal}>退款</Button>}
+                        {canRefund && pendingManualRefund ? (
+                            <Button danger type="primary" onClick={openManualRefundConfirmation}>确认已线下退款</Button>
+                        ) : null}
                         {canEditOrder ? <Button type="primary" disabled={forbidEdit} onClick={openEditModal}>编辑订单</Button> : null}
 
                         {canDispatchOrder ? <Tooltip title={!canDispatch ? dispatchDisabledReason : ''}>
@@ -3547,6 +3588,12 @@ const OrderDetailPage: React.FC = () => {
                                                         退款
                                                     </Button>
                                                 </>
+                                            ) : null}
+                                            {canRefund && pendingManualRefund ? (
+                                                <Button danger type="primary" block onClick={openManualRefundConfirmation}
+                                                        style={{borderRadius: 14, height: 44}}>
+                                                    确认已线下退款
+                                                </Button>
                                             ) : null}
 
                                             {canEditOrder ? <Button
@@ -4116,6 +4163,40 @@ const OrderDetailPage: React.FC = () => {
                         value={refundRemark}
                         onChange={(e) => setRefundRemark(e.target.value)}
                         placeholder={manualOfflineRefundCompleted ? '请填写线下退款凭证或备注（必填）' : '退款备注（可选）'}
+                    />
+                </Space>
+            </Modal>
+
+            <Modal
+                open={manualRefundConfirmOpen}
+                onCancel={() => setManualRefundConfirmOpen(false)}
+                onOk={submitManualRefundConfirmation}
+                confirmLoading={manualRefundConfirmLoading}
+                okText="确认退款已完成"
+                okButtonProps={{danger: true}}
+                title="确认人工退款完成"
+            >
+                <Space direction="vertical" size={12} style={{width: '100%'}}>
+                    <Alert
+                        showIcon
+                        type="warning"
+                        message="请仅在客户款项已实际退回后确认"
+                        description="确认后会将待人工退款转为退款已完成，并以当前确认时间计入财务退款流水；不会再次冲正订单收益或重复扣款。"
+                    />
+                    <Descriptions bordered size="small" column={1}>
+                        <Descriptions.Item label="退款单号">{pendingManualRefund?.refundNo || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="退款金额">¥{Number(pendingManualRefund?.amount || 0).toFixed(2)}</Descriptions.Item>
+                        <Descriptions.Item label="申请时间">
+                            {pendingManualRefund?.createdAt ? dayjs(pendingManualRefund.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-'}
+                        </Descriptions.Item>
+                    </Descriptions>
+                    <Input.TextArea
+                        rows={3}
+                        maxLength={500}
+                        showCount
+                        value={manualRefundConfirmRemark}
+                        onChange={(event) => setManualRefundConfirmRemark(event.target.value)}
+                        placeholder="请填写退款凭证号、退款渠道或其他可核查说明（必填）"
                     />
                 </Space>
             </Modal>

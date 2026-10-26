@@ -1271,6 +1271,14 @@ export async function refundOrder(
     });
 }
 
+/** 确认财务已完成待人工退款；该操作只闭合退款流水，不会再次执行订单退款冲正。 */
+export async function confirmManualOrderRefund(refundId: number, data: { remark: string }) {
+    return request(`${API_BASE}/orders/refund/${Number(refundId)}/confirm-manual`, {
+        method: 'POST',
+        data,
+    });
+}
+
 
 // 更新订单
 export async function updateOrder(data: any) {
