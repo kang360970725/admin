@@ -8,6 +8,13 @@ const { RangePicker } = DatePicker;
 const money = (v: any) => Number(v ?? 0).toFixed(2);
 const chinaTime = (v: any) => v ? new Date(new Date(v).getTime() + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ') : '--';
 const today = () => dayjs(new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10));
+const orderStatusText: Record<string, string> = {
+    REFUNDED: '已退款', COMPLETED: '已结单', COMPLETED_PENDING_CONFIRM: '结单待确认',
+    ARCHIVED: '已存单', CANCELLED: '已取消', WAIT_ASSIGN: '待派单', WAIT_ACCEPT: '待接单', ACCEPTED: '服务中',
+};
+const refundStatusText: Record<string, string> = {
+    SUCCESS: '退款已完成', MANUAL_REQUIRED: '待人工退款', FAILED: '退款失败',
+};
 
 const FinanceDashboardPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
@@ -63,7 +70,11 @@ const FinanceDashboardPage: React.FC = () => {
 
     const detailColumns = [
         { title: '收款时间（北京）', dataIndex: 'paymentTime', width: 180, fixed: 'left' as const, render: chinaTime },
-        { title: '交易金额', dataIndex: 'paidAmount', width: 120, render: (v: any) => `¥${money(v)}` },
+        { title: '交易金额', dataIndex: 'paidAmount', width: 120, render: (v: any) => (
+            <Typography.Text type={Number(v || 0) < 0 ? 'danger' : undefined} strong={Number(v || 0) < 0}>
+                {Number(v || 0) < 0 ? '-' : ''}¥{money(Math.abs(Number(v || 0)))}
+            </Typography.Text>
+        ) },
         { title: '计入营收', dataIndex: 'cashAmount', width: 120, render: (v: any, row: any) => (
             <Typography.Text strong={Number(v || 0) > 0} type={row?.channel === 'BALANCE' ? 'secondary' : undefined}>
                 ¥{money(v)}
@@ -71,6 +82,11 @@ const FinanceDashboardPage: React.FC = () => {
         ) },
         { title: '派单客服', dataIndex: 'dispatcherLabel', width: 130 },
         { title: '订单 / 充值编号', dataIndex: 'autoSerial', width: 190 },
+        { title: '订单状态', dataIndex: 'orderStatus', width: 120, render: (v: any) => v ? (orderStatusText[v] || v) : '--' },
+        { title: '退款状态', dataIndex: 'refundStatus', width: 130, render: (v: any) => v ? (
+            <Tag color={v === 'SUCCESS' ? 'red' : v === 'MANUAL_REQUIRED' ? 'orange' : 'default'}>{refundStatusText[v] || v}</Tag>
+        ) : '--' },
+        { title: '退款金额', dataIndex: 'refundAmount', width: 120, render: (v: any) => Number(v || 0) > 0 ? `¥${money(v)}` : '--' },
         { title: '商户支付单号', dataIndex: 'paymentNo', width: 220, render: (v: any) => v || '--' },
         { title: '收钱吧 / 微信单号', key: 'externalPaymentNo', width: 240, render: (_: any, row: any) => (
             row?.providerSn || row?.transactionId || row?.clientSn || (
@@ -109,7 +125,7 @@ const FinanceDashboardPage: React.FC = () => {
                 </Col>
                 <Col xs={12} lg={6}>
                     <Card loading={loading}>
-                        <Statistic title="现金实收（含会员充值）" value={money(summary.allPaidAmountTotal)} prefix="¥" />
+                        <Statistic title="现金收款（退款前）" value={money(summary.grossCashReceiptAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
                 <Col xs={12} lg={6}>
@@ -135,6 +151,16 @@ const FinanceDashboardPage: React.FC = () => {
                 <Col xs={12} lg={6}>
                     <Card loading={loading}>
                         <Statistic title={`会员充值实收 · ${Number(summary.rechargeCount || 0)} 笔`} value={money(summary.rechargeAmountTotal)} prefix="¥" />
+                    </Card>
+                </Col>
+                <Col xs={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic title={`已完成退款（现金+储值）· ${Number(summary.refundCount || 0)} 笔`} value={money(summary.refundAmountTotal)} prefix="¥" valueStyle={{ color: Number(summary.refundAmountTotal || 0) > 0 ? '#cf1322' : undefined }} />
+                    </Card>
+                </Col>
+                <Col xs={12} lg={6}>
+                    <Card loading={loading}>
+                        <Statistic title="净现金实收" value={money(summary.allPaidAmountTotal)} prefix="¥" />
                     </Card>
                 </Col>
             </Row>
@@ -171,6 +197,8 @@ const FinanceDashboardPage: React.FC = () => {
                                     <Typography.Text type="secondary">储值消费 ¥{money(item.memberBalanceAmountTotal)}</Typography.Text>
                                     <Typography.Text type="secondary">订单消费 ¥{money(item.orderPaidAmountTotal)}</Typography.Text>
                                     <Typography.Text type="secondary">充值实收 ¥{money(item.rechargeAmountTotal)}</Typography.Text>
+                                    <Typography.Text type="danger">退款 -¥{money(item.refundAmountTotal)}</Typography.Text>
+                                    <Typography.Text strong>净现金 ¥{money(item.allPaidAmountTotal)}</Typography.Text>
                                     <Typography.Text type="secondary">收款订单 {Number(item.allOrderCount || 0)}</Typography.Text>
                                 </Space>
                             ),
@@ -181,7 +209,7 @@ const FinanceDashboardPage: React.FC = () => {
                                             <Card size="small"><Statistic title="收款订单数（去重）" value={Number(item.allOrderCount || 0)} /></Card>
                                         </Col>
                                         <Col xs={24} sm={12} lg={6}>
-                                            <Card size="small"><Statistic title="现金实收（含会员充值）" value={money(item.allPaidAmountTotal)} prefix="¥" /></Card>
+                                            <Card size="small"><Statistic title="现金收款（退款前）" value={money(item.grossCashReceiptAmountTotal)} prefix="¥" /></Card>
                                         </Col>
                                         <Col xs={24} sm={12} lg={6}>
                                             <Card size="small"><Statistic title="线上自动验证" value={money(item.onlineReceiptAmountTotal)} prefix="¥" /></Card>
@@ -197,6 +225,12 @@ const FinanceDashboardPage: React.FC = () => {
                                         </Col>
                                         <Col xs={24} sm={12} lg={6}>
                                             <Card size="small"><Statistic title={`会员充值实收 · ${Number(item.rechargeCount || 0)} 笔`} value={money(item.rechargeAmountTotal)} prefix="¥" /></Card>
+                                        </Col>
+                                        <Col xs={24} sm={12} lg={6}>
+                                            <Card size="small"><Statistic title={`已完成退款（现金+储值）· ${Number(item.refundCount || 0)} 笔`} value={money(item.refundAmountTotal)} prefix="¥" valueStyle={{ color: Number(item.refundAmountTotal || 0) > 0 ? '#cf1322' : undefined }} /></Card>
+                                        </Col>
+                                        <Col xs={24} sm={12} lg={6}>
+                                            <Card size="small"><Statistic title="净现金实收" value={money(item.allPaidAmountTotal)} prefix="¥" /></Card>
                                         </Col>
                                     </Row>
 
@@ -217,7 +251,7 @@ const FinanceDashboardPage: React.FC = () => {
                                             columns={detailColumns as any}
                                             dataSource={(Array.isArray(item.detailRows) ? item.detailRows : []).filter((row: any) => row?.reconciliationType === 'OFFLINE')}
                                             pagination={false}
-                                            scroll={{ x: 1800 }}
+                                            scroll={{ x: 2200 }}
                                             size="small"
                                             locale={{ emptyText: '当日没有线下收款' }}
                                         />
@@ -229,7 +263,7 @@ const FinanceDashboardPage: React.FC = () => {
                                             columns={detailColumns as any}
                                             dataSource={Array.isArray(item.detailRows) ? item.detailRows : []}
                                             pagination={false}
-                                            scroll={{ x: 1800 }}
+                                            scroll={{ x: 2200 }}
                                             size="small"
                                         />
                                     </Card>
