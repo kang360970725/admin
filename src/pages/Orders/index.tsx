@@ -346,7 +346,7 @@ const OrdersPage: React.FC = () => {
                             </div>
                             <Space size={4} wrap style={{ justifyContent: 'flex-end' }}>
                                 <Tag color={s.color}>{s.text}</Tag>
-                                {row?.isGifted ? <Tag>赠送</Tag> : row?.isPaid === false ? <Tag color="red">未收款·责任客服催收中</Tag> : <Tag color="green">已收款</Tag>}
+                                {row?.isGifted ? <Tag>赠送</Tag> : row?.isPaid === false ? <Tag color={row?.orderSource === 'STORE_PENDING_SETTLEMENT' ? 'gold' : 'red'}>{row?.orderSource === 'STORE_PENDING_SETTLEMENT' ? '门店待结算·不催收' : '未收款·责任客服催收中'}</Tag> : <Tag color="green">已收款</Tag>}
                                 {row?.unpaidAutoDeductedAt ? <Tag color="volcano">客服余额代扣</Tag> : null}
                             </Space>
                         </Space>
@@ -423,7 +423,8 @@ const OrdersPage: React.FC = () => {
             width: 160,
             copyable: true,
             ellipsis: true,
-            search: false
+            order: 90,
+            fieldProps: {placeholder: '完整订单号（可查询90天前）'},
         },
         {
             title: '搜索',
@@ -433,7 +434,7 @@ const OrdersPage: React.FC = () => {
             renderFormItem: () => (
                 <Input
                     allowClear
-                    placeholder="订单号 / 客户昵称、房间号或ID / 客服 / 陪玩"
+                    placeholder="近90天综合搜索；历史订单请输入完整订单号"
                 />
             ),
         },
@@ -737,7 +738,7 @@ const OrdersPage: React.FC = () => {
                         <Space direction="vertical" size={10} style={{ width: '100%' }}>
                             <Input.Search
                                 allowClear
-                                placeholder="订单号 / 客户昵称、房间号或ID / 客服 / 陪玩"
+                                placeholder="近90天搜索；历史订单请输入完整订单号"
                                 enterButton="搜索"
                                 value={mobileFilters.keyword}
                                 onChange={(e) => setMobileFilters((prev) => ({ ...prev, keyword: e.target.value }))}
