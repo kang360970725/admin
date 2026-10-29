@@ -3819,21 +3819,20 @@ const OrderDetailPage: React.FC = () => {
                     {String(order?.customerIdentifierType || 'GAME_ID').toUpperCase() === 'ALIAS' && !/^\d+$/.test(String(order?.customerGameId || '').trim()) ? (
                         <>
                             <Alert
-                                type="warning"
+                                type="info"
                                 showIcon
                                 style={{ marginBottom: 12 }}
-                                message="该订单由昵称/房间号派单，请先补齐客户准确游戏ID"
-                                description={`客户原始标识：${String(order?.customerOriginalIdentifier || '-').trim()}`}
+                                message="该订单暂未记录客户准确游戏ID"
+                                description={`客户原始标识：${String(order?.customerOriginalIdentifier || '-').trim()}。客服可直接存单或结单；如已取得数字ID，可在下方补录。`}
                             />
                             <Form.Item
                                 name="customerGameId"
-                                label="客户准确游戏ID"
+                                label="客户准确游戏ID（选填）"
                                 rules={[
-                                    { required: true, message: '请填写客户准确游戏ID后再存单或结单' },
                                     { pattern: /^\d+$/, message: '准确游戏ID只能填写纯数字，请勿填写昵称、房间号或其他符号' },
                                 ]}
                             >
-                                <Input inputMode="numeric" maxLength={64} placeholder="请输入纯数字游戏ID" allowClear />
+                                <Input inputMode="numeric" maxLength={64} placeholder="不知道可留空，不影响客服操作" allowClear />
                             </Form.Item>
                         </>
                     ) : null}
