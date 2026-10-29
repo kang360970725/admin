@@ -133,11 +133,12 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewOwnStaffCard: userType === 'STAFF',
 
     // 订单/结算
-    canViewOrderManagement: has('orders:list:page') || canManageOrderArchiveInstructions,
+    canViewOrderManagement: has('orders:list:page') || has('service:feedback:page') || has('orders:complaints:page') || canManageOrderArchiveInstructions,
     canViewOrdersList: has('orders:list:page'),
     canManageOrderArchiveInstructions,
     canViewOrderDetail: has('orders:detail:page'),
     canViewOrderComplaints: has('orders:complaints:page') || has('orders:list:page'),
+    canViewFeedback: has('service:feedback:page') || has('orders:complaints:page') || has('orders:list:page'),
     canViewRenewalLeaderboard: has('orders:list:page'),
     canViewSettlementExperience: has('settlements:experience:page'),
     canViewSettlementMonthly: has('settlements:monthly:page'),

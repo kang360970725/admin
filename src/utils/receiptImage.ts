@@ -19,6 +19,8 @@ export type GenerateReceiptImageOptions = {
     radius?: number;
     maxDpr?: number;
     theme?: ReceiptTheme;
+    /** 订单级小程序码；未传时继续使用历史固定小程序码。 */
+    miniappCodeUrl?: string;
 };
 
 type ParsedReceipt = {
@@ -905,7 +907,23 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
 
     const parsed = parseReceipt(text);
     const sourceW = 1752;
-    const sourceH = 3592;
+    const sourceBaseH = 3592;
+    const paidItem = [...parsed.financeItems].reverse().find((item) => item.label === '实付金额') ||
+        parsed.financeItems[parsed.financeItems.length - 1] || {label: '实付金额', value: '¥0.00', isBold: true};
+    const ordinaryFinance = parsed.financeItems.filter((item) => item !== paidItem);
+    // 结算区拆为两块：上方明细区允许增高；下方原生实付金额模块只下移，
+    // 不参与拉伸。模板切片结束点必须位于实付模块上边框之前。
+    const financeFirstRowY = 2108;
+    const financeBaseCapacity = 5;
+    // 每条超出基础容量的明细增加一整行空间，避免仅做到“不重叠”但视觉拥挤。
+    const financeExtraHeight = Math.max(0, ordinaryFinance.length - financeBaseCapacity) * 80;
+    // 保证基础五行也有正常行距；扩展后最后一行与实付框仍保留充足留白。
+    const financeLastAllowedY = 2240 + financeExtraHeight;
+    const financeRowGap = ordinaryFinance.length > 1
+        ? Math.min(44, (financeLastAllowedY - financeFirstRowY) / (ordinaryFinance.length - 1))
+        : 0;
+    const financePaidY = 2350 + financeExtraHeight;
+    const sourceH = sourceBaseH + financeExtraHeight;
     const width = Math.max(700, opts.width ?? 700);
     const scale = width / sourceW;
     const height = sourceH * scale;
@@ -923,13 +941,45 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     let miniappCode: HTMLImageElement | null = null;
     try {
         template = await loadReceiptAsset('/receipt-assets/receipt-pink-template.png');
-        miniappCode = await loadReceiptAsset('/receipt-assets/bluecat-miniapp-code.jpg').catch(() => null);
+        miniappCode = await loadReceiptAsset(opts.miniappCodeUrl || '/receipt-assets/bluecat-miniapp-code.jpg').catch(() => null);
     } catch {
         return generateReceiptImageBlueDraft(_title, text, opts);
     }
-    ctx.drawImage(template, 0, 0, width, height);
-
     const sx = (value: number) => value * scale;
+    if (financeExtraHeight > 0) {
+        // 仅拉伸实付框上方的一段纯明细背景；从 2260 开始的实付模块及
+        // 后续所有版块保持原始像素比例，整体向下平移。
+        // 钱包图标位于 2160~2240 左右，必须完整保留在上半片中；只拉伸
+        // 图标之后、实付模块之前的纯背景窄带。
+        const stretchStart = 2240;
+        const paidModuleStart = 2260;
+        ctx.drawImage(template, 0, 0, sourceW, stretchStart, 0, 0, width, sx(stretchStart));
+        ctx.drawImage(
+            template,
+            0,
+            stretchStart,
+            sourceW,
+            paidModuleStart - stretchStart,
+            0,
+            sx(stretchStart),
+            width,
+            sx(paidModuleStart - stretchStart + financeExtraHeight),
+        );
+        ctx.drawImage(
+            template,
+            0,
+            paidModuleStart,
+            sourceW,
+            sourceBaseH - paidModuleStart,
+            0,
+            sx(paidModuleStart + financeExtraHeight),
+            width,
+            sx(sourceBaseH - paidModuleStart),
+        );
+    } else {
+        ctx.drawImage(template, 0, 0, width, height);
+    }
+    const belowFinanceY = (value: number) => value + financeExtraHeight;
     const pink = '#f55f8b';
     const pinkDark = '#e94979';
     const blue = '#397dcf';
@@ -1009,38 +1059,34 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
     }
 
     drawText('结算信息', 876, 2041, 50, '#ffffff', 700, 'center');
-    const paidItem = [...parsed.financeItems].reverse().find((item) => item.label === '实付金额') ||
-        parsed.financeItems[parsed.financeItems.length - 1] || {label: '实付金额', value: '¥0.00', isBold: true};
-    const ordinaryFinance = parsed.financeItems.filter((item) => item !== paidItem);
-    const financeGap = ordinaryFinance.length > 6 ? 31 : ordinaryFinance.length > 3 ? 39 : 55;
     ordinaryFinance.forEach((item, index) => {
-        const fy = 2118 + index * financeGap;
-        const compact = ordinaryFinance.length > 3;
-        drawText(`${item.label}：`, 420, fy, compact ? 27 : 35, ink, 600);
-        fitText(item.value, 1385, fy, 760, compact ? 29 : 37, 20, valueBlue, 600, 'right');
+        const fy = financeFirstRowY + index * financeRowGap;
+        const compactSize = financeRowGap > 34 ? 28 : financeRowGap > 27 ? 25 : 22;
+        drawText(`${item.label}：`, 420, fy, compactSize, ink, 600);
+        fitText(item.value, 1385, fy, 720, compactSize + 1, 17, valueBlue, 600, 'right');
     });
-    drawText(`${paidItem.label}：`, 420, 2350, 38, blue, 700);
-    fitText(paidItem.value, 1365, 2366, 560, 72, 48, pinkDark, 800, 'right');
+    drawText(`${paidItem.label}：`, 420, financePaidY, 38, blue, 700);
+    fitText(paidItem.value, 1365, financePaidY + 16, 560, 72, 48, pinkDark, 800, 'right');
 
-    drawText('售后与投诉须知', 884, 2540, 46, '#ffffff', 700, 'center');
+    drawText('售后与投诉须知', 884, belowFinanceY(2540), 46, '#ffffff', 700, 'center');
     const tipLines = (parsed.tips.length ? parsed.tips : [
         '消费过程中如遇任何问题，请随时联系本单客服处理～',
         '订单完结24小时内支持售后，客服为售后唯一渠道；',
         '请勿相信其他任何人，谨防上当受骗。',
     ]).flatMap((line) => wrapped(line, 860, 34, 500));
-    tipLines.slice(0, 3).forEach((line, index) => drawText(line, 348, 2665 + index * 54, 34, '#332d30', 500));
-    drawText('本店通过各类渠道收集工作人员私联交易证据，', 348, 2864, 32, '#332d30', 500);
-    drawText('举报查实私加联系方式及私单奖 500-2000R', 348, 2910, 33, '#d92f68', 800);
+    tipLines.slice(0, 3).forEach((line, index) => drawText(line, 348, belowFinanceY(2665 + index * 54), 34, '#332d30', 500));
+    drawText('本店通过各类渠道收集工作人员私联交易证据，', 348, belowFinanceY(2864), 32, '#332d30', 500);
+    drawText('举报查实私加联系方式及私单奖 500-2000R', 348, belowFinanceY(2910), 33, '#d92f68', 800);
 
-    drawText('感谢你的选择，喵～ 期待下次陪你一起玩！', 876, 3047, 41, pink, 700, 'center');
+    drawText('感谢你的选择，喵～ 期待下次陪你一起玩！', 876, belowFinanceY(3047), 41, pink, 700, 'center');
 
     // Use the original lower information panel for a sufficiently large mini-app-code slot.
     ctx.save();
     ctx.fillStyle = 'rgba(255,250,248,.94)';
-    roundRect(ctx, sx(260), sx(3099), sx(1232), sx(222), sx(28), 'rgba(255,250,248,.94)', '#f7b9c9');
+    roundRect(ctx, sx(260), sx(belowFinanceY(3099)), sx(1232), sx(222), sx(28), 'rgba(255,250,248,.94)', '#f7b9c9');
     ctx.restore();
     const qrX = 282;
-    const qrY = 3108;
+    const qrY = belowFinanceY(3108);
     const qrSize = 204;
     ctx.save();
     ctx.fillStyle = '#ffffff';
@@ -1056,12 +1102,12 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
         ctx.strokeRect(sx(qrX), sx(qrY), sx(qrSize), sx(qrSize));
     }
     ctx.restore();
-    drawText('扫码进入蓝猫爽打小程序', 548, 3168, 34, pinkDark, 700);
-    drawText('查订单 · 找客服 · 享福利', 548, 3221, 31, ink, 600);
-    drawText('微信扫码即可进入小程序', 548, 3268, 27, muted, 500);
+    drawText('扫码进入蓝猫爽打小程序', 548, belowFinanceY(3168), 34, pinkDark, 700);
+    drawText('查订单 · 找客服 · 享福利', 548, belowFinanceY(3221), 31, ink, 600);
+    drawText('微信扫码即可进入小程序', 548, belowFinanceY(3268), 27, muted, 500);
 
-    drawText(`BlueCat · 萌爪订单小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, 876, 3395, 30, '#74686d', 500, 'center');
-    drawText('BlueCat · 蓝猫爽打 与您同行。', 876, 3475, 33, '#74686d', 500, 'center');
+    drawText(`BlueCat · 萌爪订单小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, 876, belowFinanceY(3395), 30, '#74686d', 500, 'center');
+    drawText('BlueCat · 蓝猫爽打 与您同行。', 876, belowFinanceY(3475), 33, '#74686d', 500, 'center');
 
     return canvas.toDataURL('image/png');
 };

@@ -30,10 +30,11 @@ import {
     AutoComplete,
     QRCode,
     Typography,
+    Avatar,
 } from 'antd';
 import dayjs from 'dayjs';
 import html2canvas from 'html2canvas';
-import { getGameProjectOptions, getMemberOrderContext, getOrderDetail, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
+import { getGameProjectOptions, getMemberOrderContext, getOrderClaimCode, getOrderDetail, getOrderSourceOptions, getPlayerOptions, getUsers, getUserCoupons } from '@/services/api';
 import { useIsMobile } from '@/utils/useIsMobile';
 import { maskPhone } from '@/utils/privacy';
 import { generateReceiptImage } from '@/utils/receiptImage';
@@ -208,6 +209,7 @@ export type OrderUpsertValues = {
     renewalPlayerIds?: number[];
     isDesignated?: boolean;
     designatedPlayerIds?: number[];
+    bonusAttributionType?: 'NONE' | 'RENEWAL' | 'DESIGNATED';
 
     // ---- 以下用于小票生成/展示，不建议直接传后端 ----
     projectName?: string;
@@ -264,8 +266,12 @@ export default function OrderUpsertModal(props: {
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
     const [memberLoading, setMemberLoading] = useState(false);
-    const [memberOptions, setMemberOptions] = useState<Array<{ label: string; value: number }>>([]);
-    const [memberMetaMap, setMemberMetaMap] = useState<Record<number, { name: string; phone: string; balance: number; gameCards: MemberGameCardOption[] }>>({});
+    const [memberOptions, setMemberOptions] = useState<Array<{ label: React.ReactNode; value: number; title: string }>>([]);
+    const [memberMetaMap, setMemberMetaMap] = useState<Record<number, { name: string; phone: string; memberCode: string; avatar: string; balance: number; gameCards: MemberGameCardOption[] }>>({});
+    const [memberSearchKeyword, setMemberSearchKeyword] = useState('');
+    const [memberSelectOpen, setMemberSelectOpen] = useState(false);
+    const memberSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const memberSearchRequestRef = useRef(0);
     const [memberOrderContext, setMemberOrderContext] = useState<any>(null);
     const [memberOrderContextLoading, setMemberOrderContextLoading] = useState(false);
     const memberContextRequestRef = useRef(0);
@@ -373,28 +379,46 @@ export default function OrderUpsertModal(props: {
         }
     };
 
-    const fetchMembers = async (keyword?: string) => {
+    const fetchMembers = async (keyword: string) => {
+        const digits = String(keyword || '').replace(/\D/g, '');
+        if (digits.length < 4) {
+            setMemberOptions([]);
+            return;
+        }
+        const requestId = ++memberSearchRequestRef.current;
         setMemberLoading(true);
         try {
             const res: any = await getUsers({
                 page: 1,
                 limit: 20,
-                search: keyword || '',
+                memberTail: digits,
                 scene: 'MEMBER',
                 includeStaffMembers: true,
             });
+            if (requestId !== memberSearchRequestRef.current) return;
             const list = Array.isArray(res?.data) ? res.data : [];
-            const nextMeta: Record<number, { name: string; phone: string; balance: number; gameCards: MemberGameCardOption[] }> = {};
+            const nextMeta: Record<number, { name: string; phone: string; memberCode: string; avatar: string; balance: number; gameCards: MemberGameCardOption[] }> = {};
             const nextOptions = list.map((item: any) => {
                 const id = Number(item?.id || 0);
                 const name = String(item?.name || '未命名会员').trim();
                 const phone = String(item?.phone || '').trim();
                 const memberCode = String(item?.memberProfile?.memberCode || '').trim();
+                const avatar = String(item?.avatar || '').trim();
                 const balance = Number(item?.wallet?.availableBalance ?? 0);
-                nextMeta[id] = { name, phone, balance, gameCards: Array.isArray(item?.memberGameCards) ? item.memberGameCards : [] };
+                nextMeta[id] = { name, phone, memberCode, avatar, balance, gameCards: Array.isArray(item?.memberGameCards) ? item.memberGameCards : [] };
                 return {
                     value: id,
-                    label: `${name}${phone ? `（${maskPhone(phone)}）` : ''}${memberCode ? ` · 编码${memberCode}` : ''} · 储值¥${balance.toFixed(2)}`,
+                    title: name,
+                    label: (
+                        <div className="bc-member-option">
+                            <Avatar size={32} src={avatar}>{name.slice(0, 1)}</Avatar>
+                            <div>
+                                <strong>{name}</strong>
+                                <span>{phone ? maskPhone(phone) : '无手机号'} · ID {memberCode || '-'}</span>
+                            </div>
+                            <b><small>余额</small>¥{balance.toFixed(2)}</b>
+                        </div>
+                    ),
                 };
             });
             setMemberMetaMap((prev) => ({ ...prev, ...nextMeta }));
@@ -404,8 +428,32 @@ export default function OrderUpsertModal(props: {
             message.error('获取会员列表失败');
             setMemberOptions([]);
         } finally {
-            setMemberLoading(false);
+            if (requestId === memberSearchRequestRef.current) setMemberLoading(false);
         }
+    };
+
+    const handleMemberSearch = (value: string) => {
+        const digits = String(value || '').replace(/\D/g, '');
+        setMemberSearchKeyword(digits);
+        if (memberSearchTimerRef.current) clearTimeout(memberSearchTimerRef.current);
+        if (digits.length < 4) {
+            memberSearchRequestRef.current += 1;
+            setMemberLoading(false);
+            setMemberOptions([]);
+            return;
+        }
+        memberSearchTimerRef.current = setTimeout(() => void fetchMembers(digits), 280);
+    };
+
+    const clearMemberSearch = () => {
+        if (memberSearchTimerRef.current) {
+            clearTimeout(memberSearchTimerRef.current);
+            memberSearchTimerRef.current = null;
+        }
+        memberSearchRequestRef.current += 1;
+        setMemberLoading(false);
+        setMemberSearchKeyword('');
+        setMemberOptions([]);
     };
 
     const refreshMemberOrderContext = async (userIdInput?: number, projectIdInput?: number, amountInput?: number) => {
@@ -428,7 +476,20 @@ export default function OrderUpsertModal(props: {
                 const coupon = couponId > 0 ? couponMetaMap?.[couponId] : null;
                 const couponDiscount = calcCouponPreviewDiscount(coupon, toMoney(discount.payableAmount), projectId);
                 const payable = toMoney(Math.max(0, toMoney(discount.payableAmount) - couponDiscount));
-                form?.setFieldsValue?.({ paidAmount: payable, settlementAmount: payable, manualAdjustAmount: 0 } as any);
+                const balance = Number(memberMetaMap?.[userId]?.balance ?? 0);
+                if (balance < payable) {
+                    form?.setFieldsValue?.({
+                        paymentChannel: 'MANUAL',
+                        isPaid: false,
+                        paymentTime: undefined,
+                        paidAmount: originalAmount,
+                        settlementAmount: originalAmount,
+                        manualAdjustAmount: 0,
+                    } as any);
+                    message.warning(`会员储值余额不足（可用 ¥${balance.toFixed(2)}，需 ¥${payable.toFixed(2)}），已切换为线下确认收款`);
+                } else {
+                    form?.setFieldsValue?.({ paidAmount: payable, settlementAmount: payable, manualAdjustAmount: 0 } as any);
+                }
             }
             return context;
         } catch (error) {
@@ -564,6 +625,9 @@ export default function OrderUpsertModal(props: {
 
         form?.resetFields?.();
         setMemberOrderContext(null);
+        setMemberOptions([]);
+        setMemberSearchKeyword('');
+        setMemberSelectOpen(false);
         memberContextRequestRef.current += 1;
         autoSelectedCardRef.current = '';
 
@@ -580,6 +644,7 @@ export default function OrderUpsertModal(props: {
             renewalPlayerIds: Array.isArray(initialValues?.renewalPlayerIds) ? initialValues?.renewalPlayerIds : [],
             isDesignated: Boolean(initialValues?.isDesignated ?? false),
             designatedPlayerIds: Array.isArray(initialValues?.designatedPlayerIds) ? initialValues?.designatedPlayerIds : [],
+            bonusAttributionType: initialValues?.isDesignated ? 'DESIGNATED' : initialValues?.isRenewal ? 'RENEWAL' : 'NONE',
             orderSource: initialValues?.orderSource || 'CUSTOMER_SERVICE_MANUAL',
             paymentChannel:
                 ONLINE_QR_PAYMENT_PAUSED && String(initialValues?.paymentChannel || '').trim().toUpperCase() === 'SHOUQIANBA'
@@ -600,10 +665,13 @@ export default function OrderUpsertModal(props: {
 
         void fetchProjects('');
         void fetchPlayers('');
-        void fetchMembers('');
         void fetchOrderSources();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
+
+    useEffect(() => () => {
+        if (memberSearchTimerRef.current) clearTimeout(memberSearchTimerRef.current);
+    }, []);
 
     // 项目列表加载完成后：用当前 projectId 再同步一次（确保一打开就自动填）
     useEffect(() => {
@@ -620,6 +688,21 @@ export default function OrderUpsertModal(props: {
         form?.setFieldsValue?.({
             paidAmount: receiptLocked ? initialValues?.paidAmount : payable,
             settlementAmount: payable,
+        } as any);
+    };
+
+    const resetMemberDerivedPricing = () => {
+        memberContextRequestRef.current += 1;
+        setMemberOrderContext(null);
+        setCouponOptions([]);
+        setCouponMetaMap({});
+
+        const originalAmount = toMoney(form?.getFieldValue?.('receivableAmount' as any));
+        form?.setFieldsValue?.({
+            userCouponId: undefined,
+            paidAmount: receiptLocked ? initialValues?.paidAmount : originalAmount,
+            settlementAmount: originalAmount,
+            manualAdjustAmount: 0,
         } as any);
     };
 
@@ -701,50 +784,34 @@ export default function OrderUpsertModal(props: {
             applyCouponToAmounts(changed.userCouponId);
         }
 
-        if (changed?.customerUserId != null && Number(changed.customerUserId) > 0) {
+        const customerUserChanged = Object.prototype.hasOwnProperty.call(changed || {}, 'customerUserId');
+        if (customerUserChanged && changed?.customerUserId != null && Number(changed.customerUserId) > 0) {
             const memberId = Number(changed.customerUserId);
+            // 会员权益属于会员维度。切换会员时必须先撤销上一位会员产生的
+            // 折扣、优惠券及结算价，再异步计算新会员的权益。
+            resetMemberDerivedPricing();
             const balance = Number(memberMetaMap?.[memberId]?.balance ?? 0);
-            const requiredAmount = Number(form?.getFieldValue?.('receivableAmount') || 0);
-            const canUseBalance = balance > 0 && balance >= requiredAmount;
+            const canUseBalance = balance > 0;
             const currentChannel = String(form?.getFieldValue?.('paymentChannel') || '').trim().toUpperCase();
             const fallbackChannel = ONLINE_QR_PAYMENT_PAUSED ? 'MANUAL' : 'SHOUQIANBA';
             const nextChannel = canUseBalance ? 'BALANCE' : (currentChannel === 'BALANCE' ? fallbackChannel : currentChannel || fallbackChannel);
             form?.setFieldsValue?.({
                 paymentChannel: nextChannel,
                 isPaid: nextChannel === 'BALANCE',
-                userCouponId: undefined,
                 customerGameId: undefined,
                 customerIdentifierIsGameId: false,
             } as any);
             autoSelectedCardRef.current = '';
-            if (!canUseBalance) message.warning(balance <= 0 ? '该会员当前无可用储值余额，已保留在线/线下收款方式' : `会员储值余额不足（可用 ¥${balance.toFixed(2)}），已保留在线/线下收款方式`);
+            if (!canUseBalance) message.warning('该会员当前无可用储值余额，已切换为线下确认收款');
             void fetchMemberCoupons(memberId);
-        } else if (changed?.customerUserId !== undefined) {
-            memberContextRequestRef.current += 1;
-            setMemberOrderContext(null);
+        } else if (customerUserChanged) {
+            resetMemberDerivedPricing();
             form?.setFieldsValue?.({
-                userCouponId: undefined,
                 paymentChannel: ONLINE_QR_PAYMENT_PAUSED ? 'MANUAL' : 'SHOUQIANBA',
                 isPaid: false,
                 paymentTime: undefined,
-                manualAdjustAmount: 0,
             } as any);
-            setCouponOptions([]);
-            setCouponMetaMap({});
             autoSelectedCardRef.current = '';
-            const projectId = Number(form?.getFieldValue?.('projectId') || 0);
-            const project = projectMap?.[projectId];
-            if (project) {
-                const quantity = String(project?.billingMode || '') === 'HOURLY'
-                    ? Math.max(1, Number(form?.getFieldValue?.('orderQuantity') || 1))
-                    : 1;
-                const originalAmount = toMoney(Number(project?.price || 0) * quantity);
-                form?.setFieldsValue?.({
-                    receivableAmount: originalAmount,
-                    paidAmount: originalAmount,
-                    settlementAmount: originalAmount,
-                } as any);
-            }
         }
 
         if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'BALANCE') {
@@ -758,11 +825,18 @@ export default function OrderUpsertModal(props: {
             }
         }
         if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'MANUAL') {
+            // 会员等级折扣仅限储值余额支付。切换到线下收款时立即使
+            // 会员折扣上下文失效，优惠券仍按项目原价独立计算。
+            memberContextRequestRef.current += 1;
+            setMemberOrderContext(null);
             const projectId = Number(form?.getFieldValue?.('projectId') || 0);
             const project = projectMap?.[projectId];
             const quantity = String(project?.billingMode || '') === 'HOURLY' ? Math.max(0.5, Number(form?.getFieldValue?.('orderQuantity') || 1)) : 1;
             const originalAmount = toMoney(Number(project?.price || 0) * quantity);
-            const payable = calcPayableAfterCoupon(originalAmount, Number(form?.getFieldValue?.('userCouponId') || 0), projectId);
+            const couponId = Number(form?.getFieldValue?.('userCouponId') || 0);
+            const coupon = couponId > 0 ? couponMetaMap?.[couponId] : null;
+            const couponDiscount = calcCouponPreviewDiscount(coupon, originalAmount, projectId);
+            const payable = toMoney(Math.max(0, originalAmount - couponDiscount));
             form?.setFieldsValue?.({
                 isPaid: false,
                 paymentTime: undefined,
@@ -773,11 +847,16 @@ export default function OrderUpsertModal(props: {
             } as any);
         }
         if (changed?.paymentChannel && String(changed.paymentChannel).trim().toUpperCase() === 'SHOUQIANBA') {
+            memberContextRequestRef.current += 1;
+            setMemberOrderContext(null);
             const projectId = Number(form?.getFieldValue?.('projectId') || 0);
             const project = projectMap?.[projectId];
             const quantity = String(project?.billingMode || '') === 'HOURLY' ? Math.max(0.5, Number(form?.getFieldValue?.('orderQuantity') || 1)) : 1;
             const originalAmount = toMoney(Number(project?.price || 0) * quantity);
-            const payable = calcPayableAfterCoupon(originalAmount, Number(form?.getFieldValue?.('userCouponId') || 0), projectId);
+            const couponId = Number(form?.getFieldValue?.('userCouponId') || 0);
+            const coupon = couponId > 0 ? couponMetaMap?.[couponId] : null;
+            const couponDiscount = calcCouponPreviewDiscount(coupon, originalAmount, projectId);
+            const payable = toMoney(Math.max(0, originalAmount - couponDiscount));
             form?.setFieldsValue?.({
                 isPaid: false,
                 paymentTime: undefined,
@@ -1011,7 +1090,8 @@ export default function OrderUpsertModal(props: {
     // ---------- UI：默认 2 列（你当前 UI 改动） ----------
     // 2列：lg=12；要 3 列把 lg 改 8
     const compactColProps = { xs: 24, sm: 12, md: 12, lg: 12 };
-    const fullColProps = { xs: 24, sm: 24, md: 24, lg: 24 };
+    // 桌面端默认双列，尽量让派单在一屏内完成；手机端仍为单列。
+    const fullColProps = { xs: 24, sm: 24, md: 12, lg: 12 };
 
     const watchedProjectId = Form.useWatch('projectId', form);
     const curProjectId = Number(watchedProjectId ?? 0);
@@ -1021,7 +1101,12 @@ export default function OrderUpsertModal(props: {
     const watchedIsGifted = Form.useWatch('isGifted', form);
     const canSelectPlayersWhenUnpaid =
         Boolean(watchedIsGifted) || ['CUSTOMER_SERVICE_MANUAL', 'STORE_PENDING_SETTLEMENT'].includes(String(watchedOrderSource || '').trim());
-    const watchedPlayerIds = Form.useWatch('playerIds', form) || [];
+    const watchedPlayerIdsRaw = Form.useWatch('playerIds', form);
+    const watchedPlayerIds = Array.isArray(watchedPlayerIdsRaw)
+        ? watchedPlayerIdsRaw.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id))
+        : (watchedPlayerIdsRaw != null && watchedPlayerIdsRaw !== '' && Number.isFinite(Number(watchedPlayerIdsRaw))
+            ? [Number(watchedPlayerIdsRaw)]
+            : []);
     const watchedAttributionType = String(Form.useWatch('bonusAttributionType', form) || 'NONE');
     const watchedLegacyIsRenewal = Boolean(Form.useWatch('isRenewal', form));
     const watchedLegacyIsDesignated = Boolean(Form.useWatch('isDesignated', form));
@@ -1172,9 +1257,12 @@ export default function OrderUpsertModal(props: {
                     '订单完结24小时内支持售后，客服为售后唯一渠道；',
                     '请勿相信其他任何人，谨防上当受骗。',
                 ].filter(Boolean).join('\n');
+                const orderId = Number(detail?.id || paymentResult?.orderId || 0);
+                const claimCode = orderId > 0 ? await getOrderClaimCode(orderId).catch(() => null) : null;
                 const image = await generateReceiptImage('蓝猫爽打 · 萌爪订单', text, {
                     width: 800,
                     theme: {accent: '#f55f8b', accent2: '#5599df'},
+                    miniappCodeUrl: claimCode?.miniCodeDataUrl,
                 });
                 if (!cancelled) {
                     setPaymentReceiptText(text);
@@ -1432,18 +1520,28 @@ export default function OrderUpsertModal(props: {
     return (
         <Modal
             open={open}
-            title={title}
+            title={null}
             onCancel={onCancel}
             onOk={confirmAndSubmitOrder}
             confirmLoading={submitting}
             destroyOnClose
             rootClassName="bc-order-upsert-modal-root"
             className="bc-order-upsert-modal"
-            width={isMobile ? '96vw' : 1080}
-            style={{ top: isMobile ? 8 : 24 }}
-            okText="保存"
+            width={isMobile ? '96vw' : 1180}
+            style={{ top: isMobile ? 8 : 10 }}
+            okText={showPlayers ? (watchedIsPaid || watchedPaymentChannel === 'BALANCE' ? '确认收款并派单' : '确认派单（未收款）') : '保存订单'}
             cancelText="取消"
-            footer={watchedPaymentChannel === 'SHOUQIANBA' ? null : undefined}
+            footer={watchedPaymentChannel === 'SHOUQIANBA' ? null : (
+                <div className="bc-order-action-footer">
+                    <div><span>确认收款金额</span><strong>¥{watchedPaidAmount.toFixed(2)}</strong></div>
+                    <Space>
+                        <Button onClick={onCancel}>取消</Button>
+                        <Button type="primary" loading={submitting} disabled={balanceInsufficient} onClick={confirmAndSubmitOrder}>
+                            {showPlayers ? (watchedIsPaid || watchedPaymentChannel === 'BALANCE' ? '收款并派单' : '创建并派单') : '保存订单'}
+                        </Button>
+                    </Space>
+                </div>
+            )}
             okButtonProps={{
                 disabled: balanceInsufficient,
             }}
@@ -1451,25 +1549,65 @@ export default function OrderUpsertModal(props: {
             <div className="bc-order-create-layout">
             <Form form={form} layout="vertical" disabled={editingLocked} onValuesChange={onValuesChange} className="bc-admin-form bc-order-create-form">
                 {editingLocked ? <Alert type="info" showIcon message="为保护交易与财务数据，现有订单仅允许修改客户标识；商品、金额、渠道、会员和支付方式均已锁定。" style={{marginBottom: 16}} /> : null}
-                <div className="bc-admin-form-summary bc-order-create-summary">
-                    <div className="bc-admin-form-summary-card info">
-                        <div className="bc-admin-form-summary-label">应收金额</div>
-                        <div className="bc-admin-form-summary-value">¥{watchedReceivableAmount.toFixed(2)}</div>
-                    </div>
-                    <div className="bc-admin-form-summary-card warning">
-                        <div className="bc-admin-form-summary-label">优惠抵扣</div>
-                        <div className="bc-admin-form-summary-value">¥{totalDiscountPreview.toFixed(2)}</div>
-                    </div>
-                    <div className={`bc-admin-form-summary-card ${watchedIsPaid ? 'success' : 'danger'}`}>
-                        <div className="bc-admin-form-summary-label">收款状态</div>
-                        <div className="bc-admin-form-summary-value">{watchedIsPaid ? '已付款' : '未付款'}</div>
-                    </div>
+                <div className="bc-order-new-header">
+                    <div><strong>{title || '快速派单'}</strong><span>一页完成订单、会员、收款和服务者选择</span></div>
+                    <b className="bc-order-time-hint">预计 20 秒完成</b>
                 </div>
-                {/* 1) 订单核心 */}
-                <div className="bc-admin-form-section-title">① 客户与收款</div>
 
-                <Row gutter={[16, 12]}>
-                    <Col {...compactColProps}>
+                <Row gutter={[16, 12]} className="bc-order-workflow-grid">
+                    <Col span={24} className="bc-order-flow-divider flow-member" aria-hidden="true" />
+                    <Col {...compactColProps} className="flow-member member-customer-row">
+                        <Form.Item
+                            name="customerUserId"
+                            label="关联会员（可选）"
+                            extra={(
+                                <div className="bc-member-extra-slot">
+                                    {selectedMember ? (
+                                        <div className="bc-selected-member-card">
+                                            <Avatar size={22} src={selectedMember.avatar}>{selectedMember.name.slice(0, 1)}</Avatar>
+                                            <strong>{selectedMember.name}</strong>
+                                            <span>{selectedMember.phone ? maskPhone(selectedMember.phone) : '无手机号'}</span>
+                                            <i />
+                                            <span>ID {selectedMember.memberCode || '-'}</span>
+                                        </div>
+                                    ) : <span>输入手机尾号或会员 ID 尾号（至少 4 位）</span>}
+                                </div>
+                            )}
+                        >
+                            <Select
+                                placeholder="输入 4 位以上手机或会员 ID 尾号"
+                                showSearch
+                                filterOption={false}
+                                onSearch={handleMemberSearch}
+                                optionLabelProp="title"
+                                open={memberSelectOpen}
+                                onDropdownVisibleChange={(nextOpen) => {
+                                    clearMemberSearch();
+                                    setMemberSelectOpen(nextOpen);
+                                }}
+                                onSelect={() => {
+                                    clearMemberSearch();
+                                    setMemberSelectOpen(false);
+                                }}
+                                onClear={() => {
+                                    clearMemberSearch();
+                                    setMemberSelectOpen(false);
+                                }}
+                                options={memberSelectOpen
+                                    ? memberOptions
+                                    : (selectedMember ? [{
+                                        value: watchedCustomerUserId,
+                                        title: selectedMember.name,
+                                        label: selectedMember.name,
+                                    }] : [])}
+                                loading={memberLoading}
+                                notFoundContent={memberSearchKeyword.length < 4 ? '请输入至少 4 位数字' : (memberLoading ? '查询中…' : '未找到匹配会员')}
+                                disabled={Boolean(paymentResult?.orderId)}
+                                allowClear
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col {...compactColProps} className="flow-member">
                         <Form.Item name="paymentChannel" label="收款方式">
                             <Radio.Group
                                 className="bc-order-payment-channel"
@@ -1477,17 +1615,16 @@ export default function OrderUpsertModal(props: {
                                 buttonStyle="solid"
                                 disabled={Boolean(paymentResult?.orderId)}
                             >
-                                <Radio.Button value="SHOUQIANBA" disabled={ONLINE_QR_PAYMENT_PAUSED}>在线二维码支付（暂停）</Radio.Button>
-                                <Radio.Button value="BALANCE">会员储值</Radio.Button>
-                                <Radio.Button value="MANUAL" className="bc-order-payment-manual">线下确认收款</Radio.Button>
+                                <Radio.Button value="BALANCE" disabled={!(watchedCustomerUserId > 0) || selectedMemberBalance <= 0}>
+                                    <strong>会员余额</strong><span className={watchedCustomerUserId > 0 ? 'bc-payment-balance-value' : undefined}>{watchedCustomerUserId > 0 ? `¥${selectedMemberBalance.toFixed(2)}` : '需先选择会员'}</span>
+                                </Radio.Button>
+                                <Radio.Button value="MANUAL" className="bc-order-payment-manual">
+                                    <strong>线下收款</strong><span>现金、转账或其他方式</span>
+                                </Radio.Button>
                             </Radio.Group>
                         </Form.Item>
-                        {watchedPaymentChannel === 'MANUAL' ? (
-                            <div className="bc-order-manual-channel-note">
-                                {String(watchedOrderSource || '') === 'STORE_PENDING_SETTLEMENT'
-                                    ? '门店待结算订单按固定周期对账，不进入48小时催收及客服扣款流程。'
-                                    : '当前默认方式。支持先创建未收款订单，结单待确认后开始计算48小时收款责任期。'}
-                            </div>
+                        {watchedPaymentChannel === 'MANUAL' && String(watchedOrderSource || '') === 'STORE_PENDING_SETTLEMENT' ? (
+                            <div className="bc-order-manual-channel-note">门店待结算按固定周期对账，不进入 48 小时催收及客服扣款流程。</div>
                         ) : null}
                         {paymentResult?.orderId ? (
                             <div style={{ marginTop: -8, marginBottom: 8, color: '#64748b', fontSize: 12 }}>
@@ -1495,34 +1632,8 @@ export default function OrderUpsertModal(props: {
                             </div>
                         ) : null}
                     </Col>
-                    <Col {...compactColProps}>
-                        <Form.Item name="orderSource" label="订单渠道来源" rules={[{ required: true, message: '请选择订单渠道来源' }]}>
-                            <Select
-                                placeholder="请选择订单渠道来源"
-                                options={orderSourceOptions}
-                                allowClear={false}
-                            />
-                        </Form.Item>
-                    </Col>
-                    <Col {...fullColProps}>
-                        <Form.Item
-                            name="customerUserId"
-                            label="关联会员（可选）"
-                            extra="订单将直接归属该会员，用于消费记录、会员权益、积分和售后；与本次游戏ID是否填写无关。"
-                        >
-                            <Select
-                                placeholder="可选：搜索会员编码、手机号或姓名"
-                                showSearch
-                                filterOption={false}
-                                onSearch={(v) => fetchMembers(v)}
-                                options={memberOptions}
-                                loading={memberLoading}
-                                disabled={Boolean(paymentResult?.orderId)}
-                                allowClear
-                            />
-                        </Form.Item>
-                    </Col>
-                    <Col {...fullColProps}>
+                    <Col span={24} className="bc-order-flow-divider flow-order first" aria-hidden="true" />
+                    <Col xs={24} sm={16} md={16} lg={16} className="flow-order">
                         <Form.Item name="projectId" label="项目" rules={[{ required: true, message: '请选择项目' }]}>
                             <Select
                                 placeholder="请选择项目"
@@ -1535,7 +1646,16 @@ export default function OrderUpsertModal(props: {
                             />
                         </Form.Item>
                     </Col>
-                    {watchedCustomerUserId > 0 ? <Col {...fullColProps}>
+                    <Col xs={24} sm={8} md={8} lg={8} className="flow-order">
+                        <Form.Item name="orderSource" label="订单渠道来源" rules={[{ required: true, message: '请选择订单渠道来源' }]}>
+                            <Select
+                                placeholder="请选择"
+                                options={orderSourceOptions}
+                                allowClear={false}
+                            />
+                        </Form.Item>
+                    </Col>
+                    {watchedCustomerUserId > 0 ? <Col {...fullColProps} className="flow-member">
                         <Form.Item name="userCouponId" label="使用优惠券">
                             <Select
                                 placeholder={
@@ -1564,7 +1684,7 @@ export default function OrderUpsertModal(props: {
 
                     {/* ✅ 小时单才展示“下单小时(数量)” */}
                     {showQtyForHourly ? (
-                        <Col {...compactColProps}>
+                        <Col {...compactColProps} className="flow-order">
                             <Form.Item
                                 name="orderQuantity"
                                 label="下单小时"
@@ -1575,7 +1695,7 @@ export default function OrderUpsertModal(props: {
                         </Col>
                     ) : null}
 
-                    <Col {...compactColProps}>
+                    <Col {...compactColProps} className="flow-member">
                         <Form.Item name="receivableAmount" hidden rules={[{ required: true, message: '项目定价异常' }]}><InputNumber /></Form.Item>
                         <Form.Item label="应收金额">
                             <div style={{height: 32, display: 'flex', alignItems: 'center', padding: '0 11px', borderRadius: 6, background: '#f5f5f5', border: '1px solid #d9d9d9', fontWeight: 600}}>
@@ -1585,7 +1705,7 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    <Col {...compactColProps}>
+                    <Col {...compactColProps} className="flow-member">
                         <Form.Item name="paidAmount" label="实收金额" tooltip={receiptLocked ? '已收款金额不可直接编辑，请通过补收或退款流程处理' : undefined} rules={[{ required: true, message: '请输入实收金额' }]}>
                             <InputNumber
                                 min={0}
@@ -1601,7 +1721,7 @@ export default function OrderUpsertModal(props: {
                         ) : null}
                     </Col>
 
-                    <Col {...fullColProps}>
+                    <Col {...fullColProps} className="flow-member">
                         <Collapse
                             ghost
                             size="small"
@@ -1638,13 +1758,13 @@ export default function OrderUpsertModal(props: {
                         />
                     </Col>
 
-                    {memberDiscountActive ? <Col {...fullColProps}>
+                    {memberDiscountActive ? <Col {...fullColProps} className="flow-member">
                         <div style={{ marginTop: -4, marginBottom: 8, padding: '8px 12px', borderRadius: 8, background: '#fff7e6', color: '#ad6800' }}>
                             {memberOrderContextLoading ? '正在计算会员折扣…' : `${memberOrderContext?.memberDiscount?.levelCode || '会员'} 折扣已应用：减免 ¥${memberDiscountAmount.toFixed(2)}，应收、实收和结算金额由系统计算并锁定。`}
                         </div>
                     </Col> : null}
 
-                    <Col {...fullColProps}>
+                    <Col {...compactColProps} className="flow-member member-customer-row">
                         <Form.Item label="客户标识" style={{ marginBottom: 8 }}>
                             <Input.Group compact>
                                 <Form.Item name="customerGameId" noStyle>
@@ -1711,29 +1831,35 @@ export default function OrderUpsertModal(props: {
                         </Form.Item>
                     </Col>
 
-                    {watchedPaymentChannel === 'MANUAL' ? <Col {...compactColProps}>
-                        <Form.Item name="paymentTime" label="付款时间">
-                            <DatePicker
-                                showTime
-                                style={{ width: '100%' }}
-                                disabled={receiptLocked || !watchedIsPaid}
-                                placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
-                            />
-                        </Form.Item>
-                    </Col> : null}
-                    {watchedPaymentChannel === 'MANUAL' ? <Col {...compactColProps}>
-                        <Form.Item
-                            name="isPaid"
-                            valuePropName="checked"
-                            label="收款状态"
-                            initialValue={true}
-                            tooltip={isBalancePayment ? '会员储值支付会立即扣减余额，固定为已付款状态' : '先打后付：把这里取消勾选，订单会被标记为未收款'}
-                        >
-                            <Checkbox disabled={isBalancePayment}>已付款</Checkbox>
-                        </Form.Item>
-                    </Col> : null}
+                    {watchedPaymentChannel === 'MANUAL' ? (
+                        <Col span={24} className="flow-member bc-payment-status-row">
+                            <Row gutter={[16, 0]}>
+                                <Col {...compactColProps}>
+                                    <Form.Item name="paymentTime" label="付款时间">
+                                        <DatePicker
+                                            showTime
+                                            style={{ width: '100%' }}
+                                            disabled={receiptLocked || !watchedIsPaid}
+                                            placeholder={watchedIsPaid ? '可选：不选则按确认时自动写入当前时间' : '未收款时不需要填写'}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                                <Col {...compactColProps}>
+                                    <Form.Item
+                                        name="isPaid"
+                                        valuePropName="checked"
+                                        label="收款状态"
+                                        initialValue={true}
+                                        tooltip={isBalancePayment ? '会员储值支付会立即扣减余额，固定为已付款状态' : '先打后付：把这里取消勾选，订单会被标记为未收款'}
+                                    >
+                                        <Checkbox disabled={isBalancePayment}>已付款</Checkbox>
+                                    </Form.Item>
+                                </Col>
+                            </Row>
+                        </Col>
+                    ) : null}
                     {watchedIsPaid && watchedPaymentChannel === 'BALANCE' ? (
-                        <Col {...fullColProps}>
+                        <Col {...fullColProps} className="flow-member">
                             <div style={{
                                 marginTop: -4,
                                 padding: '10px 12px',
@@ -1756,8 +1882,9 @@ export default function OrderUpsertModal(props: {
                     ) : null}
 
                     {/* 新建可选派单 */}
+                    {showPlayers ? <Col span={24} className="bc-order-flow-divider flow-dispatch" aria-hidden="true" /> : null}
                     {showPlayers ? (
-                        <Col {...fullColProps}>
+                        <Col xs={24} sm={16} md={16} lg={16} className="flow-dispatch">
                             <Form.Item
                                 name="playerIds"
                                 label={watchedPaymentChannel === 'SHOUQIANBA'
@@ -1814,34 +1941,43 @@ export default function OrderUpsertModal(props: {
                                         ) : null}
                                     </div>
                                 ) : (
-                                    <Select
-                                        mode="multiple"
-                                        placeholder="可选：新建即派单"
-                                        showSearch
-                                        filterOption={false}
-                                        onSearch={(v) => fetchPlayers(v)}
-                                        options={playerOptions}
-                                        loading={playerLoading}
-                                        disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
-                                        maxTagCount={2}
-                                        allowClear
-                                        dropdownRender={(menu) => (
-                                            <>
-                                                {menu}
-                                                <div style={{ padding: 8, borderTop: '1px solid rgba(0,0,0,.06)' }}>
-                                                    <Button block loading={playerLoading} onClick={() => fetchPlayers('')}>
-                                                        刷新列表
-                                                    </Button>
-                                                </div>
-                                            </>
-                                        )}
-                                    />
+                                    <div className="bc-quick-player-picker">
+                                        {playerOptions.slice(0, 3).map((item) => {
+                                            const selected = watchedPlayerIds.map((id: any) => Number(id)).includes(Number(item.value));
+                                            return (
+                                                <Button
+                                                    key={item.value}
+                                                    type={selected ? 'primary' : 'default'}
+                                                    disabled={!selected && (watchedPlayerIds.length >= MAX_PLAYERS || (!watchedIsPaid && !canSelectPlayersWhenUnpaid))}
+                                                    onClick={() => updatePlayerSelection(selected
+                                                        ? watchedPlayerIds.map(Number).filter((id: number) => id !== Number(item.value))
+                                                        : [...watchedPlayerIds.map(Number), Number(item.value)])}
+                                                >
+                                                    {String(item.label).split('-')[0]} · {selected ? '已选' : '空闲'}
+                                                </Button>
+                                            );
+                                        })}
+                                        <Select
+                                            mode="multiple"
+                                            className="bc-quick-player-more"
+                                            placeholder="搜索更多"
+                                            showSearch
+                                            filterOption={false}
+                                            onSearch={(v) => fetchPlayers(v)}
+                                            options={playerOptions}
+                                            loading={playerLoading}
+                                            disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
+                                            value={watchedPlayerIds}
+                                            onChange={(ids) => updatePlayerSelection(ids.map(Number).slice(0, MAX_PLAYERS))}
+                                            maxTagCount={0}
+                                        />
+                                    </div>
                                 )}
                             </Form.Item>
                         </Col>
                     ) : null}
                     {showPlayers ? (
-                        <Col {...fullColProps}>
+                        <Col xs={24} sm={8} md={8} lg={8} className="flow-dispatch">
                             <Space direction="vertical" size={10} style={{ width: '100%' }}>
                                 <Form.Item name="bonusAttributionType" label="分红归因" initialValue="NONE" style={{ marginBottom: 0 }}>
                                     <Radio.Group
@@ -1915,7 +2051,7 @@ export default function OrderUpsertModal(props: {
 
                 {/* 2) 更多设置 */}
                 <Collapse
-                    style={{ marginTop: 16 }}
+                    className="bc-order-more-settings"
                     items={[
                         {
                             key: 'more',
@@ -2071,42 +2207,56 @@ export default function OrderUpsertModal(props: {
                 </aside>
             ) : watchedPaymentChannel === 'MANUAL' ? (
                 <aside className={`bc-order-liability-panel ${watchedIsPaid ? 'is-paid' : ''}`}>
+                    <div className="bc-order-checkout-heading">结算确认</div>
+                    <div className="bc-order-checkout-lines">
+                        <span>商品<strong>{watchedProjectName || '待选择'}</strong></span>
+                        <span>会员<strong>{selectedMember?.name || '未关联'}</strong></span>
+                        <span>收款方式<strong>线下确认收款</strong></span>
+                        {showPlayers ? <span>派单<strong>{watchedPlayerIds.length ? `${watchedPlayerIds.length} 人 · ${watchedIsRenewal ? '续单' : watchedIsDesignated ? '指定' : '普通'}` : '待选陪玩'}</strong></span> : null}
+                        <span>应收<strong>¥{watchedReceivableAmount.toFixed(2)}</strong></span>
+                        <span>优惠<strong>-¥{totalDiscountPreview.toFixed(2)}</strong></span>
+                    </div>
+                    <div className="bc-order-checkout-total"><span>{watchedIsPaid ? '实收' : '待收'}</span><strong>¥{watchedPaidAmount.toFixed(2)}</strong></div>
                     <div className="bc-order-liability-icon">{watchedIsPaid ? '✓' : String(watchedOrderSource || '') === 'STORE_PENDING_SETTLEMENT' ? '账期' : '48h'}</div>
                     <Typography.Title level={5} style={{ margin: 0 }}>
                         {watchedIsPaid ? '已标记线下收款' : String(watchedOrderSource || '') === 'STORE_PENDING_SETTLEMENT' ? '门店周期结算' : '未收款责任提醒'}
                     </Typography.Title>
                     {watchedIsPaid ? (
-                        <Typography.Text type="secondary">
-                            订单将按已收款创建，不进入 48 小时未收款追责流程。请确保款项已实际到账。
-                        </Typography.Text>
+                        <Alert type="success" showIcon message="按已收款创建，不进入 48 小时追责" />
                     ) : (
                         String(watchedOrderSource || '') === 'STORE_PENDING_SETTLEMENT' ? (
-                            <>
-                                <Typography.Text>订单以未付款状态进入正常服务流程，待门店固定周期对账后确认收款。</Typography.Text>
-                                <div className="bc-order-liability-amount">待结算金额 <strong>¥{watchedPaidAmount.toFixed(2)}</strong></div>
-                                <Typography.Text type="secondary">此渠道不启动48小时催收，不会从派单客服余额自动扣款。</Typography.Text>
-                            </>
+                            <Alert type="info" showIcon message="按门店账期待结算" description="正常进入服务流程，不启动 48 小时催收与自动扣款。" />
                         ) : (
-                        <>
-                            <Typography.Text>
-                                允许先派单后收款，但未收款状态将对后续所有流程参与者可见。
-                            </Typography.Text>
-                            <div className="bc-order-liability-amount">
-                                待收金额 <strong>¥{watchedPaidAmount.toFixed(2)}</strong>
-                            </div>
-                            <ul>
-                                <li>责任归属创建并派单的客服</li>
-                                <li>系统会定期提醒责任客服完成收款</li>
-                                <li>超过 48 小时仍未收款，将自动从责任客服余额扣除订单金额</li>
-                            </ul>
-                            <Typography.Text type="danger" strong>
-                                请确认责任可承担后再派单。
-                            </Typography.Text>
-                        </>
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message="先派单后收款"
+                                description="责任归属派单客服；系统定期催收，超过 48 小时仍未收款将自动扣除责任客服余额。"
+                            />
                         )
                     )}
                 </aside>
-            ) : <aside className="bc-order-create-side-placeholder" aria-hidden="true" />}
+            ) : (
+                <aside className="bc-order-checkout-panel">
+                    <div className="bc-order-checkout-heading">结算确认</div>
+                    <div className="bc-order-checkout-lines">
+                        <span>商品<strong>{watchedProjectName || '待选择'}</strong></span>
+                        <span>会员<strong>{selectedMember?.name || '未关联'}</strong></span>
+                        <span>会员 ID<strong>{selectedMember?.memberCode || '-'}</strong></span>
+                        <span>储值余额<strong>¥{selectedMemberBalance.toFixed(2)}</strong></span>
+                        <span>收款方式<strong>会员储值</strong></span>
+                        {showPlayers ? <span>派单<strong>{watchedPlayerIds.length ? `${watchedPlayerIds.length} 人 · ${watchedIsRenewal ? '续单' : watchedIsDesignated ? '指定' : '普通'}` : '待选陪玩'}</strong></span> : null}
+                        <span>应收<strong>¥{watchedReceivableAmount.toFixed(2)}</strong></span>
+                        <span>优惠<strong>-¥{totalDiscountPreview.toFixed(2)}</strong></span>
+                    </div>
+                    <div className="bc-order-checkout-total"><span>本次收款</span><strong>¥{watchedPaidAmount.toFixed(2)}</strong></div>
+                    <Alert
+                        type={balanceInsufficient ? 'error' : 'success'}
+                        showIcon
+                        message={balanceInsufficient ? '会员余额不足，请改用线下收款' : '确认后将预占会员余额并进入派单'}
+                    />
+                </aside>
+            )}
             </div>
 
             {isMobile ? (

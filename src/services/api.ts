@@ -197,6 +197,7 @@ export interface GetUsersParams {
     page?: number;
     limit?: number;
     search?: string;
+    memberTail?: string;
     keyword?: string;
     userType?: string;
     status?: string;
@@ -830,6 +831,13 @@ export async function removeExcellentStaff(data: { userIds: number[]; remark?: s
 /** 订单详情：POST /orders/detail */
 export async function getOrderDetail(id: number) {
     return request(`${API_BASE}/orders/detail`, {
+        method: 'POST',
+        data: { id },
+    });
+}
+
+export async function getOrderClaimCode(id: number) {
+    return request<{ orderId: number; token: string; bound: boolean; miniCodeDataUrl: string; page: string }>(`${API_BASE}/orders/claim-code`, {
         method: 'POST',
         data: { id },
     });
@@ -3423,6 +3431,17 @@ export async function refundComplaintWorkOrder(id: number, data: { refundAmount?
         data,
     });
 }
+
+export interface FeedbackTicket {
+    id: number; ticketNo: string; category: string; title: string; content: string; contact?: string | null;
+    status: string; createdAt: string; updatedAt: string; lastReplyAt?: string | null;
+    user?: { id: number; name?: string; phone?: string; avatar?: string };
+    handler?: { id: number; name?: string } | null;
+    replies?: Array<{ id: number; authorType: 'USER' | 'STAFF'; content: string; createdAt: string; user?: { name?: string; avatar?: string } }>;
+}
+export const getFeedbackTickets = (params?: any) => request<{ data: FeedbackTicket[]; total: number }>(`${API_BASE}/feedback/tickets`, { params });
+export const replyFeedbackTicket = (id: number, content: string) => request<FeedbackTicket>(`${API_BASE}/feedback/tickets/${id}/replies`, { method: 'POST', data: { content } });
+export const updateFeedbackTicketStatus = (id: number, status: string) => request<FeedbackTicket>(`${API_BASE}/feedback/tickets/${id}/status`, { method: 'POST', data: { status } });
 
 
 

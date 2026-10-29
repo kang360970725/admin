@@ -58,6 +58,7 @@ import {
     createShouqianbaPaymentRequest,
     getEnumDicts,
     getOrderDetail,
+    getOrderClaimCode,
     getPlayerOptions,
     markOrderPaid,
     previewMemberBalanceHourlySettlement,
@@ -1481,9 +1482,11 @@ const OrderDetailPage: React.FC = () => {
             setConfirmRenewalInvalidReason('');
             const refreshedOrder = await loadDetail();
             if (settlementAmountChanged) {
-                message.info('结算信息已变化，请将新小票同步给客户');
+                message.info(refreshedOrder?.customerUserId
+                    ? '结算信息已变化，会员端电子小票已自动更新'
+                    : '结算信息已变化，请将新小票同步给客户');
             }
-            if (settlementAmountChanged && canUseReceipt && refreshedOrder) {
+            if (settlementAmountChanged && canUseReceipt && refreshedOrder && !refreshedOrder?.customerUserId) {
                 await openReceipt('customer', refreshedOrder);
             }
         } catch (e: any) {
@@ -1883,9 +1886,11 @@ const OrderDetailPage: React.FC = () => {
         const {customerText, staffText} = buildReceiptTextsFromDetail(receiptOrder);
         setReceiptTextCustomer(customerText);
         setReceiptTextStaff(staffText);
+        const claimCode = await getOrderClaimCode(Number(receiptOrder?.id)).catch(() => null);
         const image = await generateReceiptImage('蓝猫爽打 · 萌爪订单', customerText, {
             width: 800,
             theme: {accent: '#f55f8b', accent2: '#5599df'},
+            miniappCodeUrl: claimCode?.miniCodeDataUrl,
         });
         setReceiptImgCustomer(image);
         setReceiptType(type);
