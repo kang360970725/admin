@@ -1956,45 +1956,25 @@ export default function OrderUpsertModal(props: {
                                         ) : null}
                                     </div>
                                 ) : (
-                                    <div className="bc-quick-player-picker">
-                                        {playerOptions.slice(0, 3).map((item) => {
-                                            const selected = watchedPlayerIds.map((id: any) => Number(id)).includes(Number(item.value));
-                                            return (
-                                                <Button
-                                                    key={item.value}
-                                                    type={selected ? 'primary' : 'default'}
-                                                    disabled={!selected && (watchedPlayerIds.length >= MAX_PLAYERS || (!watchedIsPaid && !canSelectPlayersWhenUnpaid))}
-                                                    onClick={() => updatePlayerSelection(selected
-                                                        ? watchedPlayerIds.map(Number).filter((id: number) => id !== Number(item.value))
-                                                        : [...watchedPlayerIds.map(Number), Number(item.value)])}
-                                                >
-                                                    {String(item.label).split('-')[0]} · {selected ? '已选' : '空闲'}
-                                                </Button>
-                                            );
-                                        })}
-                                        <Select
-                                            mode="multiple"
-                                            className="bc-quick-player-more"
-                                            placeholder="搜索更多"
-                                            showSearch
-                                            filterOption={false}
-                                            onSearch={(v) => fetchPlayers(v)}
-                                            options={playerOptions}
-                                            loading={playerLoading}
-                                            disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
-                                            value={watchedPlayerIds}
-                                            onSelect={(id) => {
-                                                const nextId = Number(id);
-                                                const current = watchedPlayerIds.map(Number);
-                                                if (!current.includes(nextId)) updatePlayerSelection([...current, nextId]);
-                                            }}
-                                            onDeselect={(id) => {
-                                                const removedId = Number(id);
-                                                updatePlayerSelection(watchedPlayerIds.map(Number).filter((currentId: number) => currentId !== removedId));
-                                            }}
-                                            maxTagCount={0}
-                                        />
-                                    </div>
+                                    <Select
+                                        mode="multiple"
+                                        className="bc-player-search-select"
+                                        placeholder="输入昵称或手机号搜索服务者"
+                                        showSearch
+                                        allowClear
+                                        filterOption={false}
+                                        onSearch={(v) => fetchPlayers(v)}
+                                        onDropdownVisibleChange={(visible) => {
+                                            if (visible && !playerOptions.length) void fetchPlayers('');
+                                        }}
+                                        options={playerOptions}
+                                        loading={playerLoading}
+                                        disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
+                                        value={watchedPlayerIds}
+                                        onChange={(ids) => updatePlayerSelection(ids.map(Number))}
+                                        maxCount={MAX_PLAYERS}
+                                        maxTagCount={MAX_PLAYERS}
+                                    />
                                 )}
                             </Form.Item>
                         </Col>
