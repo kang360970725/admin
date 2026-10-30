@@ -265,6 +265,7 @@ export default function OrderUpsertModal(props: {
     const [playerLoading, setPlayerLoading] = useState(false);
     const [playerOptions, setPlayerOptions] = useState<OptionItem[]>([]);
     const [playerMap, setPlayerMap] = useState<Record<number, string>>({});
+    const playerSearchRequestRef = useRef(0);
     const [memberLoading, setMemberLoading] = useState(false);
     const [memberOptions, setMemberOptions] = useState<Array<{ label: React.ReactNode; value: number; title: string }>>([]);
     const [memberMetaMap, setMemberMetaMap] = useState<Record<number, { name: string; phone: string; memberCode: string; avatar: string; balance: number; gameCards: MemberGameCardOption[] }>>({});
@@ -327,9 +328,11 @@ export default function OrderUpsertModal(props: {
 
     const fetchPlayers = async (keyword?: string) => {
         if (!showPlayers) return;
+        const requestId = ++playerSearchRequestRef.current;
         setPlayerLoading(true);
         try {
             const res = await getPlayerOptions?.({ keyword: keyword || '', onlyIdle: true, onlyOnline: true });
+            if (requestId !== playerSearchRequestRef.current) return;
             const list: any[] = Array.isArray(res) ? res : (res?.data ?? []);
 
             const map: Record<number, string> = {};
@@ -344,14 +347,26 @@ export default function OrderUpsertModal(props: {
             });
 
             setPlayerMap((prev) => ({ ...prev, ...map }));
-            setPlayerOptions(opts);
+            // 搜索结果只包含当前关键字命中的人员。必须把已经选中的人员继续保留在
+            // options 中，否则 Select 再次选择时会把上一轮搜索中已选的值丢掉。
+            const selectedIds = Array.isArray(form?.getFieldValue?.('playerIds'))
+                ? form.getFieldValue('playerIds').map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id))
+                : [];
+            setPlayerOptions((previous) => {
+                const optionById = new Map<number, OptionItem>();
+                for (const option of previous) optionById.set(Number(option.value), option);
+                for (const option of opts) optionById.set(Number(option.value), option);
+                const retainedSelected = selectedIds
+                    .filter((id: number) => !opts.some((option) => Number(option.value) === id))
+                    .map((id: number) => optionById.get(id) || ({ value: id, label: playerMap?.[id] || `#${id}` } as OptionItem));
+                return [...retainedSelected, ...opts];
+            });
         } catch (e) {
+            if (requestId !== playerSearchRequestRef.current) return;
             console.error(e);
             message.error('获取打手列表失败');
-            setPlayerMap((prev) => prev);
-            setPlayerOptions([]);
         } finally {
-            setPlayerLoading(false);
+            if (requestId === playerSearchRequestRef.current) setPlayerLoading(false);
         }
     };
 
@@ -1968,7 +1983,15 @@ export default function OrderUpsertModal(props: {
                                             loading={playerLoading}
                                             disabled={!watchedIsPaid && !canSelectPlayersWhenUnpaid}
                                             value={watchedPlayerIds}
-                                            onChange={(ids) => updatePlayerSelection(ids.map(Number).slice(0, MAX_PLAYERS))}
+                                            onSelect={(id) => {
+                                                const nextId = Number(id);
+                                                const current = watchedPlayerIds.map(Number);
+                                                if (!current.includes(nextId)) updatePlayerSelection([...current, nextId]);
+                                            }}
+                                            onDeselect={(id) => {
+                                                const removedId = Number(id);
+                                                updatePlayerSelection(watchedPlayerIds.map(Number).filter((currentId: number) => currentId !== removedId));
+                                            }}
                                             maxTagCount={0}
                                         />
                                     </div>
