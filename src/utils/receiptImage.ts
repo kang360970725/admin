@@ -711,7 +711,7 @@ const generateReceiptImageBlueDraft = async (_title: string, text: string, opts:
     ];
     const tipLines = tips.flatMap((tip) => getLines(tip, innerW - 40 * scale, font(400, 13)));
     const noticeH = 70 * scale + tipLines.length * 22 * scale + 52 * scale;
-    const qrH = 150 * scale;
+    const qrH = 182 * scale;
     const headerH = 315 * scale;
     const footerH = 196 * scale;
     const gap = 18 * scale;
@@ -845,15 +845,15 @@ const generateReceiptImageBlueDraft = async (_title: string, text: string, opts:
     const qrGradient = ctx.createLinearGradient(side, y, W - side, y + qrH);
     qrGradient.addColorStop(0, '#eef6ff'); qrGradient.addColorStop(1, '#ffffff');
     rr(side, y, innerW, qrH, 20 * scale, qrGradient, blueLine);
-    const qrSize = 106 * scale;
+    const qrSize = 138 * scale;
     rr(side + 20 * scale, y + 22 * scale, qrSize, qrSize, 12 * scale, '#ffffff', blueLine);
     ctx.save(); ctx.setLineDash([5 * scale, 4 * scale]); ctx.strokeStyle = '#73a9ed'; ctx.lineWidth = 2 * scale;
     roundRect(ctx, side + 30 * scale, y + 32 * scale, qrSize - 20 * scale, qrSize - 20 * scale, 8 * scale); ctx.stroke(); ctx.restore();
-    label('小程序码', side + 73 * scale, y + 72 * scale, 14, blue, 700, 'center');
-    label('预留区域', side + 73 * scale, y + 94 * scale, 11, muted, 400, 'center');
-    label('扫码进入蓝猫爽打小程序', side + 150 * scale, y + 58 * scale, 17, blueDark, 700);
-    label('查订单 · 找客服 · 享福利', side + 150 * scale, y + 87 * scale, 14, muted, 400);
-    label('请将正式小程序码替换至左侧区域', side + 150 * scale, y + 113 * scale, 11, '#91a3bb', 400);
+    label('小程序码', side + 89 * scale, y + 82 * scale, 14, blue, 700, 'center');
+    label('预留区域', side + 89 * scale, y + 105 * scale, 11, muted, 400, 'center');
+    label('微信扫码 · 随时查看本单进度', side + 180 * scale, y + 54 * scale, 17, blueDark, 700);
+    label('订单详情 · 电子小票 · 售后评价', side + 180 * scale, y + 86 * scale, 14, muted, 500);
+    label('无需下载，微信扫码即可打开', side + 180 * scale, y + 116 * scale, 12, '#71849d', 400);
 
     y += qrH + gap;
     sparkle(side + 20 * scale, y + 28 * scale, 7 * scale, '#f1bd42');
@@ -1080,14 +1080,15 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
 
     drawText('感谢你的选择，喵～ 期待下次陪你一起玩！', 876, belowFinanceY(3047), 41, pink, 700, 'center');
 
-    // Use the original lower information panel for a sufficiently large mini-app-code slot.
+    // 小程序入口以“客户自己查进度”为主诉求，弱化客服主动引导感；
+    // 二维码尽量占满原模板下方留白，兼顾手机截图后的扫码识别率。
     ctx.save();
     ctx.fillStyle = 'rgba(255,250,248,.94)';
-    roundRect(ctx, sx(260), sx(belowFinanceY(3099)), sx(1232), sx(222), sx(28), 'rgba(255,250,248,.94)', '#f7b9c9');
+    roundRect(ctx, sx(250), sx(belowFinanceY(3078)), sx(1252), sx(270), sx(30), 'rgba(255,250,248,.96)', '#f7b9c9');
     ctx.restore();
-    const qrX = 282;
-    const qrY = belowFinanceY(3108);
-    const qrSize = 204;
+    const qrX = 274;
+    const qrY = belowFinanceY(3092);
+    const qrSize = 242;
     ctx.save();
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(sx(qrX - 6), sx(qrY - 6), sx(qrSize + 12), sx(qrSize + 12));
@@ -1102,9 +1103,10 @@ export const generateReceiptImage = async (_title: string, text: string, opts: G
         ctx.strokeRect(sx(qrX), sx(qrY), sx(qrSize), sx(qrSize));
     }
     ctx.restore();
-    drawText('扫码进入蓝猫爽打小程序', 548, belowFinanceY(3168), 34, pinkDark, 700);
-    drawText('查订单 · 找客服 · 享福利', 548, belowFinanceY(3221), 31, ink, 600);
-    drawText('微信扫码即可进入小程序', 548, belowFinanceY(3268), 27, muted, 500);
+    drawText('微信扫码 · 随时查看本单进度', 558, belowFinanceY(3145), 36, pinkDark, 800);
+    drawText('订单详情 · 电子小票 · 售后评价', 558, belowFinanceY(3204), 31, ink, 650);
+    drawText('无需下载，微信扫码即可打开', 558, belowFinanceY(3262), 28, muted, 500);
+    drawText('建议保存本小票，后续查询更方便', 558, belowFinanceY(3313), 25, '#9b6b78', 500);
 
     drawText(`BlueCat · 萌爪订单小票 · ${dayjs().format('YYYY-MM-DD HH:mm')}`, 876, belowFinanceY(3395), 30, '#74686d', 500, 'center');
     drawText('BlueCat · 蓝猫爽打 与您同行。', 876, belowFinanceY(3475), 33, '#74686d', 500, 'center');
