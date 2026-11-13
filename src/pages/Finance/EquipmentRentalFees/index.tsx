@@ -338,7 +338,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
                   <Button
                     key="generate"
                     onClick={() => {
-                      generateForm.setFieldsValue({ month: dayjs() });
+                      generateForm.setFieldsValue({ month: dayjs().subtract(1, 'month') });
                       setGenerateOpen(true);
                     }}
                   >
@@ -606,7 +606,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
             const res = await generateEquipmentRentalBills({ month: monthValue(values.month) });
             const differences = Array.isArray(res?.reconciliations) ? res.reconciliations : [];
             setReconciliations(differences);
-            setReconciliationOpen(true);
+            setReconciliationOpen(differences.length > 0);
             message.success(`已生成/更新 ${res?.affected ?? 0} 条，${res?.correct ?? 0} 条已缴账单金额正确，${differences.length} 条存在差异`);
             setGenerateOpen(false);
             billActionRef.current?.reload();
