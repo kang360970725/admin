@@ -19,6 +19,8 @@ import {
 } from '@/services/api';
 import { maskPhone } from '@/utils/privacy';
 
+const currentShanghaiMonth = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date());
+const billingDate = (value?: string) => value?.slice(0, 10) || '-';
 const money = (v: any) => Number(v ?? 0).toFixed(2);
 const monthValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM') : String(value || ''));
 const dateValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM-DD') : String(value || ''));
@@ -109,6 +111,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
   };
 
   const contractColumns = useMemo<ProColumns<EquipmentRentalContract>[]>(() => [
+    { title: '合同 ID', dataIndex: 'id', width: 95, search: false },
     {
       title: '员工',
       dataIndex: 'userId',
@@ -137,6 +140,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
   ], []);
 
   const billColumns = useMemo<ProColumns<EquipmentRentalBill>[]>(() => [
+    { title: '合同 ID', dataIndex: 'contractId', width: 95, search: false },
     {
       title: '月份',
       dataIndex: 'billMonth',
@@ -189,7 +193,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
       dataIndex: 'periodStart',
       width: 210,
       search: false,
-      render: (_, row) => `${row.periodStart ? dayjs(row.periodStart).format('YYYY-MM-DD') : '-'} ~ ${row.periodEnd ? dayjs(row.periodEnd).format('YYYY-MM-DD') : '-'}`,
+      render: (_, row) => `${billingDate(row.periodStart)} ~ ${billingDate(row.periodEnd)}`,
     },
     {
       title: '缴费日',
@@ -338,7 +342,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
                   <Button
                     key="generate"
                     onClick={() => {
-                      generateForm.setFieldsValue({ month: dayjs().subtract(1, 'month') });
+                      generateForm.setFieldsValue({ month: dayjs(currentShanghaiMonth() + '-01').subtract(1, 'month') });
                       setGenerateOpen(true);
                     }}
                   >
@@ -619,7 +623,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
       >
         <Form form={generateForm} layout="vertical">
           <Form.Item label="账单月份" name="month" rules={[{ required: true, message: '请选择月份' }]}>
-            <DatePicker picker="month" format="YYYY-MM" style={{ width: '100%' }} />
+            <DatePicker picker="month" format="YYYY-MM" disabledDate={(date) => monthValue(date) >= currentShanghaiMonth()} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>
