@@ -163,6 +163,7 @@ const OrderDetailPage: React.FC = () => {
     const [toolsLoading, setToolsLoading] = useState(false);
     const [toolsResult, setToolsResult] = useState<any>(null);
     const [toolsRemark, setToolsRemark] = useState<string>('');
+    const [recalcBasis, setRecalcBasis] = useState<'SETTLEMENT_BASE_AMOUNT' | 'PAID_AMOUNT' | 'MANUAL'>('MANUAL');
     const [recalcSettlementBaseAmount, setRecalcSettlementBaseAmount] = useState<number | null>(null);
 
     // ✅ 工具流程：先重新结算（不动钱包）=> 再钱包对齐预览 => 再执行钱包对齐
@@ -738,6 +739,7 @@ const OrderDetailPage: React.FC = () => {
                 : [],
         });
         initRecalcModePlayAlloc()
+        setRecalcBasis(isHourly && !order?.customerUserId && !order?.isGifted ? 'SETTLEMENT_BASE_AMOUNT' : 'MANUAL');
         setRecalcSettlementBaseAmount(getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT'));
         setToolsOpen(true);
 
@@ -1006,7 +1008,7 @@ const OrderDetailPage: React.FC = () => {
 
         // ✅ 口径：可手动修改重算结算金额；不填则按订单当前结算金额/实付兜底
         const repairSettlementBaseAmount = toNum(
-            recalcSettlementBaseAmount ?? getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT'),
+            recalcBasis === 'MANUAL' ? recalcSettlementBaseAmount ?? getOrderSettlementBasisAmount(order) : getOrderSettlementBasisAmount(order, recalcBasis),
         );
 
         // ✅ 玩法单：重算必须携带每轮金额（无论 need 与否）
@@ -1077,7 +1079,9 @@ const OrderDetailPage: React.FC = () => {
                 scope: 'COMPLETED_AND_ARCHIVED',
                 dryRun: true,
                 applyRepair: false,
-                settlementBaseAmount: repairSettlementBaseAmount,
+                ...(recalcBasis === 'MANUAL'
+                    ? { settlementBaseAmount: repairSettlementBaseAmount }
+                    : { settlementBaseMode: recalcBasis }),
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
                 renewalAttributionAction: toolsRenewalAction,
@@ -1109,7 +1113,7 @@ const OrderDetailPage: React.FC = () => {
 
         // ✅ 口径：可手动修改重算结算金额；不填则按订单当前结算金额/实付兜底
         const repairSettlementBaseAmount = toNum(
-            recalcSettlementBaseAmount ?? getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT'),
+            recalcBasis === 'MANUAL' ? recalcSettlementBaseAmount ?? getOrderSettlementBasisAmount(order) : getOrderSettlementBasisAmount(order, recalcBasis),
         );
 
         // ✅ 玩法单：应用时也携带每轮金额（无论 need 与否）
@@ -1175,7 +1179,9 @@ const OrderDetailPage: React.FC = () => {
                 applyRepair: true,
                 dryRun: false,
                 scope: 'COMPLETED_AND_ARCHIVED',
-                settlementBaseAmount: repairSettlementBaseAmount,
+                ...(recalcBasis === 'MANUAL'
+                    ? { settlementBaseAmount: repairSettlementBaseAmount }
+                    : { settlementBaseMode: recalcBasis }),
 
                 ...(isModePlay ? { modePlayAllocList } : {}),
                 renewalAttributionAction: toolsRenewalAction,
@@ -1225,6 +1231,13 @@ const OrderDetailPage: React.FC = () => {
             return 0;
         })();
         return mode === 'PAID_AMOUNT' ? cashAmount : settlementBaseAmount;
+    };
+
+    const getRecalcReceivedAmount = () => {
+        const refunded = (Array.isArray(order?.refunds) ? order.refunds : [])
+            .filter((item: any) => ['SUCCESS', 'MANUAL_REQUIRED'].includes(item.status))
+            .reduce((total: number, item: any) => total + toNum(item.amount), 0);
+        return Math.max(0, getOrderSettlementBasisAmount(order, 'PAID_AMOUNT') - refunded);
     };
 
     const getDispatchParticipantIds = (d: any): number[] => {
@@ -1306,7 +1319,9 @@ const OrderDetailPage: React.FC = () => {
     const openConfirmComplete = () => {
         setConfirmCompleteRemark('');
         const reservedHourlyOrder = order?.balanceSettlementMode === 'RESERVE_CAPTURE' && isHourly;
-        setConfirmCompleteSettlementBaseMode(reservedHourlyOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
+        const supplementedHourlyOrder = isHourly && !order?.customerUserId && !order?.isGifted
+            && getOrderSettlementBasisAmount(order, 'PAID_AMOUNT') > getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT');
+        setConfirmCompleteSettlementBaseMode(reservedHourlyOrder || supplementedHourlyOrder ? 'PAID_AMOUNT' : 'SETTLEMENT_BASE_AMOUNT');
         const dispatchHours = (Array.isArray(order?.dispatches) ? order.dispatches : [])
             .reduce((sum: number, item: any) => sum + Number(item?.billableHours || 0), 0);
         const storedFinalHours = Number(order?.orderQuantity || 0);
@@ -4346,12 +4361,27 @@ const OrderDetailPage: React.FC = () => {
                                 <Typography.Text type="secondary" style={{display: 'block', marginBottom: 8, fontSize: 12}}>
                                     为空时按订单当前结算金额兜底；老数据 0/空值则按实付金额兜底。
                                 </Typography.Text>
+                                {isHourly && !order?.customerUserId && !order?.isGifted && (
+                                    <Radio.Group style={{marginBottom: 8}} value={recalcBasis} onChange={(event) => {
+                                        setRecalcBasis(event.target.value);
+                                        setRepairPreview(null);
+                                        setRecalcResult(null);
+                                        setToolsResult(null);
+                                        setToolsStep('INIT');
+                                    }}>
+                                        <Radio value="SETTLEMENT_BASE_AMOUNT">当前结算 ¥{getOrderSettlementBasisAmount(order).toFixed(2)}</Radio>
+                                        <Radio value="PAID_AMOUNT">按实收 ¥{getRecalcReceivedAmount().toFixed(2)}</Radio>
+                                        <Radio value="MANUAL">手动输入</Radio>
+                                    </Radio.Group>
+                                )}
                                 <InputNumber
                                     style={{width: '100%'}}
                                     min={0}
                                     precision={2}
                                     step={1}
-                                    value={recalcSettlementBaseAmount as any}
+                                    disabled={recalcBasis !== 'MANUAL'}
+                                    value={recalcBasis === 'MANUAL' ? recalcSettlementBaseAmount
+                                        : recalcBasis === 'PAID_AMOUNT' ? getRecalcReceivedAmount() : getOrderSettlementBasisAmount(order)}
                                     placeholder={`默认：${getOrderSettlementBasisAmount(order, 'SETTLEMENT_BASE_AMOUNT').toFixed(2)}`}
                                     onChange={(v) => {
                                         setRecalcSettlementBaseAmount(v == null ? null : Number(v));
@@ -5161,7 +5191,7 @@ const OrderDetailPage: React.FC = () => {
                                             </Typography.Text>
                                         </Radio>
                                         <Radio value="PAID_AMOUNT">
-                                            使用实付金额
+                                            使用实收金额
                                             <Typography.Text type="secondary" style={{marginLeft: 8}}>
                                                 ¥{paidAmount.toFixed(2)}
                                             </Typography.Text>

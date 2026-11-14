@@ -3528,6 +3528,7 @@ export async function recalculateOrderSettlements(data: {
     scope?: string;
     allowWalletSync?: boolean;
     settlementBaseAmount?: number;
+    settlementBaseMode?: 'PAID_AMOUNT' | 'SETTLEMENT_BASE_AMOUNT';
     modePlayAllocList?: any[];
     playerEvaluations?: any[];
     orderTipEnabled?: boolean;
