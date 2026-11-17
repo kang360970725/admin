@@ -795,6 +795,60 @@ export async function getRenewalLeaderboard(data: {
     });
 }
 
+export interface OrderReviewRecord {
+    id: number;
+    orderId: number | null;
+    score: number;
+    tags?: string[] | null;
+    content?: string | null;
+    anonymous: boolean;
+    isHidden: boolean;
+    createdAt: string;
+    updatedAt: string;
+    project?: { id: number; name: string } | null;
+    user?: { id: number; name?: string | null; phone?: string | null; avatar?: string | null } | null;
+    order: { id: number; autoSerial: string; status: string } | null;
+    playerEvaluations?: Array<{
+        id: number;
+        score: number;
+        technicalScore: number;
+        serviceScore: number;
+        comprehensiveScore: number;
+        ratingLabel: string;
+        reviewRemark?: string | null;
+        createdAt: string;
+        player?: { id: number; name?: string | null; phone?: string | null; avatar?: string | null } | null;
+    }>;
+    dispatcherReview?: {
+        dispatcherUserId?: number;
+        dispatcherUserName?: string;
+        score?: number;
+        responseScore?: number;
+        serviceScore?: number;
+        comprehensiveScore?: number;
+        ratingLabel?: string;
+        content?: string;
+        anonymous?: boolean;
+        createdAt?: string;
+    } | null;
+}
+
+export async function getOrderReviews(data: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    scoreMin?: number;
+    scoreMax?: number;
+    anonymous?: boolean;
+    startAt?: string;
+    endAt?: string;
+}) {
+    return request<{ data: OrderReviewRecord[]; total: number; page: number; limit: number; totalPages: number }>(`${API_BASE}/orders/reviews/list`, {
+        method: 'POST',
+        data,
+    });
+}
+
 export async function getExcellentStaffList(data: {
     page?: number;
     limit?: number;
@@ -3963,3 +4017,18 @@ export async function clearMiniappWechatBindingForTest(userId: number) {
     { method: 'DELETE' },
   );
 }
+
+export const operateLiveTournament = (data: Record<string, unknown>) =>
+    request<any>(`${API_BASE}/orders/live-tournament/operations`, { method: 'POST', data });
+
+export const getLiveTournamentProjection = (dayId: number) =>
+    request<any>(`${API_BASE}/orders/live-tournament/stage/${dayId}`, { skipErrorHandler: true });
+
+export const saveLiveTournamentScore = (data: Record<string, unknown>) =>
+    request(`${API_BASE}/orders/live-tournament/round-score`, { method: 'POST', data });
+
+export const publishLiveTournamentScore = (data: Record<string, unknown>) =>
+    request(`${API_BASE}/orders/live-tournament/score-publication`, { method: 'POST', data });
+
+export const settleLiveTournamentTicket = (orderId: number) =>
+    request<{ idempotent: boolean }>(`${API_BASE}/orders/live-tournament/settle`, { method: 'POST', data: { orderId } });

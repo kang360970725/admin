@@ -216,7 +216,7 @@ let refreshingTokenPromise: Promise<string | null> | null = null;
 
 function isPublicMenuPath(pathname?: string | null) {
     const path = String(pathname || window.location.pathname || '').trim();
-    return path === '/menu' || path.startsWith('/menu/');
+    return path === '/menu' || path.startsWith('/menu/') || path.startsWith('/live-tournament/screen/');
 }
 
 async function ensureFreshTokenBeforeRequest(currentToken?: string | null): Promise<string | null> {
@@ -935,8 +935,7 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
             const allowAnonymous =
                 path === '/login' ||
                 path === '/reset-password' ||
-                path === '/menu' ||
-                path.startsWith('/menu/') ||
+                isPublicMenuPath(path) ||
                 path === '/chest-event';
 
             if (!token && !allowAnonymous) {
@@ -946,12 +945,22 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
             const pathname = location?.pathname || window.location.pathname;
 
             const isMobileRoute = pathname === '/m' || pathname.startsWith('/m/');
+            const isTournamentStageRoute =
+                pathname.startsWith('/ops/live-tournament/stage/') ||
+                pathname.startsWith('/live-tournament/screen/');
 
             const cls = 'bc-mobile-fullscreen';
             if (isMobileRoute) {
                 document.body.classList.add(cls);
             } else {
                 document.body.classList.remove(cls);
+            }
+
+            const stageCls = 'bc-tournament-stage-fullscreen';
+            if (isTournamentStageRoute) {
+                document.body.classList.add(stageCls);
+            } else {
+                document.body.classList.remove(stageCls);
             }
         },
         childrenRender: (children) => {
@@ -964,8 +973,7 @@ export const layout: RuntimeConfig['layout'] = (props: any) => {
             const skipWatermark =
                 pathname === '/login' ||
                 pathname === '/reset-password' ||
-                pathname === '/menu' ||
-                pathname.startsWith('/menu/') ||
+                isPublicMenuPath(pathname) ||
                 pathname === '/chest-event';
             const watermarkContent = skipWatermark ? children : (
                 <Watermark
@@ -1273,7 +1281,10 @@ export const request: RuntimeConfig['request'] = {
             let token = localStorage.getItem('token');
             const isAuthLogin = String(url || '').includes('/auth/login');
             const isAuthRefresh = String(url || '').includes('/auth/refresh');
-            const skipAuthForPublicMenu = isPublicMenuPath(window.location.pathname);
+            const isTournamentControlScreen =
+                window.location.pathname.startsWith('/live-tournament/screen/') &&
+                new URLSearchParams(window.location.search).get('viewOnly') !== '1';
+            const skipAuthForPublicMenu = isPublicMenuPath(window.location.pathname) && !isTournamentControlScreen;
             if (token && !isAuthLogin && !isAuthRefresh && !skipAuthForPublicMenu) {
                 token = await ensureFreshTokenBeforeRequest(token);
             }

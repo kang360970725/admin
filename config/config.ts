@@ -7,7 +7,7 @@ import path from 'node:path';
 const envConfig = {
   development: {
     // 固定 IPv4，避免部分 macOS 环境将 localhost 解析为 ::1，而后端仅监听 IPv4。
-    API_BASE: 'http://127.0.0.1:3000',
+    API_BASE: process.env.BLUECAT_LOCAL_API_URL || 'http://127.0.0.1:3000',
     APP_NAME: '蓝猫陪玩管理系统-开发',
   },
   test: {
@@ -177,12 +177,15 @@ export default defineConfig({
         { path: '/goods/tags', name: '标签管理', component: '@/pages/System/GoodsTagManagement', access: 'canViewGameProjectManagement' },
       ],
     },
+    { path: '/ops/live-tournament/stage/:dayId', component: '@/pages/LiveTournament/Stage', access: 'canOperateLiveTournament', hideInMenu: true, layout: false },
+    { path: '/live-tournament/screen/:dayId', component: '@/pages/LiveTournament/Stage', hideInMenu: true, layout: false },
     { path: '/system/game-project-management', redirect: '/goods/list', hideInMenu: true },
     {
       path: '/ops',
       name: '推广运营',
       icon: 'GiftOutlined',
       routes: [
+        { path: '/ops/live-tournament', name: '直播挑战赛', component: '@/pages/LiveTournament', access: 'canOperateLiveTournament' },
         { path: '/ops/chest-demo', name: '宝盒活动', component: '@/pages/System/ChestDemo', access: 'canViewChestDemo' },
         { path: '/ops/coupons', name: '优惠券管理', component: '@/pages/System/Coupons', access: 'canViewCoupons' },
       ],
@@ -305,6 +308,7 @@ export default defineConfig({
       access: 'canViewOrderManagement',
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
+        { path: '/orders/reviews', name: '订单评价', component: './Orders/Reviews', access: 'canViewOrderReviews' },
         { path: '/orders/renewal-leaderboard', name: '续单榜单', component: './Orders/RenewalLeaderboard', access: 'canViewRenewalLeaderboard' },
         { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrderComplaints' },
         { path: '/orders/feedback', name: '问题反馈', component: './Orders/Feedback', access: 'canViewFeedback' },

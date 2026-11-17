@@ -134,9 +134,11 @@ export default function access(initialState: { currentUser?: any } | undefined) 
 
     // 订单/结算
     canViewOrderManagement: has('orders:list:page') || has('service:feedback:page') || has('orders:complaints:page') || canManageOrderArchiveInstructions,
+    canOperateLiveTournament: isSuperAdmin || has('orders:detail:dispatch:button'),
     canViewOrdersList: has('orders:list:page'),
     canManageOrderArchiveInstructions,
     canViewOrderDetail: has('orders:detail:page'),
+    canViewOrderReviews: has('orders:list:page'),
     canViewOrderComplaints: has('orders:complaints:page') || has('orders:list:page'),
     canViewFeedback: has('service:feedback:page') || has('orders:complaints:page') || has('orders:list:page'),
     canViewRenewalLeaderboard: has('orders:list:page'),

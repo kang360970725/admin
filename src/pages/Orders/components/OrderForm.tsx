@@ -475,7 +475,8 @@ export default function OrderUpsertModal(props: {
         const userId = Number(userIdInput ?? form?.getFieldValue?.('customerUserId') ?? 0);
         const projectId = Number(projectIdInput ?? form?.getFieldValue?.('projectId') ?? 0);
         const originalAmount = toMoney(amountInput ?? form?.getFieldValue?.('receivableAmount') ?? 0);
-        if (!(userId > 0) || !(projectId > 0) || !(originalAmount > 0)) {
+        if (!(userId > 0) || !(projectId > 0)) {
+            memberContextRequestRef.current += 1;
             setMemberOrderContext(null);
             return null;
         }
@@ -484,7 +485,7 @@ export default function OrderUpsertModal(props: {
         try {
             const context: any = await getMemberOrderContext({ userId, projectId, originalAmount });
             if (requestId !== memberContextRequestRef.current) return null;
-            setMemberOrderContext(context || null);
+            setMemberOrderContext(context ? { ...context, userId, projectId } : null);
             const discount = context?.memberDiscount;
             if (discount?.applied && String(form?.getFieldValue?.('paymentChannel') || '').toUpperCase() === 'BALANCE') {
                 const couponId = Number(form?.getFieldValue?.('userCouponId') || 0);
@@ -944,6 +945,18 @@ export default function OrderUpsertModal(props: {
             const v: any = await form?.validateFields?.();
 
             const pid = Number(v?.projectId);
+            const memberId = Number(v?.customerUserId);
+            const context = memberOrderContext?.userId === memberId && memberOrderContext?.projectId === pid
+                ? memberOrderContext
+                : memberId > 0 && pid > 0 && !initialValues?.id
+                    ? await refreshMemberOrderContext(memberId, pid, Number(v?.receivableAmount || 0))
+                    : null;
+            const ticket = context?.tournamentTicket;
+            if (ticket?.purchaseBlocked) {
+                message.error('店内认证服务者不可购买本赛事门票或参赛，请更换会员');
+                return;
+            }
+            const dispatchOnCreate = showPlayers && !ticket;
             const hourly = isHourlyProject(pid);
             const orderSource = String(v?.orderSource || '').trim();
             const isLiveLuckyBagGift = orderSource === LIVE_LUCKY_BAG_GIFT_SOURCE;
@@ -958,7 +971,7 @@ export default function OrderUpsertModal(props: {
                 return;
             }
             if (
-                showPlayers &&
+                dispatchOnCreate &&
                 Array.isArray(v?.playerIds) &&
                 v.playerIds.length > 0 &&
                 !canDispatchBeforePaid &&
@@ -987,14 +1000,14 @@ export default function OrderUpsertModal(props: {
                 return;
             }
 
-            const payloadPlayerIds = showPlayers
+            const payloadPlayerIds = dispatchOnCreate
                 ? Array.isArray(v?.playerIds)
                     ? v.playerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                     : []
                 : undefined;
             const bonusAttributionType = String(v?.bonusAttributionType || 'NONE');
-            const isRenewal = showPlayers ? (bonusAttributionType === 'RENEWAL' || Boolean(v?.isRenewal)) : false;
-            const isDesignated = showPlayers ? (bonusAttributionType === 'DESIGNATED' || Boolean(v?.isDesignated)) : false;
+            const isRenewal = dispatchOnCreate ? (bonusAttributionType === 'RENEWAL' || Boolean(v?.isRenewal)) : false;
+            const isDesignated = dispatchOnCreate ? (bonusAttributionType === 'DESIGNATED' || Boolean(v?.isDesignated)) : false;
             const renewalPlayerIds = isRenewal && Array.isArray(v?.renewalPlayerIds)
                 ? v.renewalPlayerIds.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n))
                 : [];
@@ -1392,7 +1405,16 @@ export default function OrderUpsertModal(props: {
         };
     }, [paymentResult, watchedProjectName, watchedCustomerGameId, watchedPaidAmount]);
 
+    const currentTournamentTicket = memberOrderContext?.userId === watchedCustomerUserId
+        && memberOrderContext?.projectId === curProjectId ? memberOrderContext?.tournamentTicket : null;
+    const saleBlocked = Boolean(currentTournamentTicket?.purchaseBlocked);
+    const dispatchOnCreate = showPlayers && !currentTournamentTicket;
+
     const confirmAndSubmitOrder = () => {
+        if (saleBlocked) {
+            message.error('店内认证服务者不可购买本赛事门票或参赛，请更换会员');
+            return;
+        }
         const isOnline = watchedPaymentChannel === 'SHOUQIANBA';
         const isBalance = watchedPaymentChannel === 'BALANCE';
         const actionTitle = isOnline
@@ -1410,7 +1432,7 @@ export default function OrderUpsertModal(props: {
                             ? (paymentResult?.orderId ? '确认后将更新原订单并撤销旧付款码，不会重复创建订单。' : '确认后先保存订单草稿，再向收钱吧创建预支付请求；成功后进入待支付。')
                             : (isBalance
                                 ? '确认后将预占会员储值余额；预占成功后订单进入待派单。'
-                                : (watchedIsPaid ? '确认后将按线下已收款创建订单，并进入待派单。' : '该订单将以“未收款”进入派单流程，派单客服承担催收及超时扣款责任。'))}
+                                : (watchedIsPaid ? (currentTournamentTicket ? '确认后将按线下已收款售出门票，服务者由赛事转盘分配。' : '确认后将按线下已收款创建订单，并进入待派单。') : '该订单将以“未收款”进入派单流程，派单客服承担催收及超时扣款责任。'))}
                     </Typography.Text>
                 </Space>
             ),
@@ -1456,7 +1478,7 @@ export default function OrderUpsertModal(props: {
 
     useEffect(() => {
         if (!open || initialValues?.id) return;
-        if (watchedPaymentChannel !== 'BALANCE' || !(watchedCustomerUserId > 0) || !(curProjectId > 0) || !(watchedReceivableAmount > 0)) {
+        if (!(watchedCustomerUserId > 0) || !(curProjectId > 0)) {
             memberContextRequestRef.current += 1;
             setMemberOrderContext(null);
             return;
@@ -1544,21 +1566,21 @@ export default function OrderUpsertModal(props: {
             className="bc-order-upsert-modal"
             width={isMobile ? '96vw' : 1180}
             style={{ top: isMobile ? 8 : 10 }}
-            okText={showPlayers ? (watchedIsPaid || watchedPaymentChannel === 'BALANCE' ? '确认收款并派单' : '确认派单（未收款）') : '保存订单'}
+            okText={currentTournamentTicket ? '确认售票' : dispatchOnCreate ? (watchedIsPaid || watchedPaymentChannel === 'BALANCE' ? '确认收款并派单' : '确认派单（未收款）') : '保存订单'}
             cancelText="取消"
             footer={watchedPaymentChannel === 'SHOUQIANBA' ? null : (
                 <div className="bc-order-action-footer">
                     <div><span>确认收款金额</span><strong>¥{watchedPaidAmount.toFixed(2)}</strong></div>
                     <Space>
                         <Button onClick={onCancel}>取消</Button>
-                        <Button type="primary" loading={submitting} disabled={balanceInsufficient} onClick={confirmAndSubmitOrder}>
-                            {showPlayers ? (watchedIsPaid || watchedPaymentChannel === 'BALANCE' ? '收款并派单' : '创建并派单') : '保存订单'}
+                        <Button type="primary" loading={submitting} disabled={balanceInsufficient || saleBlocked} onClick={confirmAndSubmitOrder}>
+                            {currentTournamentTicket ? '确认收款并售票' : dispatchOnCreate ? (watchedIsPaid || watchedPaymentChannel === 'BALANCE' ? '收款并派单' : '创建并派单') : '保存订单'}
                         </Button>
                     </Space>
                 </div>
             )}
             okButtonProps={{
-                disabled: balanceInsufficient,
+                disabled: balanceInsufficient || saleBlocked,
             }}
         >
             <div className="bc-order-create-layout">
@@ -1773,6 +1795,16 @@ export default function OrderUpsertModal(props: {
                         />
                     </Col>
 
+                    {currentTournamentTicket && (
+                        <Col {...fullColProps} className="flow-member">
+                            {saleBlocked ? (
+                                <Alert type="error" showIcon message="店内认证服务者不可购买本赛事门票或参赛，请更换会员" />
+                            ) : !currentTournamentTicket.hasPastPurchase ? (
+                                <Alert type="warning" showIcon message="该会员暂无已完成的消费订单，请确认后再售票" />
+                            ) : null}
+                        </Col>
+                    )}
+
                     {memberDiscountActive ? <Col {...fullColProps} className="flow-member">
                         <div style={{ marginTop: -4, marginBottom: 8, padding: '8px 12px', borderRadius: 8, background: '#fff7e6', color: '#ad6800' }}>
                             {memberOrderContextLoading ? '正在计算会员折扣…' : `${memberOrderContext?.memberDiscount?.levelCode || '会员'} 折扣已应用：减免 ¥${memberDiscountAmount.toFixed(2)}，应收、实收和结算金额由系统计算并锁定。`}
@@ -1897,8 +1929,8 @@ export default function OrderUpsertModal(props: {
                     ) : null}
 
                     {/* 新建可选派单 */}
-                    {showPlayers ? <Col span={24} className="bc-order-flow-divider flow-dispatch" aria-hidden="true" /> : null}
-                    {showPlayers ? (
+                    {dispatchOnCreate ? <Col span={24} className="bc-order-flow-divider flow-dispatch" aria-hidden="true" /> : null}
+                    {dispatchOnCreate ? (
                         <Col xs={24} sm={16} md={16} lg={16} className="flow-dispatch">
                             <Form.Item
                                 name="playerIds"
@@ -1979,7 +2011,7 @@ export default function OrderUpsertModal(props: {
                             </Form.Item>
                         </Col>
                     ) : null}
-                    {showPlayers ? (
+                    {dispatchOnCreate ? (
                         <Col xs={24} sm={8} md={8} lg={8} className="flow-dispatch">
                             <Space direction="vertical" size={10} style={{ width: '100%' }}>
                                 <Form.Item name="bonusAttributionType" label="分红归因" initialValue="NONE" style={{ marginBottom: 0 }}>
@@ -2177,7 +2209,7 @@ export default function OrderUpsertModal(props: {
                                     await navigator.clipboard.writeText(String(paymentResult?.paymentUrl || ''));
                                     message.success('付款链接已复制');
                                 }}>复制付款链接</Button>
-                                <Button type={paymentCodeInvalid ? 'primary' : 'default'} loading={submitting} onClick={confirmAndSubmitOrder}>
+                                <Button type={paymentCodeInvalid ? 'primary' : 'default'} loading={submitting} disabled={saleBlocked} onClick={confirmAndSubmitOrder}>
                                     {paymentCodeInvalid ? '重新生成有效付款码' : '重新生成付款码'}
                                 </Button>
                             </Space> : null}
@@ -2187,7 +2219,7 @@ export default function OrderUpsertModal(props: {
                             <strong>订单草稿已保存，但付款码生成失败</strong>
                             <span>{paymentResult.error}</span>
                             <Space wrap style={{ justifyContent: 'center' }}>
-                                <Button type="primary" loading={submitting} onClick={confirmAndSubmitOrder}>在此重新生成</Button>
+                                <Button type="primary" loading={submitting} disabled={saleBlocked} onClick={confirmAndSubmitOrder}>在此重新生成</Button>
                                 <Button onClick={() => onViewCreatedOrder?.(Number(paymentResult?.orderId || 0))}>查看订单草稿</Button>
                             </Space>
                         </div>
@@ -2196,7 +2228,7 @@ export default function OrderUpsertModal(props: {
                             <div className="bc-payment-preview-placeholder">付</div>
                             <strong>确认左侧信息后生成</strong>
                             <span>点击一次即创建订单并生成付款码，不会再打开第二个弹窗。</span>
-                            <Button type="primary" size="large" loading={submitting} onClick={confirmAndSubmitOrder}>
+                            <Button type="primary" size="large" loading={submitting} disabled={saleBlocked} onClick={confirmAndSubmitOrder}>
                                 核对并生成付款码
                             </Button>
                         </div>
@@ -2215,7 +2247,7 @@ export default function OrderUpsertModal(props: {
                         <span>商品<strong>{watchedProjectName || '待选择'}</strong></span>
                         <span>会员<strong>{selectedMember?.name || '未关联'}</strong></span>
                         <span>收款方式<strong>线下确认收款</strong></span>
-                        {showPlayers ? <span>派单<strong>{watchedPlayerIds.length ? `${watchedPlayerIds.length} 人 · ${watchedIsRenewal ? '续单' : watchedIsDesignated ? '指定' : '普通'}` : '待选陪玩'}</strong></span> : null}
+                        {dispatchOnCreate ? <span>派单<strong>{watchedPlayerIds.length ? `${watchedPlayerIds.length} 人 · ${watchedIsRenewal ? '续单' : watchedIsDesignated ? '指定' : '普通'}` : '待选陪玩'}</strong></span> : null}
                         <span>应收<strong>¥{watchedReceivableAmount.toFixed(2)}</strong></span>
                         <span>优惠<strong>-¥{totalDiscountPreview.toFixed(2)}</strong></span>
                     </div>
@@ -2248,7 +2280,7 @@ export default function OrderUpsertModal(props: {
                         <span>会员 ID<strong>{selectedMember?.memberCode || '-'}</strong></span>
                         <span>储值余额<strong>¥{selectedMemberBalance.toFixed(2)}</strong></span>
                         <span>收款方式<strong>会员储值</strong></span>
-                        {showPlayers ? <span>派单<strong>{watchedPlayerIds.length ? `${watchedPlayerIds.length} 人 · ${watchedIsRenewal ? '续单' : watchedIsDesignated ? '指定' : '普通'}` : '待选陪玩'}</strong></span> : null}
+                        {dispatchOnCreate ? <span>派单<strong>{watchedPlayerIds.length ? `${watchedPlayerIds.length} 人 · ${watchedIsRenewal ? '续单' : watchedIsDesignated ? '指定' : '普通'}` : '待选陪玩'}</strong></span> : null}
                         <span>应收<strong>¥{watchedReceivableAmount.toFixed(2)}</strong></span>
                         <span>优惠<strong>-¥{totalDiscountPreview.toFixed(2)}</strong></span>
                     </div>

@@ -43,6 +43,18 @@ const statusText: Record<string, { text: string; color?: string }> = {
     REFUNDED: {text: '已退款', color: 'red'},
 };
 
+const tournamentStatusText: Record<string, { text: string; color?: string }> = {
+    PENDING_PAYMENT: {text: '赛事待付款', color: 'default'},
+    UNBOOKED: {text: '赛事待预约', color: 'gold'},
+    BOOKED: {text: '赛事已预约', color: 'blue'},
+    QUEUED: {text: '赛事候赛中', color: 'cyan'},
+    ON_STAGE: {text: '赛事进行中', color: 'processing'},
+    SCORING: {text: '赛事成绩统计中', color: 'purple'},
+    FINISHED: {text: '赛事已完赛待结算', color: 'green'},
+    ABSENT: {text: '赛事缺席', color: 'volcano'},
+    VOID: {text: '赛事资格已释放', color: 'default'},
+};
+
 const { Text } = Typography;
 
 const paymentChannelText: Record<string, string> = {
@@ -268,9 +280,18 @@ const OrdersPage: React.FC = () => {
     };
 
     const getCurrentPlayerNames = (row: any) => {
-        return row?.currentDispatch?.participants
+        const dispatchNames = row?.currentDispatch?.participants
             ?.map((p: any) => p?.user?.name || maskPhone(p?.user?.phone))
             ?.filter(Boolean) || [];
+        if (dispatchNames.length) return dispatchNames;
+        return row?.liveTournament?.providerName ? [row.liveTournament.providerName] : [];
+    };
+
+    const getDisplayStatus = (row: any) => {
+        if (row?.liveTournament && String(row?.status) !== 'COMPLETED') {
+            return tournamentStatusText[String(row.liveTournament.status)] || {text: '赛事门票', color: 'blue'};
+        }
+        return statusText[row?.status] || {text: row?.status || '-'};
     };
 
     const loadMobileOrders = async (page = mobilePage, filters = mobileFilters) => {
@@ -318,7 +339,7 @@ const OrdersPage: React.FC = () => {
     }, [isMobile]);
 
     const renderMobileOrderCard = (row: any) => {
-        const s = statusText[row?.status] || { text: row?.status || '-' };
+        const s = getDisplayStatus(row);
         const players = getCurrentPlayerNames(row);
         const canQuickMarkPaid = !row?.isGifted && row?.isPaid === false;
         return (
@@ -364,7 +385,8 @@ const OrdersPage: React.FC = () => {
 
                         <Space size={6} wrap>
                             <Tag>客户：{renderCustomerIdentifier(row)}</Tag>
-                            {players.length ? players.map((name: string, idx: number) => <Tag key={`${name}-${idx}`}>{name}</Tag>) : <Tag>未派单</Tag>}
+                            {players.length ? players.map((name: string, idx: number) => <Tag key={`${name}-${idx}`}>{name}</Tag>)
+                                : row?.liveTournament ? <Tag color="blue">服务者待转盘抽取</Tag> : <Tag>未派单</Tag>}
                         </Space>
 
                         <Space style={{ width: '100%', justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
@@ -434,7 +456,7 @@ const OrdersPage: React.FC = () => {
             renderFormItem: () => (
                 <Input
                     allowClear
-                    placeholder="近90天综合搜索；历史订单请输入完整订单号"
+                    placeholder="综合搜索（已存单不限时间）"
                 />
             ),
         },
@@ -464,7 +486,7 @@ const OrdersPage: React.FC = () => {
             hideInTable: false,
             order: 70,
             render: (_: any, row: any) => {
-                const s = statusText[row.status] || {text: row.status};
+                const s = getDisplayStatus(row);
                 return <Tag color={s?.color}>{s.text}</Tag>;
             },
             valueType: 'select',
@@ -558,8 +580,8 @@ const OrdersPage: React.FC = () => {
             search: false,
             hideInTable: isMobile,
             render: (_: any, row: any) => {
-                const players = row.currentDispatch?.participants?.map((p: any) => p.user?.name || maskPhone(p.user?.phone)) || [];
-                if (players.length === 0) return '-';
+                const players = getCurrentPlayerNames(row);
+                if (players.length === 0) return row?.liveTournament ? <Tag color="blue">待转盘抽取</Tag> : '-';
                 return (
                     <Space wrap>
                         {players.map((n: string) => (
@@ -738,7 +760,7 @@ const OrdersPage: React.FC = () => {
                         <Space direction="vertical" size={10} style={{ width: '100%' }}>
                             <Input.Search
                                 allowClear
-                                placeholder="近90天搜索；历史订单请输入完整订单号"
+                                placeholder="综合搜索（已存单不限时间）"
                                 enterButton="搜索"
                                 value={mobileFilters.keyword}
                                 onChange={(e) => setMobileFilters((prev) => ({ ...prev, keyword: e.target.value }))}

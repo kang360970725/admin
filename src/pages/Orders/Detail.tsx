@@ -3,6 +3,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {PageContainer} from '@ant-design/pro-components';
 import {
     Alert,
+    Avatar,
     Button,
     Card,
     Checkbox,
@@ -20,6 +21,7 @@ import {
     Modal,
     Radio,
     QRCode,
+    Rate,
     Row,
     Select,
     Space,
@@ -96,6 +98,13 @@ const resolvePaymentChannelLabel = (channel: any, providedLabel?: any) => {
     const normalized = String(channel || '').trim().toUpperCase();
     return PAYMENT_CHANNEL_LABELS[normalized] || String(providedLabel || '').trim() || normalized || '未记录支付方式';
 };
+
+const readOnlyReviewScore = (value: any) => (
+    <Space size={8}>
+        <Rate disabled allowHalf value={Number(value || 0)} style={{fontSize: 15}} />
+        <Typography.Text strong>{Number(value || 0).toFixed(1)}</Typography.Text>
+    </Space>
+);
 
 const MAX_PLAYERS = 2;
 
@@ -3368,6 +3377,61 @@ const OrderDetailPage: React.FC = () => {
                     </Descriptions.Item>
                 </Descriptions>
             </Card>
+
+            {order?.review ? (
+                <Card
+                    title="客户评价"
+                    loading={loading}
+                    extra={<Space>
+                        <Tag color={Number(order.review.score || 0) >= 4 ? 'green' : Number(order.review.score || 0) >= 3 ? 'gold' : 'red'}>
+                            {Number(order.review.score || 0) >= 4 ? '好评' : Number(order.review.score || 0) >= 3 ? '中评' : '差评'}
+                        </Tag>
+                        {order.review.anonymous ? <Tag>匿名评价</Tag> : null}
+                    </Space>}
+                >
+                    <Descriptions bordered size="small" column={isMobile ? 1 : 2}>
+                        <Descriptions.Item label="综合评分">{readOnlyReviewScore(order.review.score)}</Descriptions.Item>
+                        <Descriptions.Item label="提交时间">{order.review.createdAt ? dayjs(order.review.createdAt).format('YYYY-MM-DD HH:mm:ss') : '-'}</Descriptions.Item>
+                        <Descriptions.Item label="体验标签" span={isMobile ? 1 : 2}>
+                            <Space wrap>{(Array.isArray(order.review.tags) ? order.review.tags : []).map((tag: string) => <Tag color="blue" key={tag}>{tag}</Tag>)}{!Array.isArray(order.review.tags) || !order.review.tags.length ? '-' : null}</Space>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="综合评价内容" span={isMobile ? 1 : 2}>
+                            <Typography.Paragraph style={{margin: 0, whiteSpace: 'pre-wrap'}}>{order.review.content || '未填写'}</Typography.Paragraph>
+                        </Descriptions.Item>
+                    </Descriptions>
+
+                    <Divider orientation="left">服务者评价</Divider>
+                    {Array.isArray(order.playerEvaluations) && order.playerEvaluations.length ? (
+                        <Row gutter={[12, 12]}>
+                            {order.playerEvaluations.map((item: any) => <Col xs={24} lg={12} key={item.id}>
+                                <Card size="small" type="inner" title={<Space>
+                                    <Avatar size="small" src={item.player?.avatar}>{item.player?.name?.[0]}</Avatar>
+                                    <span>{item.player?.name || `服务者 #${item.playerUserId}`}</span>
+                                    <Tag color={Number(item.score || 0) >= 4 ? 'green' : Number(item.score || 0) >= 3 ? 'gold' : 'red'}>{item.ratingLabel || '-'}</Tag>
+                                </Space>}>
+                                    <Descriptions size="small" column={1}>
+                                        <Descriptions.Item label="技术评价">{readOnlyReviewScore(item.technicalScore)}</Descriptions.Item>
+                                        <Descriptions.Item label="服务评价">{readOnlyReviewScore(item.serviceScore)}</Descriptions.Item>
+                                        <Descriptions.Item label="综合评价">{readOnlyReviewScore(item.comprehensiveScore)}</Descriptions.Item>
+                                        <Descriptions.Item label="文字评价"><Typography.Paragraph style={{margin: 0, whiteSpace: 'pre-wrap'}}>{item.reviewRemark || '未填写'}</Typography.Paragraph></Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            </Col>)}
+                        </Row>
+                    ) : <Typography.Text type="secondary">没有服务者评价</Typography.Text>}
+
+                    <Divider orientation="left">客服评价</Divider>
+                    {order.dispatcherReview ? (
+                        <Descriptions bordered size="small" column={isMobile ? 1 : 2}>
+                            <Descriptions.Item label="客服">{order.dispatcherReview.dispatcherUserName || `#${order.dispatcherReview.dispatcherUserId || '-'}`}</Descriptions.Item>
+                            <Descriptions.Item label="综合评分">{readOnlyReviewScore(order.dispatcherReview.comprehensiveScore ?? order.dispatcherReview.score)}</Descriptions.Item>
+                            <Descriptions.Item label="响应及时">{readOnlyReviewScore(order.dispatcherReview.responseScore)}</Descriptions.Item>
+                            <Descriptions.Item label="服务评价">{readOnlyReviewScore(order.dispatcherReview.serviceScore)}</Descriptions.Item>
+                            <Descriptions.Item label="文字评价" span={isMobile ? 1 : 2}><Typography.Paragraph style={{margin: 0, whiteSpace: 'pre-wrap'}}>{order.dispatcherReview.content || '未填写'}</Typography.Paragraph></Descriptions.Item>
+                        </Descriptions>
+                    ) : <Typography.Text type="secondary">没有客服评价</Typography.Text>}
+                </Card>
+            ) : null}
 
             {order?.status !== 'REFUNDED' && !hideCurrentParticipants ? (
                 <Card title="当前参与者（本轮）" loading={loading}>
