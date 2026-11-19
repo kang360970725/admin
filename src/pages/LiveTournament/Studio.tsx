@@ -11,6 +11,7 @@ interface StudioEntryResult {
         endsAt: string;
         state: 'PREHEAT' | 'UPCOMING' | 'IN_PROGRESS' | 'ENDED';
     };
+    tournament?: null | { id: number; title: string; salesStartAt: string; salesEndAt: string };
     message?: string;
 }
 
@@ -27,6 +28,8 @@ export default function LiveTournamentStudioEntry() {
                 if (response.day?.id) {
                     const preheat = response.day.state === 'PREHEAT';
                     history.replace(`/ops/live-tournament/stage/${response.day.id}?auto=1${preheat ? '&preheat=1&view=sales' : ''}`);
+                } else if (response.tournament?.id) {
+                    history.replace(`/ops/live-tournament/preheat/${response.tournament.id}`);
                 }
             })
             .catch((reason: any) => {
@@ -44,7 +47,7 @@ export default function LiveTournamentStudioEntry() {
         />;
     }
 
-    if (result && !result.day) {
+    if (result && !result.day && !result.tournament) {
         return <Result
             status="info"
             title="今日暂无可直播场次"

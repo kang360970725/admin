@@ -311,6 +311,8 @@
 .tournament-stage__progress-fill::before { position: absolute; inset: 0; background: linear-gradient(115deg, transparent 0 35%, rgba(255,255,255,.32) 36% 44%, transparent 45% 100%); background-size: 70px 100%; content: ''; animation: arena-progress-flow 1.8s linear infinite; }
 .tournament-stage__progress-fill i { position: absolute; top: 50%; right: 0; width: 4px; height: 70%; border-radius: 4px; background: #d9fbff; box-shadow: 0 0 13px #70ecff; transform: translateY(-50%); }
 .tournament-stage__progress-grid { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 1px), rgba(181, 218, 255, .16) calc(10% - 1px) 10%); pointer-events: none; }
+.tournament-stage__progress-unlock { position: absolute; top: 0; bottom: 0; z-index: 2; width: 2px; background: rgba(255, 204, 90, .88); box-shadow: 0 0 10px rgba(255, 192, 61, .65); transform: translateX(-1px); pointer-events: none; }
+.tournament-stage__progress-unlock span { position: absolute; right: 5px; bottom: 3px; color: #ffe3a0; font-size: 8px; font-weight: 850; white-space: nowrap; text-shadow: 0 1px 3px #071425; }
 .tournament-stage__progress-scale { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; color: #607c9f; font-size: 10px; font-variant-numeric: tabular-nums; }
 .tournament-stage__progress-scale b { color: #9fc8f8; font-weight: 800; }
 .tournament-stage__progress.is-compact { padding: 9px 12px 10px; border-radius: 8px 2px 8px 2px; box-shadow: inset 2px 0 #268dff; }
@@ -318,6 +320,7 @@
 .tournament-stage__progress.is-compact .tournament-stage__progress-head span { font-size: 8px; }
 .tournament-stage__progress.is-compact .tournament-stage__progress-head strong { font-size: 14px; }
 .tournament-stage__progress.is-compact .tournament-stage__progress-track { height: 17px; }
+.tournament-stage__progress.is-compact .tournament-stage__progress-unlock span { display: none; }
 .tournament-stage__numbers {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

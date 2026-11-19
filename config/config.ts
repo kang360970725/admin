@@ -177,6 +177,7 @@ export default defineConfig({
         { path: '/goods/tags', name: '标签管理', component: '@/pages/System/GoodsTagManagement', access: 'canViewGameProjectManagement' },
       ],
     },
+    { path: '/ops/live-tournament/preheat/:tournamentId', component: '@/pages/LiveTournament/Preheat', access: 'canOperateLiveTournament', hideInMenu: true, layout: false },
     { path: '/ops/live-tournament/stage/:dayId', component: '@/pages/LiveTournament/Stage', access: 'canOperateLiveTournament', hideInMenu: true, layout: false },
     { path: '/live-tournament/screen/:dayId', component: '@/pages/LiveTournament/Stage', hideInMenu: true, layout: false },
     { path: '/system/game-project-management', redirect: '/goods/list', hideInMenu: true },

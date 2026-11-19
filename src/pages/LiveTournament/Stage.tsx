@@ -31,7 +31,7 @@ interface StageState {
     locked?: boolean;
     title: string;
     day?: { id: number; startsAt: string; endsAt: string; capacity: number };
-    sales: { paid: number; remaining: number; threshold: number; booked: boolean; open: boolean };
+    sales: { paid: number; remaining: number; limit: number; threshold: number; booked: boolean; open: boolean };
     current: Player | null;
     next: Player | null;
     providers: { id: number; name: string | null; serviceRank?: string }[];
@@ -160,8 +160,11 @@ export default function TournamentStage() {
         ? `${row.points ?? 0} 分`
         : board === 'byKills' ? `${row.kills ?? 0} 杀` : `${((row.firstKillElapsedMs ?? 0) / 1000).toFixed(1)} 秒`;
     const salesThreshold = Math.max(1, stage?.sales.threshold ?? 1);
-    const salesValue = Math.min(stage?.sales.paid ?? 0, salesThreshold);
-    const salesPercent = Math.round(salesValue / salesThreshold * 100);
+    const salesLimit = Math.max(salesThreshold, stage?.sales.limit ?? 70);
+    const salesUnlocked = Boolean(stage?.sales.booked) || (stage?.sales.paid ?? 0) >= salesThreshold;
+    const salesProgressMax = salesUnlocked ? salesLimit : salesThreshold;
+    const salesValue = Math.min(stage?.sales.paid ?? 0, salesProgressMax);
+    const salesPercent = Math.round(salesValue / salesProgressMax * 100);
     const scheduleText = stage?.day ? `${new Date(stage.day.startsAt).toLocaleString('zh-CN', {
         timeZone: 'Asia/Shanghai', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
     })}–${new Date(stage.day.endsAt).toLocaleTimeString('zh-CN', {
@@ -174,18 +177,21 @@ export default function TournamentStage() {
             role="progressbar"
             aria-label="开放预约进度"
             aria-valuemin={0}
-            aria-valuemax={salesThreshold}
+            aria-valuemax={salesProgressMax}
             aria-valuenow={salesValue}
         >
             <div className="tournament-stage__progress-head">
-                <span>{compact ? '预约解锁' : 'RESERVATION UNLOCK'}</span>
+                <span>{salesUnlocked ? compact ? '总票进度' : 'TOTAL TICKET SALES' : compact ? '预约解锁' : 'RESERVATION UNLOCK'}</span>
                 <strong>{salesPercent}%</strong>
             </div>
             <div className="tournament-stage__progress-track">
                 <div className="tournament-stage__progress-fill" style={{ width: `${salesPercent}%` }}><i /></div>
                 <div className="tournament-stage__progress-grid" />
+                {salesUnlocked && salesThreshold < salesLimit && <div className="tournament-stage__progress-unlock"
+                    style={{ left: `${salesThreshold / salesLimit * 100}%` }}><span>{salesThreshold} 张预约线</span></div>}
             </div>
-            {!compact && <div className="tournament-stage__progress-scale"><span>0</span><b>{stage?.sales.paid ?? 0} 张已售</b><span>{salesThreshold} 张开放预约</span></div>}
+            {!compact && <div className="tournament-stage__progress-scale"><span>0</span><b>{stage?.sales.paid ?? 0} 张已售</b>
+                <span>{salesUnlocked ? `${salesLimit} 张总票量` : `${salesThreshold} 张开放预约`}</span></div>}
         </div>;
     }
 
