@@ -9,7 +9,7 @@ interface StudioEntryResult {
         title: string;
         startsAt: string;
         endsAt: string;
-        state: 'UPCOMING' | 'IN_PROGRESS' | 'ENDED';
+        state: 'PREHEAT' | 'UPCOMING' | 'IN_PROGRESS' | 'ENDED';
     };
     message?: string;
 }
@@ -25,7 +25,8 @@ export default function LiveTournamentStudioEntry() {
                 if (!active) return;
                 setResult(response);
                 if (response.day?.id) {
-                    history.replace(`/ops/live-tournament/stage/${response.day.id}?auto=1`);
+                    const preheat = response.day.state === 'PREHEAT';
+                    history.replace(`/ops/live-tournament/stage/${response.day.id}?auto=1${preheat ? '&preheat=1&view=sales' : ''}`);
                 }
             })
             .catch((reason: any) => {

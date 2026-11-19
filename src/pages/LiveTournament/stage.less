@@ -253,14 +253,28 @@
 
   .ant-alert { margin-bottom: 18px; border-color: rgba(255, 181, 71, .3); background: rgba(92, 59, 10, .52); color: #ffe4b5; }
   &__auto-linked.ant-alert {
-    border-color: rgba(67, 221, 174, .32);
-    background: linear-gradient(90deg, rgba(13, 78, 67, .56), rgba(9, 30, 46, .72));
-    color: #c6ffed;
-    box-shadow: inset 3px 0 #3fe0ad, 0 12px 28px rgba(0, 0, 0, .12);
-    .ant-alert-message { color: #e8fff8; font-weight: 800; }
-    .ant-alert-description { color: #8fc9b8; }
-    .ant-alert-icon { color: #49e1b2; }
-    .ant-btn { border-color: rgba(117, 240, 204, .4); color: #baffeb; background: rgba(15, 80, 68, .42); }
+    width: max-content;
+    max-width: min(100%, 560px);
+    min-height: 34px;
+    margin: 0;
+    padding: 4px 7px 4px 9px;
+    border-color: rgba(91, 157, 185, .22);
+    border-radius: 7px;
+    background: rgba(9, 27, 43, .58);
+    color: #a9c9d2;
+    box-shadow: none;
+    .ant-alert-content { min-width: 0; }
+    .ant-alert-message { overflow: hidden; color: #a9c9d2; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .ant-alert-icon { margin-inline-end: 6px; color: #58bfa5; font-size: 12px; }
+    .ant-alert-action { margin-inline-start: 8px; }
+    .ant-btn { height: 24px; border-color: rgba(108, 174, 199, .22); padding-inline: 8px; color: #9fcbd5; background: rgba(18, 58, 75, .28); font-size: 10px; }
+  }
+}
+
+@media (max-width: 640px) {
+  .tournament-stage__auto-linked.ant-alert {
+    width: 100%;
+    .ant-alert-message { white-space: normal; }
   }
 }
 

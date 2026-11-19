@@ -50,6 +50,7 @@ export default function TournamentStage() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const autoLinked = searchParams.get('auto') === '1';
+    const preheatMode = searchParams.get('preheat') === '1';
     const authenticated = Boolean(localStorage.getItem('token'));
     const [presentationOnly, setPresentationOnly] = useState(searchParams.get('viewOnly') === '1' || !authenticated);
     const controlMode = authenticated && !presentationOnly;
@@ -197,14 +198,21 @@ export default function TournamentStage() {
             </div>
             <div className="tournament-stage__header-actions">
                 <Space wrap className="tournament-stage__nav">
-                    <Button type={view === 'stage' ? 'primary' : 'default'} onClick={() => setView('stage')}>直播转盘</Button>
+                    {!preheatMode && <Button type={view === 'stage' ? 'primary' : 'default'} onClick={() => setView('stage')}>直播转盘</Button>}
                     <Button type={view === 'sales' ? 'primary' : 'default'} onClick={() => setView('sales')}>售票进度</Button>
-                    <Button type={view === 'board' ? 'primary' : 'default'} onClick={() => setView('board')}>赛事榜单</Button>
+                    {!preheatMode && <Button type={view === 'board' ? 'primary' : 'default'} onClick={() => setView('board')}>赛事榜单</Button>}
                 </Space>
                 {authenticated && <Button
                     className="tournament-stage__screen-link"
                     onClick={() => setPresentationOnly(value => !value)}
                 >{presentationOnly ? '返回主播操作' : '切换纯净投屏'}</Button>}
+                {controlMode && autoLinked && <Alert
+                    className="tournament-stage__auto-linked"
+                    type="success"
+                    showIcon
+                    message={`${preheatMode ? '预热展示 · 仅展示售票' : '今日场次已自动关联'}${scheduleText ? ` · ${scheduleText}` : ''}`}
+                    action={<Button size="small" onClick={() => history.replace('/ops/live-tournament/studio')}>刷新场次</Button>}
+                />}
             </div>
         </header>
         <section className="tournament-stage__ad-rotator" aria-label="赛事合作信息">
@@ -216,14 +224,6 @@ export default function TournamentStage() {
             </article>
             <div className="tournament-stage__ad-dots"><i /><i /></div>
         </section>
-        {controlMode && autoLinked && <Alert
-            className="tournament-stage__auto-linked"
-            type="success"
-            showIcon
-            message={`系统已自动关联今日场次${scheduleText ? ` · ${scheduleText}` : ''}`}
-            description="主播无需创建或选择场次；如运营刚调整排期，可重新校验。"
-            action={<Button size="small" onClick={() => history.replace('/ops/live-tournament/studio')}>重新校验</Button>}
-        />}
         {connectionError && <Alert type="warning" message="直播状态暂未同步，正在重连" showIcon />}
         {operationError && <Alert type="error" message={operationError} showIcon />}
         {!internal && view === 'stage' && stage && <section className="tournament-stage__sales-strip" aria-label="报名进度">
