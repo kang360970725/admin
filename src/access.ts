@@ -23,6 +23,7 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     (staffEmploymentStatus === 'EXITED' || staffEmploymentStatus === 'BLACKLISTED')
   );
   const has = (key: string) => permissions.includes(key);
+  const canViewStoreDashboard = userType === 'SUPER_ADMIN' || ['SUPER_ADMIN', 'STORE_MANAGER', '店长'].includes(roleName);
   const canViewMemberUsers = isSuperAdmin || has('users:member:page');
   const canViewStaffUsers = isSuperAdmin || has('users:staff:page');
   const canViewStaffRentalRisk = isSuperAdmin || has('users:staff-rental-risk:page');
@@ -133,7 +134,8 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     canViewOwnStaffCard: userType === 'STAFF',
 
     // 订单/结算
-    canViewOrderManagement: has('orders:list:page') || has('service:feedback:page') || has('orders:complaints:page') || canManageOrderArchiveInstructions,
+    canViewStoreDashboard,
+    canViewOrderManagement: canViewStoreDashboard || has('orders:list:page') || has('service:feedback:page') || has('orders:complaints:page') || canManageOrderArchiveInstructions,
     canOperateLiveTournament: isSuperAdmin || has('orders:detail:dispatch:button'),
     canViewOrdersList: has('orders:list:page'),
     canManageOrderArchiveInstructions,

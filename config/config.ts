@@ -311,6 +311,7 @@ export default defineConfig({
       routes: [
         { path: '/orders', name: '订单列表', component: './Orders', access: 'canViewOrdersList' },
         { path: '/orders/reviews', name: '订单评价', component: './Orders/Reviews', access: 'canViewOrderReviews' },
+        { path: '/orders/store-dashboard', name: '店长经营看板', component: './Orders/StoreDashboard', access: 'canViewStoreDashboard' },
         { path: '/orders/renewal-leaderboard', name: '续单榜单', component: './Orders/RenewalLeaderboard', access: 'canViewRenewalLeaderboard' },
         { path: '/orders/complaints', name: '客诉工单', component: './Orders/Complaints', access: 'canViewOrderComplaints' },
         { path: '/orders/feedback', name: '问题反馈', component: './Orders/Feedback', access: 'canViewFeedback' },

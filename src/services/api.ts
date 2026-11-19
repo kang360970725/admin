@@ -4044,3 +4044,28 @@ export const publishLiveTournamentScore = (data: Record<string, unknown>) =>
 
 export const settleLiveTournamentTicket = (orderId: number) =>
     request<{ idempotent: boolean }>(`${API_BASE}/orders/live-tournament/settle`, { method: 'POST', data: { orderId } });
+
+export type StoreOrderCounts = Record<'EXPERIENCE' | 'GUARANTEED' | 'MODE_PLAY' | 'HOURLY' | 'OTHER', number>;
+
+export interface StoreDashboardData {
+    date: string;
+    dispatchCount: number;
+    paidAmount: number;
+    orderTypes: StoreOrderCounts;
+    staff: {
+        userId: number;
+        name: string | null;
+        selectedCount: number;
+        count7: number;
+        count30: number;
+        types7: StoreOrderCounts;
+        types30: StoreOrderCounts;
+    }[];
+}
+
+export function getStoreDashboard(date: string) {
+    return request<{ success: boolean; data: StoreDashboardData }>(`${API_BASE}/orders/store-dashboard`, {
+        method: 'POST',
+        data: { date },
+    });
+}
