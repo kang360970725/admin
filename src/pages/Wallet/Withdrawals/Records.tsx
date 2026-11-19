@@ -154,7 +154,10 @@ const WithdrawalRecords: React.FC = () => {
             search: false,
             render: (_: any, row: any) => (
                 <Text strong style={{ fontSize: 14 }}>
-                    ¥{Number(row.amount || 0).toFixed(2)}
+                    {row.status === 'PENDING_REVIEW' && Number(row.partialPaidAmount) > 0
+                        ? `已付 ¥${Number(row.partialPaidAmount).toFixed(2)}，预留 ¥${Number(row.amount).toFixed(2)}`
+                        : `¥${Number(row.amount || 0).toFixed(2)}`}
+                    {Number(row.reserveOffsetAmount) > 0 && <><br />炸补抵扣 ¥{Number(row.reserveOffsetAmount).toFixed(2)}</>}
                 </Text>
             ),
         },
@@ -184,7 +187,8 @@ const WithdrawalRecords: React.FC = () => {
                 FAILED: { text: '打款失败' },
                 CANCELED: { text: '已废除' },
             },
-            render: (_: any, row: any) => renderStatusTag(row.status),
+            render: (_: any, row: any) => row.status === 'PENDING_REVIEW' && Number(row.partialPaidAmount) > 0
+                ? <Tag color="warning">已部分出款</Tag> : renderStatusTag(row.status),
         },
         {
             title: '打款状态',

@@ -293,6 +293,7 @@ const WithdrawalMine: React.FC<Props> = (props) => {
             search: false,
             render: (_: any, row: any) => {
                 const s = String(row?.status || '');
+                if (s === 'PENDING_REVIEW' && Number(row.partialPaidAmount) > 0) return <Tag color="warning">已部分出款</Tag>;
                 if (s === 'PENDING_REVIEW') return <Tag color="processing">待审核</Tag>;
                 if (s === 'APPROVED') return <Tag color="success">已通过</Tag>;
                 if (s === 'REJECTED') return <Tag color="error">已驳回</Tag>;
@@ -308,7 +309,12 @@ const WithdrawalMine: React.FC<Props> = (props) => {
             dataIndex: 'amount',
             width: 120,
             search: false,
-            render: (_: any, row: any) => <span>{Number((row as any).amount || 0).toFixed(2)}</span>,
+            render: (_: any, row: any) => {
+                if (!Number(row.partialPaidAmount)) return <span>¥{Number(row.amount || 0).toFixed(2)}</span>;
+                return row.status === 'PAID'
+                    ? <span>实付 ¥{Number(row.amount).toFixed(2)}，抵扣 ¥{Number(row.reserveOffsetAmount || 0).toFixed(2)}</span>
+                    : <span>已付 ¥{Number(row.partialPaidAmount).toFixed(2)}，预留 ¥{Number(row.amount).toFixed(2)}</span>;
+            },
         },
         {
             title: '渠道',

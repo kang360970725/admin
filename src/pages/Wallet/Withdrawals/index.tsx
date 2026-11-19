@@ -8,6 +8,7 @@ import {
     getPendingWithdrawals,
     markManualWithdrawalPaid,
     reviewWithdrawal,
+    recordReservedWithdrawalPayout,
     type WalletWithdrawalRequest,
 } from '@/services/api';
 import dayjs from "dayjs";
@@ -38,6 +39,7 @@ const WithdrawalsPage: React.FC = () => {
     const [reviewForm] = Form.useForm();
     const [currentRow, setCurrentRow] = useState<any>(null);
     const [, setReviewError] = useState('');
+    const payoutDecision = Form.useWatch('approve', reviewForm);
     const [reviewSummaryDate, setReviewSummaryDate] = useState(dayjs());
     const reviewSummaryDateRef = useRef(dayjs().format('YYYY-MM-DD'));
 
@@ -90,7 +92,9 @@ const WithdrawalsPage: React.FC = () => {
             dataIndex: 'amount',
             width: 120,
             search: false,
-            render: (_: any, row: any) => <span>{Number(row.amount || 0).toFixed(2)}</span>,
+            render: (_: any, row: any) => Number(row.partialPaidAmount) > 0
+                ? <span>已付 ¥{Number(row.partialPaidAmount).toFixed(2)}<br />预留 ¥{Number(row.amount).toFixed(2)}</span>
+                : <span>{Number(row.amount || 0).toFixed(2)}</span>,
         },
         {
             title: '渠道',
@@ -110,6 +114,7 @@ const WithdrawalsPage: React.FC = () => {
             search: false,
             render: (_: any, row: any) => {
                 const s = row.status;
+                if (s === 'PENDING_REVIEW' && Number(row.partialPaidAmount) > 0) return <Tag color="warning">已部分出款</Tag>;
                 if (s === 'PENDING_REVIEW') return <Tag color="processing">待审核</Tag>;
                 if (s === 'APPROVED') return <Tag color="success">已通过</Tag>;
                 if (s === 'REJECTED') return <Tag color="error">已驳回</Tag>;
@@ -178,9 +183,9 @@ const WithdrawalsPage: React.FC = () => {
                             setReviewError('');
                             setCurrentRow(row);
                             reviewForm.setFieldsValue({
-                                approve: true,
+                                approve: row.reservedPayout ? 'RESERVED' : Number(row.partialPaidAmount) > 0 ? undefined : true,
                                 channel: 'MANUAL',
-                                reviewRemark: '审核成功，已放款',
+                                reviewRemark: row.reservedPayout ? '' : '审核成功，已放款',
                             });
                             setReviewOpen(true);
                         }}
@@ -189,7 +194,7 @@ const WithdrawalsPage: React.FC = () => {
                     </Button>,
                 ];
 
-                if (!['PAID', 'REJECTED', 'CANCELED'].includes(String(row.status || ''))) {
+                if (!Number(row.partialPaidAmount) && !['PAID', 'REJECTED', 'CANCELED'].includes(String(row.status || ''))) {
                     actions.push(
                         <Popconfirm
                             key="cancel"
@@ -331,7 +336,7 @@ const WithdrawalsPage: React.FC = () => {
 
             {/* ✅ 审批弹窗：通过/驳回 */}
             <ModalForm<{
-                approve: boolean;
+                approve: boolean | 'RESERVED';
                 channel?: 'MANUAL' | 'WECHAT';
                 reviewRemark?: string;
             }>
@@ -356,18 +361,34 @@ const WithdrawalsPage: React.FC = () => {
                 }}
                 onFinish={async (values) => {
                     if (!currentRow) return false;
+                    if (values.approve === true && currentRow.reviewEligibility?.canApprove === false) {
+                        setReviewError(currentRow.reviewEligibility.reason);
+                        return false;
+                    }
 
                     try {
-                        await reviewWithdrawal({
-                            requestId: currentRow.id,
-                            reviewerId,
-                            approve: Boolean(values.approve),
-                            channel: 'MANUAL',
-                            autoTransfer: false,
-                            reviewRemark: values.reviewRemark || '',
-                        });
-
-                        message.success(values.approve ? '已通过' : '已驳回');
+                        if (values.approve === 'RESERVED') {
+                            const quote = currentRow.reservedPayout;
+                            if (!quote || !values.reviewRemark?.trim()) {
+                                message.error('请填写服务者确认记录及打款凭证或扣款备注');
+                                return false;
+                            }
+                            await recordReservedWithdrawalPayout({
+                                requestId: currentRow.id, stage: quote.stage, payout: quote.payout,
+                                offset: quote.offset, remark: values.reviewRemark,
+                            });
+                            message.success(quote.stage === 'PARTIAL' ? '部分出款已登记，余款继续预留' : '预留余款已结清');
+                        } else {
+                            await reviewWithdrawal({
+                                requestId: currentRow.id,
+                                reviewerId,
+                                approve: values.approve,
+                                channel: 'MANUAL',
+                                autoTransfer: false,
+                                reviewRemark: values.reviewRemark || '',
+                            });
+                            message.success(values.approve ? '已通过' : '已驳回');
+                        }
                         setReviewOpen(false);
                         setCurrentRow(null);
                         setReviewError('');
@@ -413,6 +434,16 @@ const WithdrawalsPage: React.FC = () => {
                                 </div>
                             </Card>
 
+                            {currentRow.reservedPayout ? (
+                                <Alert type="warning" showIcon
+                                    message={currentRow.reservedPayout.stage === 'PARTIAL'
+                                        ? `本次可支付 ¥${currentRow.reservedPayout.payout.toFixed(2)}，原申请继续冻结 ¥${currentRow.reservedPayout.hold.toFixed(2)}`
+                                        : `余款可支付 ¥${currentRow.reservedPayout.payout.toFixed(2)}，抵扣已入账炸补 ¥${currentRow.reservedPayout.offset.toFixed(2)}`}
+                                    description="请先确认服务者同意并核对本次金额。按页面金额人工打款后，填写凭证并登记。出款金额为零时直接登记扣款结清。"
+                                />
+                            ) : currentRow.reviewEligibility?.canApprove === false && (
+                                <Alert type="error" showIcon message={currentRow.reviewEligibility.reason} />
+                            )}
                             {Number(currentRow?.feeRiskPreview?.totalRiskAmount || 0) > 0 ? (
                                 <Alert
                                     type={Number(currentRow?.feeRiskPreview?.riskGapAmount || 0) > 0 ? 'error' : 'warning'}
@@ -444,7 +475,10 @@ const WithdrawalsPage: React.FC = () => {
 
                             <div className="bc-admin-form-section">
                                 <div className="bc-admin-form-section-title">收款信息</div>
-                                {currentRow?.withdrawQrCodeUrl ? (
+                                {currentRow.reviewEligibility?.canApprove === false &&
+                                !(payoutDecision === 'RESERVED' && currentRow.reservedPayout?.payout > 0) ? (
+                                    <span>该申请暂不可放行</span>
+                                ) : currentRow.withdrawQrCodeUrl ? (
                                     <Image src={currentRow.withdrawQrCodeUrl} width={180} style={{ borderRadius: 12 }} />
                                 ) : (
                                     <span style={{ color: '#999' }}>未获取到收款二维码</span>
@@ -460,20 +494,28 @@ const WithdrawalsPage: React.FC = () => {
                             label="审批结果"
                             rules={[{ required: true, message: '请选择审批结果' }]}
                             options={[
-                                { label: '通过', value: true },
-                                { label: '驳回', value: false },
+                                ...(currentRow?.reservedPayout ? [{
+                                    label: currentRow.reservedPayout.stage === 'PARTIAL' ? '登记部分出款并预留余款' : '登记余款结清',
+                                    value: 'RESERVED',
+                                }] : []),
+                                ...(!Number(currentRow?.partialPaidAmount) ? [
+                                    { label: '通过', value: true, disabled: currentRow?.reviewEligibility?.canApprove === false },
+                                    { label: '驳回', value: false },
+                                ] : []),
                             ]}
                             fieldProps={{
                                 onChange: (event) => reviewForm.setFieldValue(
                                     'reviewRemark',
-                                    event?.target?.value ? '审核成功，已放款' : '审批异常，放款失败',
+                                    event.target.value === 'RESERVED' ? '' :
+                                        event.target.value ? '审核成功，已放款' : '审批异常，放款失败',
                                 ),
                             }}
                         />
                         <ProFormTextArea
                             name="reviewRemark"
                             label="审批备注"
-                            placeholder="可选：填写审批说明（通过/驳回原因）"
+                            placeholder={payoutDecision === 'RESERVED' ? '填写服务者确认记录及打款凭证或扣款说明' : '可选：填写审批说明'}
+                            rules={payoutDecision === 'RESERVED' ? [{ required: true, whitespace: true, max: 500 }] : []}
                             fieldProps={{ rows: 2, maxLength: 200 }}
                         />
                     </div>

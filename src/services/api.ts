@@ -160,6 +160,9 @@ export interface StaffExitPreview {
     depositTopUpUnpaidAmount?: number;
     releaseAmount: number;
     finalAvailableBalance?: number;
+    orderReserveAmount?: number;
+    orderReserveNeedsReview?: boolean;
+    withdrawableAfterExit?: number;
     clearAmount: number;
     depositAmountRule: number;
     firstWithdrawMinBalance: number;
@@ -1777,6 +1780,9 @@ export interface WalletWithdrawalRequest {
     id: number;
     userId: number;
     amount: number;
+    partialPaidAmount?: string | number;
+    reserveOffsetAmount?: string | number;
+    reservedPayout?: { stage: 'PARTIAL' | 'FINAL'; payout: number; hold: number; offset: number } | null;
     status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'PAYING' | 'PAID' | 'FAILED' | 'CANCELED';
     channel: 'WECHAT' | 'MANUAL';
     transferStatus?: 'NOT_STARTED' | 'PROCESSING' | 'WAIT_USER_CONFIRM' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'MANUAL_FALLBACK';
@@ -1852,6 +1858,12 @@ export async function reviewWithdrawal(data: {
         method: 'POST',
         data,
     });
+}
+
+export function recordReservedWithdrawalPayout(data: {
+    requestId: number; stage: 'PARTIAL' | 'FINAL'; payout: number; offset: number; remark: string;
+}) {
+    return request<WalletWithdrawalRequest>(`${API_BASE}/wallet/withdrawals/reserved-payout`, { method: 'POST', data });
 }
 
 export async function queryWechatWithdrawalTransfer(data: { requestId: number }) {

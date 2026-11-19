@@ -2024,6 +2024,9 @@ export default function UsersPage() {
                             <div>本次不退保证金：¥{Number(staffExitPreview?.forfeitDepositAmount ?? 0)}</div>
                             <div>保证金未缴满补扣：¥{Number(staffExitPreview?.depositTopUpForfeitAmount ?? 0)}</div>
                             <div>余额不足未补齐保证金：¥{Number(staffExitPreview?.depositTopUpUnpaidAmount ?? 0)}</div>
+                            <div>存单炸补预留：¥{Number(staffExitPreview?.orderReserveAmount ?? 0).toFixed(2)}</div>
+                            <div>退出后预计可提现：¥{Number(staffExitPreview?.withdrawableAfterExit ?? 0).toFixed(2)}</div>
+                            {staffExitPreview?.orderReserveNeedsReview && <div>存单结算基数异常，核对前不可提现。</div>}
                             <div>退出后转入可用余额：¥{Number(staffExitPreview?.releaseAmount ?? 0)}</div>
                             <div>首次提现接单满：{Number(staffExitPreview?.firstWithdrawMinAcceptedOrders ?? 20)} 单</div>
                         </div>
