@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useLocation, useParams } from '@umijs/max';
+import { history, useLocation, useParams } from '@umijs/max';
 import { Alert, Button, Space } from 'antd';
 import { getLiveTournamentProjection, operateLiveTournament } from '@/services/api';
 import './stage.less';
@@ -30,6 +30,7 @@ interface StageState {
     leaderboard?: Record<Board, BoardRow[]>;
     locked?: boolean;
     title: string;
+    day?: { id: number; startsAt: string; endsAt: string; capacity: number };
     sales: { paid: number; remaining: number; threshold: number; booked: boolean; open: boolean };
     current: Player | null;
     next: Player | null;
@@ -37,13 +38,18 @@ interface StageState {
 }
 
 const colors = ['#0f6fff', '#7647ff', '#00a7a0', '#d7468a', '#d88317', '#2460a8'];
-const placeholderProviders = Array.from({ length: 8 }, (_, index) => ({ id: -(index + 1), name: `候选 ${index + 1}` }));
+const placeholderProviders = Array.from({ length: 8 }, (_, index) => ({
+    id: -(index + 1),
+    name: `候选 ${index + 1}`,
+    serviceRank: '候选席位',
+}));
 
 export default function TournamentStage() {
     const { dayId: rawDayId } = useParams();
     const dayId = Number(rawDayId);
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
+    const autoLinked = searchParams.get('auto') === '1';
     const authenticated = Boolean(localStorage.getItem('token'));
     const [presentationOnly, setPresentationOnly] = useState(searchParams.get('viewOnly') === '1' || !authenticated);
     const controlMode = authenticated && !presentationOnly;
@@ -155,6 +161,11 @@ export default function TournamentStage() {
     const salesThreshold = Math.max(1, stage?.sales.threshold ?? 1);
     const salesValue = Math.min(stage?.sales.paid ?? 0, salesThreshold);
     const salesPercent = Math.round(salesValue / salesThreshold * 100);
+    const scheduleText = stage?.day ? `${new Date(stage.day.startsAt).toLocaleString('zh-CN', {
+        timeZone: 'Asia/Shanghai', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+    })}–${new Date(stage.day.endsAt).toLocaleTimeString('zh-CN', {
+        timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false,
+    })}` : '';
 
     function salesProgress(compact = false) {
         return <div
@@ -205,6 +216,14 @@ export default function TournamentStage() {
             </article>
             <div className="tournament-stage__ad-dots"><i /><i /></div>
         </section>
+        {controlMode && autoLinked && <Alert
+            className="tournament-stage__auto-linked"
+            type="success"
+            showIcon
+            message={`系统已自动关联今日场次${scheduleText ? ` · ${scheduleText}` : ''}`}
+            description="主播无需创建或选择场次；如运营刚调整排期，可重新校验。"
+            action={<Button size="small" onClick={() => history.replace('/ops/live-tournament/studio')}>重新校验</Button>}
+        />}
         {connectionError && <Alert type="warning" message="直播状态暂未同步，正在重连" showIcon />}
         {operationError && <Alert type="error" message={operationError} showIcon />}
         {!internal && view === 'stage' && stage && <section className="tournament-stage__sales-strip" aria-label="报名进度">

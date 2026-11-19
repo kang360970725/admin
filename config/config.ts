@@ -185,7 +185,8 @@ export default defineConfig({
       name: '推广运营',
       icon: 'GiftOutlined',
       routes: [
-        { path: '/ops/live-tournament', name: '直播挑战赛', component: '@/pages/LiveTournament', access: 'canOperateLiveTournament' },
+        { path: '/ops/live-tournament/studio', name: '主播工作台', component: '@/pages/LiveTournament/Studio', access: 'canOperateLiveTournament' },
+        { path: '/ops/live-tournament', name: '赛事管理', component: '@/pages/LiveTournament', access: 'canOperateLiveTournament' },
         { path: '/ops/chest-demo', name: '宝盒活动', component: '@/pages/System/ChestDemo', access: 'canViewChestDemo' },
         { path: '/ops/coupons', name: '优惠券管理', component: '@/pages/System/Coupons', access: 'canViewCoupons' },
       ],

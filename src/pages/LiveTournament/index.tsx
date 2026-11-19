@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PageContainer } from '@ant-design/pro-components';
+import { history } from '@umijs/max';
 import { Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd';
 import { getGameProjectOptions, getPlayerOptions, operateLiveTournament, publishLiveTournamentScore, saveLiveTournamentScore, settleLiveTournamentTicket } from '@/services/api';
 
@@ -109,7 +110,10 @@ export default function LiveTournamentPage() {
     }
 
     return (
-        <PageContainer title="直播挑战赛" extra={<Button type="primary" onClick={() => openDialog('create')}>创建赛事</Button>}>
+        <PageContainer title="直播挑战赛" extra={<Space>
+            <Button onClick={() => history.push('/ops/live-tournament/studio')}>进入主播工作台</Button>
+            <Button type="primary" onClick={() => openDialog('create')}>创建赛事</Button>
+        </Space>}>
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 <Card style={{ background: 'linear-gradient(110deg, #eef5ff, #fff 75%)' }}>
                     <Space wrap align="center" size="middle">
@@ -150,7 +154,6 @@ export default function LiveTournamentPage() {
                         await loadEvents();
                         message.success('直播排场已刷新');
                     })}>刷新名单</Button>
-                    <Button href={`/live-tournament/screen/${day.id}?control=1`} target="_blank" rel="noopener noreferrer">主播工作台</Button>
                     <Button onClick={() => openDialog('roster')}>{day.rosterPublishedAt ? '编辑转盘名单' : '配置转盘名单'}</Button>
                 </Space>}>
                     <Select style={{ minWidth: 280, marginBottom: 20 }} value={dayId} placeholder="选择直播时段"
