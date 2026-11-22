@@ -27,6 +27,8 @@ export default function LiveTournamentPage() {
     const [scoring, setScoring] = useState<{ row: any; roundNumber: number }>();
     const [rescheduling, setRescheduling] = useState<any>();
     const [targetDayId, setTargetDayId] = useState<number>();
+    const [bookingOpening, setBookingOpening] = useState(false);
+    const [bookingOpenReason, setBookingOpenReason] = useState('');
     const kills = Form.useWatch('kills', scoreForm);
     const queueMutationInFlight = useRef(false);
     const [options, setOptions] = useState<{label: string; value: number}[]>([]);
@@ -125,10 +127,15 @@ export default function LiveTournamentPage() {
                         </Tag>}
                         {event && <Typography.Text type="secondary">售票 {formatTime(event.salesStartAt)} 至 {formatTime(event.salesEndAt)}</Typography.Text>}
                         {event && <Tag>预约门槛 {event.bookingThreshold} 张 · 每会员限购 {event.memberTicketLimit} 张</Tag>}
+                        {event && <Tag color={event.bookingOpenedAt ? 'green' : 'gold'}>
+                            {event.bookingOpenedAt ? '预约已开放' : '预约待开放'}
+                        </Tag>}
                         {event && <Tag color={event.days.length ? 'blue' : 'gold'}>
                             {event.days.length ? `已排 ${event.days.length} 场 · ${event.days.reduce((sum: number, item: any) => sum + item.capacity, 0)} 个席位` : '赛期与场次待定'}
                         </Tag>}
                         {event?.status !== 'CLOSED' && event && <Button onClick={() => openDialog('generate-days')}>批量生成场次</Button>}
+                        {event?.status === 'PUBLISHED' && !event.bookingOpenedAt && <Button type="primary"
+                            onClick={() => { setBookingOpenReason(''); setBookingOpening(true); }}>提前开放预约</Button>}
                         {event?.status === 'PUBLISHED' && <Popconfirm title="锁定最终榜单并结束赛事？"
                             description="锁榜后将关闭录分和售票。"
                             onConfirm={() => run(async () => {
@@ -226,6 +233,27 @@ export default function LiveTournamentPage() {
                     ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择直播时段查看预约和候赛名单" />}
                 </Card>
             </Space>
+            <Modal title="提前开放预约" open={bookingOpening} okText="确认提前开放" cancelText="取消"
+                confirmLoading={busy} okButtonProps={{ disabled: bookingOpenReason.trim().length < 2 }}
+                onCancel={() => { if (!busy) setBookingOpening(false); }}
+                onOk={() => run(async () => {
+                    if (!eventId || bookingOpenReason.trim().length < 2) return;
+                    const result = await operateLiveTournament({
+                        action: 'open-booking', tournamentId: eventId, reason: bookingOpenReason.trim(),
+                    });
+                    await loadEvents();
+                    setBookingOpening(false);
+                    message.success(result?.idempotent ? '预约已处于开放状态' : '预约已提前开放');
+                })}>
+                <Typography.Paragraph>
+                    提前开放后，已购票会员可立即选择尚未开始且有余位的场次。购票上限、库存和退款规则保持不变。
+                </Typography.Paragraph>
+                <Typography.Paragraph type="warning">
+                    该操作不会修改原定 {event?.bookingThreshold ?? 40} 张预约门槛，并将记录操作人和原因。
+                </Typography.Paragraph>
+                <Input.TextArea value={bookingOpenReason} onChange={event => setBookingOpenReason(event.target.value)}
+                    maxLength={100} showCount rows={3} placeholder="请输入提前开放原因，例如：赛事提前开赛，人工开放预约" />
+            </Modal>
             <Modal title="调整参赛场次" open={Boolean(rescheduling)} okText="确认调整" cancelText="取消"
                 confirmLoading={busy} okButtonProps={{ disabled: !targetDayId }}
                 onCancel={() => { if (!busy) { setRescheduling(undefined); setTargetDayId(undefined); } }}
