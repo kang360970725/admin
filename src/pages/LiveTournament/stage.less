@@ -302,9 +302,9 @@
 }
 .tournament-stage__sales-title span { color: #438eea; font-size: 10px; font-weight: 900; letter-spacing: .28em; }
 .tournament-stage__sales-title h2 { margin: 6px 0 0; }
-.tournament-stage__progress { position: relative; width: 100%; padding: 19px 22px 17px; border: 1px solid rgba(68, 151, 255, .3); border-radius: 14px 4px 14px 4px; background: linear-gradient(135deg, rgba(17, 40, 71, .92), rgba(6, 17, 33, .9)); box-shadow: inset 3px 0 #268dff, 0 16px 40px rgba(0, 0, 0, .18); text-align: left; }
+.tournament-stage__progress { position: relative; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding: 19px 22px 17px; border: 1px solid rgba(68, 151, 255, .3); border-radius: 14px 4px 14px 4px; background: linear-gradient(135deg, rgba(17, 40, 71, .92), rgba(6, 17, 33, .9)); box-shadow: inset 3px 0 #268dff, 0 16px 40px rgba(0, 0, 0, .18); text-align: left; }
 .tournament-stage__progress-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 11px; }
-.tournament-stage__progress-head span { color: #6ba9f5; font-size: 10px; font-weight: 900; letter-spacing: .2em; }
+.tournament-stage__progress-head span { min-width: 0; color: #6ba9f5; font-size: 10px; font-weight: 900; letter-spacing: .2em; overflow-wrap: anywhere; }
 .tournament-stage__progress-head strong { color: #fff; font-size: clamp(18px, 2vw, 28px); font-style: italic; font-weight: 950; line-height: 1; }
 .tournament-stage__progress-track { position: relative; height: 30px; overflow: hidden; border: 1px solid rgba(95, 164, 248, .3); border-radius: 4px 12px 4px 12px; background: #071425; box-shadow: inset 0 3px 10px rgba(0,0,0,.45); }
 .tournament-stage__progress-fill { position: absolute; inset: 0 auto 0 0; min-width: 6px; background: linear-gradient(90deg, #135bd0, #138ef1 65%, #4eeaff); box-shadow: 0 0 24px rgba(39, 181, 255, .55); transition: width .55s ease; }
@@ -436,6 +436,20 @@
   .tournament-stage__ad strong { grid-column: 1; }
   .tournament-stage__ad em { grid-column: 1; }
   .tournament-stage__roster { grid-template-columns: 1fr; }
+  .tournament-stage__sales-strip { gap: 10px 14px; margin-bottom: 20px; padding: 12px; }
+  .tournament-stage__sales-strip .tournament-stage__progress { flex: 1 1 100%; min-width: 0; }
+  .tournament-stage__sales { width: 100%; min-width: 0; margin-top: 24px; }
+  .tournament-stage__progress { padding: 14px 12px 12px; border-radius: 11px 3px 11px 3px; }
+  .tournament-stage__progress-head { gap: 8px; margin-bottom: 8px; }
+  .tournament-stage__progress-head span { font-size: 9px; letter-spacing: .12em; }
+  .tournament-stage__progress-track { height: 24px; }
+  .tournament-stage__progress-unlock span { display: none; }
+  .tournament-stage__progress-scale { gap: 8px; font-size: 9px; }
+  .tournament-stage__progress-scale > * { min-width: 0; }
+  .tournament-stage__progress-scale b { text-align: center; }
+  .tournament-stage__progress-scale span:last-child { text-align: right; }
+  .tournament-stage__numbers { gap: 8px; margin: 20px 0; }
+  .tournament-stage__numbers article { padding: 18px 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
