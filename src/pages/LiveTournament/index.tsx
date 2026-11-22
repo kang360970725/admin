@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import dayjs from 'dayjs';
 import { PageContainer } from '@ant-design/pro-components';
 import { history } from '@umijs/max';
 import { Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd';
@@ -24,11 +25,13 @@ export default function LiveTournamentPage() {
     const [dialog, setDialog] = useState<'create' | 'generate-days' | 'roster'>();
     const [form] = Form.useForm();
     const [scoreForm] = Form.useForm();
+    const [dayTimeForm] = Form.useForm();
     const [scoring, setScoring] = useState<{ row: any; roundNumber: number }>();
     const [rescheduling, setRescheduling] = useState<any>();
     const [targetDayId, setTargetDayId] = useState<number>();
     const [bookingOpening, setBookingOpening] = useState(false);
     const [bookingOpenReason, setBookingOpenReason] = useState('');
+    const [dayTimeEditing, setDayTimeEditing] = useState(false);
     const kills = Form.useWatch('kills', scoreForm);
     const queueMutationInFlight = useRef(false);
     const [options, setOptions] = useState<{label: string; value: number}[]>([]);
@@ -161,6 +164,14 @@ export default function LiveTournamentPage() {
                         await loadEvents();
                         message.success('直播排场已刷新');
                     })}>刷新名单</Button>
+                    <Button onClick={() => {
+                        dayTimeForm.setFieldsValue({
+                            startsAt: dayjs(day.startsAt),
+                            endsAt: dayjs(day.endsAt),
+                            reason: undefined,
+                        });
+                        setDayTimeEditing(true);
+                    }}>调整直播时间</Button>
                     <Button onClick={() => openDialog('roster')}>{day.rosterPublishedAt ? '编辑转盘名单' : '配置转盘名单'}</Button>
                 </Space>}>
                     <Select style={{ minWidth: 280, marginBottom: 20 }} value={dayId} placeholder="选择直播时段"
@@ -233,6 +244,45 @@ export default function LiveTournamentPage() {
                     ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择直播时段查看预约和候赛名单" />}
                 </Card>
             </Space>
+            <Modal title="调整直播时间" open={dayTimeEditing} okText="确认调整" cancelText="取消"
+                confirmLoading={busy} onCancel={() => { if (!busy) setDayTimeEditing(false); }}
+                onOk={() => dayTimeForm.submit()} destroyOnClose>
+                <Typography.Paragraph>
+                    调整后，小程序预约截止、赛前提醒和主播工作台自动关联都会立即使用新时间。
+                </Typography.Paragraph>
+                <Typography.Paragraph type="warning">
+                    已预约选手会收到时间调整通知；比赛开始后只能调整结束时间。
+                </Typography.Paragraph>
+                <Form form={dayTimeForm} layout="vertical" preserve={false} onFinish={values => run(async () => {
+                    if (!dayId) return;
+                    const saved = await operateLiveTournament({
+                        action: 'update-day-time',
+                        dayId,
+                        startsAt: `${values.startsAt.format('YYYY-MM-DDTHH:mm:ss')}+08:00`,
+                        endsAt: `${values.endsAt.format('YYYY-MM-DDTHH:mm:ss')}+08:00`,
+                        reason: values.reason.trim(),
+                    });
+                    await loadEvents();
+                    setDayTimeEditing(false);
+                    const notificationText = saved?.notificationTargets
+                        ? `，通知已发送 ${saved.notifiedOrders}/${saved.notificationTargets} 位预约选手`
+                        : '';
+                    message.success(`直播时间已调整${notificationText}`);
+                })}>
+                    <Form.Item name="startsAt" label="开始时间（北京时间）" rules={[{ required: true, message: '请选择开始时间' }]}>
+                        <DatePicker showTime format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="endsAt" label="结束时间（北京时间）" rules={[{ required: true, message: '请选择结束时间' }]}>
+                        <DatePicker showTime format="YYYY-MM-DD HH:mm" style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="reason" label="调整原因" rules={[
+                        { required: true, message: '请输入调整原因' },
+                        { min: 2, message: '调整原因至少 2 个字' },
+                    ]}>
+                        <Input.TextArea rows={3} maxLength={100} showCount placeholder="例如：直播临时延后，已与参赛选手确认" />
+                    </Form.Item>
+                </Form>
+            </Modal>
             <Modal title="提前开放预约" open={bookingOpening} okText="确认提前开放" cancelText="取消"
                 confirmLoading={busy} okButtonProps={{ disabled: bookingOpenReason.trim().length < 2 }}
                 onCancel={() => { if (!busy) setBookingOpening(false); }}
