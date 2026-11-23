@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { PageContainer } from '@ant-design/pro-components';
 import { history, useAccess } from '@umijs/max';
-import { Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd';
+import { Avatar, Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd';
 import { getGameProjectOptions, getPlayerOptions, operateLiveTournament, publishLiveTournamentScore, saveLiveTournamentScore, settleLiveTournamentTicket } from '@/services/api';
 
 const statusLabels: Record<string, string> = {
@@ -26,6 +26,10 @@ export default function LiveTournamentPage() {
     const [dialog, setDialog] = useState<'create' | 'generate-days' | 'roster'>();
     const [form] = Form.useForm();
     const [scoreForm] = Form.useForm();
+    const [capacityForm] = Form.useForm();
+    const [capacityEditing, setCapacityEditing] = useState(false);
+    const providerLabels = useRef(new Map<number, string>());
+    const optionRequest = useRef(0);
     const [dayTimeForm] = Form.useForm();
     const [scoring, setScoring] = useState<{ row: any; roundNumber: number }>();
     const [rescheduling, setRescheduling] = useState<any>();
@@ -96,14 +100,20 @@ export default function LiveTournamentPage() {
     }
 
     async function searchOptions(keyword = '', type = dialog) {
+        const request = ++optionRequest.current;
         const response: any = type === 'roster'
-            ? await getPlayerOptions({ keyword, limit: 50 })
+            ? await getPlayerOptions({ keyword, limit: 50, onlyIdle: false })
             : await getGameProjectOptions({ keyword });
         const rows = response?.data?.list ?? response?.data ?? response?.list ?? response;
-        setOptions(Array.isArray(rows) ? rows.map(item => ({
+        if (request !== optionRequest.current) return;
+        const matches = Array.isArray(rows) ? rows.map(item => ({
             label: item.label || item.name || String(item.value ?? item.id),
             value: Number(item.value ?? item.id),
-        })) : []);
+        })) : [];
+        if (type === 'roster') {
+            matches.forEach(option => providerLabels.current.set(option.value, option.label));
+        }
+        setOptions(matches);
     }
 
     function openDialog(type: 'create' | 'generate-days' | 'roster') {
@@ -111,7 +121,13 @@ export default function LiveTournamentPage() {
         setDialog(type);
         if (type === 'create') form.setFieldsValue({ bookingThreshold: 40, memberTicketLimit: 1 });
         setOptions([]);
-        if (type === 'roster') form.setFieldsValue({ quotas: day?.quotas?.length ? day.quotas : [{ minimum: 0 }] });
+        if (type === 'roster') {
+            const quotas = (day?.quotas ?? []).map(({ providerId, providerName, minimum, maximum }: any) => {
+                if (providerName) providerLabels.current.set(providerId, providerName);
+                return { providerId, minimum, maximum };
+            });
+            form.setFieldsValue({ quotas: quotas.length ? quotas : [{ minimum: 0 }] });
+        }
         if (type !== 'generate-days') void searchOptions('', type).catch(() => message.error('选项加载失败'));
     }
 
@@ -166,6 +182,10 @@ export default function LiveTournamentPage() {
                         message.success('直播排场已刷新');
                     })}>刷新名单</Button>
                     {canOperateLiveTournament && <>
+                        {event?.status !== 'CLOSED' && new Date(day.endsAt).getTime() > Date.now() && <Button onClick={() => {
+                            capacityForm.setFieldsValue({ capacity: day.capacity, reason: undefined });
+                            setCapacityEditing(true);
+                        }}>调整人数上限</Button>}
                         <Button onClick={() => {
                             dayTimeForm.setFieldsValue({
                                 startsAt: dayjs(day.startsAt),
@@ -183,7 +203,16 @@ export default function LiveTournamentPage() {
                     {day ? <Table rowKey="id" pagination={false} dataSource={entries} scroll={{ x: 880 }} columns={[
                         { title: '出场序号', width: 100, render: (_, row) => row.appearanceSequence ?? '—' },
                         { title: '候场顺序', width: 100, render: (_, row) => row.queuePosition ?? '—' },
-                        { title: '参赛昵称', render: (_, row) => row.competitionName || row.gameNickname },
+                        { title: '参赛会员', width: 200, render: (_, row) => {
+                            const nickname = row.competitionName || row.gameNickname || '参赛会员';
+                            return <Space size={10}>
+                                <Avatar src={row.memberAvatar || undefined} size={36}>{Array.from(nickname)[0]}</Avatar>
+                                <Space direction="vertical" size={0}>
+                                    <Typography.Text strong>{nickname}</Typography.Text>
+                                    <Typography.Text type="secondary">会员 ID {row.memberCode || '—'}</Typography.Text>
+                                </Space>
+                            </Space>;
+                        } },
                         { title: '游戏账号', render: (_, row) => <Space direction="vertical" size={0}>
                             <Typography.Text>{row.gameNickname}</Typography.Text>
                             <Typography.Text type="secondary" copyable>{row.gameAccountId}</Typography.Text>
@@ -247,6 +276,27 @@ export default function LiveTournamentPage() {
                     ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择直播时段查看预约和候赛名单" />}
                 </Card>
             </Space>
+            <Modal title="调整人数上限" open={capacityEditing} okText="保存" cancelText="取消"
+                confirmLoading={busy} onCancel={() => { if (!busy) setCapacityEditing(false); }}
+                onOk={() => capacityForm.submit()} destroyOnClose>
+                <Form form={capacityForm} layout="vertical" preserve={false} onFinish={values => run(async () => {
+                    if (!dayId) return;
+                    await operateLiveTournament({ action: 'update-day-capacity', dayId, ...values, reason: values.reason.trim() });
+                    setCapacityEditing(false);
+                    message.success('场次人数上限已保存');
+                    await loadEvents();
+                })}>
+                    <Form.Item name="capacity" label="单场人数上限" extra={`当前已占用 ${day?._count?.entries ?? 0} 个席位`}
+                        rules={[{ required: true }, { type: 'integer', min: 1, max: 70, message: '请输入 1–70 之间的整数' }]}>
+                        <InputNumber min={1} max={70} precision={0} style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="reason" label="调整原因" rules={[
+                        { required: true, whitespace: true }, { min: 2, message: '调整原因至少 2 个字' },
+                    ]}>
+                        <Input.TextArea rows={2} maxLength={100} />
+                    </Form.Item>
+                </Form>
+            </Modal>
             <Modal title="调整直播时间" open={dayTimeEditing} okText="确认调整" cancelText="取消"
                 confirmLoading={busy} onCancel={() => { if (!busy) setDayTimeEditing(false); }}
                 onOk={() => dayTimeForm.submit()} destroyOnClose>
@@ -424,7 +474,9 @@ export default function LiveTournamentPage() {
                             {fields.map(field => <Card key={field.key} size="small" style={{ marginBottom: 12 }}
                                 extra={<Button type="link" danger onClick={() => remove(field.name)}>移除</Button>}>
                                 <Form.Item name={[field.name, 'providerId']} label="服务者" rules={[{ required: true }]}>
-                                    <Select showSearch filterOption={false} options={options} onSearch={searchOptions} placeholder="搜索店内服务者" />
+                                    <Select showSearch filterOption={false} options={options} onSearch={searchOptions}
+                                        labelRender={({ value, label }) => providerLabels.current.get(Number(value)) || label || '未命名服务者'}
+                                        placeholder="搜索店内服务者" />
                                 </Form.Item>
                                 <Space wrap>
                                     <Form.Item name={[field.name, 'minimum']} label="保底次数" rules={[{ required: true }]}>
