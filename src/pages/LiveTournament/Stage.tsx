@@ -17,7 +17,7 @@ interface Player {
 interface BoardRow {
     ticketId: number;
     name: string;
-    rank?: number;
+    rank?: number | null;
     previousRank?: number | null;
     points?: number;
     kills?: number;
@@ -178,9 +178,11 @@ export default function TournamentStage() {
     const progress = Math.min(1, Math.max(0, 1 - (revealedAt - now) / 3300));
     const rotation = finalRotation * (motionReduced ? 1 : 1 - (1 - progress) ** 3);
     const boardRows = stage?.leaderboard?.[board] ?? [];
+    const podiumRows = boardRows.filter(row => row.rank !== null).slice(0, 3);
+    const listRows = boardRows.slice(podiumRows.length);
     const boardValue = (row: BoardRow) => board === 'overall'
         ? `${row.points ?? 0} 分`
-        : board === 'byKills' ? `${row.kills ?? 0} 次淘汰` : `${((row.firstKillElapsedMs ?? 0) / 1000).toFixed(1)} 秒`;
+        : board === 'byKills' ? `${row.kills ?? 0} 次淘汰` : `${((row.firstKillElapsedMs ?? 0) / 1000).toFixed(3).replace(/\.?0+$/, '')} 秒`;
     const salesThreshold = Math.max(1, stage?.sales.threshold ?? 1);
     const salesLimit = Math.max(salesThreshold, stage?.sales.limit ?? 70);
     const salesUnlocked = Boolean(stage?.sales.booked) || (stage?.sales.paid ?? 0) >= salesThreshold;
@@ -272,7 +274,7 @@ export default function TournamentStage() {
             <section className="tournament-rules__section">
                 <h3>总榜排序</h3>
                 <ol className="tournament-rules__ranking">
-                    <li><strong>总积分</strong>高者优先，<strong>至少完成一次有效淘汰</strong>才可上榜</li>
+                    <li><strong>总积分</strong>高者优先，<strong>至少完成一次有效淘汰</strong>才有名次。零分选手按确认上场时间展示</li>
                     <li><strong className="tournament-rules__key">单局最高有效淘汰数</strong>多者优先</li>
                     <li><strong>最快首淘汰</strong>耗时短者优先，同耗时则先达成者优先</li>
                     <li><strong>确认上场时间</strong>早者优先</li>
@@ -332,21 +334,21 @@ export default function TournamentStage() {
                 <Button type={board === 'byFirstKill' ? 'primary' : 'default'} onClick={() => setBoard('byFirstKill')}>最快首淘汰</Button>
             </Space>
             {boardRows.length ? <>
-                <div className="tournament-stage__podium">
-                    {boardRows.slice(0, 3).map((row, index) => <article key={`${row.ticketId}-${row.roundNumber ?? 0}`} className={`is-rank-${index + 1}`}>
+                {podiumRows.length > 0 && <div className="tournament-stage__podium">
+                    {podiumRows.map((row, index) => <article key={`${row.ticketId}-${row.roundNumber ?? 0}`} className={`is-rank-${index + 1}`}>
                         <span className="tournament-stage__podium-rank">{String(index + 1).padStart(2, '0')}</span>
                         <div><small>{index === 0 ? 'MVP LEADER' : index === 1 ? 'CHALLENGER' : 'CONTENDER'}</small><strong>{row.name}</strong></div>
                         <b>{boardValue(row)}</b>
                     </article>)}
-                </div>
+                </div>}
                 <ol>
-                {boardRows.slice(3).map((row, offset) => {
-                    const index = offset + 3;
+                {listRows.map((row, offset) => {
+                    const index = offset + podiumRows.length;
                     const change = row.previousRank && row.rank ? row.previousRank - row.rank : 0;
                     return <li key={`${row.ticketId}-${row.roundNumber ?? 0}`}>
-                        <span>{String(row.rank ?? index + 1).padStart(2, '0')}</span><strong>{row.name}</strong>
+                        <span>{row.rank === null ? '—' : String(row.rank ?? index + 1).padStart(2, '0')}</span><strong>{row.name}</strong>
                         <span>{boardValue(row)}</span>
-                        {board === 'overall' && <small>{row.previousRank == null ? '新上榜' : change ? `${change > 0 ? '↑' : '↓'} ${Math.abs(change)}` : '—'}</small>}
+                        {board === 'overall' && <small>{row.rank === null ? '' : row.previousRank == null ? '新上榜' : change ? `${change > 0 ? '↑' : '↓'} ${Math.abs(change)}` : '—'}</small>}
                     </li>;
                 })}
                 </ol>
