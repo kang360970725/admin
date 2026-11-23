@@ -71,10 +71,10 @@
   &__ticker-track i { color: #4f6c91; font-size: 9px; font-style: normal; font-weight: 800; letter-spacing: .23em; }
 
   &__ad-rotator { position: relative; z-index: 3; height: clamp(70px, 6.2vw, 92px); overflow: hidden; margin: -8px 0 clamp(22px, 2.7vw, 40px); border: 1px solid rgba(83, 153, 243, .3); border-radius: 5px 18px 5px 18px; background: #09172b; box-shadow: 0 18px 45px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.04); }
-  &__ad { position: absolute; inset: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: clamp(14px, 2.6vw, 42px); padding: 0 clamp(22px, 3vw, 52px); opacity: 0; transform: translateY(38%); animation: arena-ad-swap 10s ease-in-out infinite; }
+  &__ad { position: absolute; inset: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: clamp(14px, 2.6vw, 42px); padding: 0 clamp(22px, 3vw, 52px); animation: arena-ad-enter .35s ease-out; }
   &__ad::before { position: absolute; inset: 0; opacity: .18; background-image: linear-gradient(115deg, transparent 0 48%, rgba(255,255,255,.25) 48.2% 48.8%, transparent 49% 100%); background-size: 180px 100%; content: ''; }
   &__ad.is-bluecat { background: radial-gradient(circle at 16% 50%, rgba(53, 220, 255, .26), transparent 28%), linear-gradient(100deg, #0c2444, #0b172a 58%, #07101f); }
-  &__ad.is-kook { background: radial-gradient(circle at 18% 50%, rgba(255, 184, 65, .2), transparent 30%), linear-gradient(100deg, #352511, #171b2a 58%, #09111f); animation-delay: 5s; }
+  &__ad.is-kook { background: radial-gradient(circle at 18% 50%, rgba(255, 184, 65, .2), transparent 30%), linear-gradient(100deg, #352511, #171b2a 58%, #09111f); }
   &__ad span { position: relative; z-index: 1; padding: 7px 10px; border: 1px solid rgba(104, 218, 255, .35); border-radius: 3px 9px 3px 9px; color: #7de9ff; font-size: clamp(7px, .64vw, 10px); font-weight: 900; letter-spacing: .17em; white-space: nowrap; }
   &__ad.is-kook span { border-color: rgba(255, 199, 91, .35); color: #ffd47d; }
   &__ad strong { position: relative; z-index: 1; color: #fff; font-size: clamp(24px, 2.5vw, 40px); font-style: italic; font-weight: 950; letter-spacing: .08em; white-space: nowrap; text-shadow: 0 0 28px rgba(67, 210, 255, .28); }
@@ -82,8 +82,8 @@
   &__ad em { position: relative; z-index: 1; color: #9cb2ce; font-size: clamp(11px, 1.05vw, 16px); font-style: normal; font-weight: 650; letter-spacing: .08em; }
   &__ad b { position: relative; z-index: 1; color: #496b96; font-size: 10px; font-weight: 900; letter-spacing: .22em; white-space: nowrap; }
   &__ad-dots { position: absolute; right: 18px; bottom: 8px; z-index: 5; display: flex; gap: 5px; }
-  &__ad-dots i { width: 18px; height: 3px; border-radius: 4px; background: #355478; animation: arena-ad-dot 10s ease-in-out infinite; }
-  &__ad-dots i:last-child { animation-delay: 5s; }
+  &__ad-dots i { width: 18px; height: 3px; border-radius: 4px; background: #355478; }
+  &__ad-dots i.is-active { background: #50dfff; box-shadow: 0 0 10px rgba(80, 223, 255, .7); }
 
   &__layout { display: grid; grid-template-columns: minmax(270px, .82fr) minmax(440px, 1.5fr); gap: clamp(28px, 5vw, 88px); align-items: center; max-width: 1520px; margin: 0 auto; }
   &__lineup { display: grid; align-content: center; gap: 14px; min-width: 0; }
@@ -143,10 +143,16 @@
     border: 7px solid #d9e9ff;
     border-radius: 50%;
     box-shadow: inset 0 0 62px rgba(2, 9, 21, .68), inset 0 0 0 2px rgba(255, 255, 255, .2), 0 0 0 5px #102846, 0 0 0 8px rgba(56, 137, 226, .2), 0 0 42px rgba(52, 147, 255, .36);
-    transition-property: transform;
-    transition-timing-function: cubic-bezier(.12, .72, .12, 1);
     &::before { position: absolute; inset: 0; border-radius: 50%; background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, .13) 0 .5deg, transparent .5deg 120deg); content: ''; pointer-events: none; }
     &::after { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 38% 28%, rgba(255,255,255,.16), transparent 28%), radial-gradient(circle, transparent 0 34%, rgba(4, 11, 24, .09) 35%, rgba(4, 11, 24, .2) 72%, rgba(2, 8, 18, .54) 100%); content: ''; pointer-events: none; }
+  }
+  &__wheel-segments {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
   }
   &__pointer {
     position: absolute;
@@ -206,9 +212,6 @@
     overflow-wrap: anywhere;
     text-shadow: 0 2px 7px rgba(0, 0, 0, .55);
     transform: translate(-50%, -50%);
-    transition-property: transform;
-    transition-timing-function: cubic-bezier(.12, .72, .12, 1);
-    will-change: transform;
   }
   &__label small { display: block; margin-bottom: 5px; color: rgba(255,255,255,.58); font-size: .55em; letter-spacing: .18em; }
   &__label strong { display: block; color: #fff; font-size: 1em; font-weight: 950; }
@@ -392,15 +395,9 @@
   50% { transform: translate(-50%, -50%) scale(1.035); }
 }
 
-@keyframes arena-ad-swap {
-  0%, 7% { opacity: 0; transform: translateY(38%); }
-  12%, 46% { opacity: 1; transform: translateY(0); }
-  50%, 100% { opacity: 0; transform: translateY(-38%); }
-}
-
-@keyframes arena-ad-dot {
-  0%, 7%, 50%, 100% { background: #355478; box-shadow: none; }
-  12%, 46% { background: #50dfff; box-shadow: 0 0 10px rgba(80, 223, 255, .7); }
+@keyframes arena-ad-enter {
+  from { opacity: 0; transform: translateY(20%); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes arena-progress-flow {
@@ -453,9 +450,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tournament-stage__wheel { transition-duration: 0s !important; }
-  .tournament-stage__live i, .tournament-stage__ticker-track, .tournament-stage__ad, .tournament-stage__ad-dots i, .tournament-stage__wheel-aura, .tournament-stage__ticks, .tournament-stage__hub.is-actionable, .tournament-stage__progress-fill::before { animation: none; }
-  .tournament-stage__ad:first-of-type { opacity: 1; transform: none; }
+  .tournament-stage__live i, .tournament-stage__ticker-track, .tournament-stage__ad, .tournament-stage__wheel-aura, .tournament-stage__ticks, .tournament-stage__hub.is-actionable, .tournament-stage__progress-fill::before { animation: none; }
 }
 
 .tournament-rules {

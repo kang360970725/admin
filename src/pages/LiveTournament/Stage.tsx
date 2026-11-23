@@ -73,6 +73,13 @@ export default function TournamentStage() {
     const [view, setView] = useState(searchParams.get('view') || 'stage');
     const [board, setBoard] = useState<Board>('overall');
     const [rulesOpen, setRulesOpen] = useState(false);
+    const [showCommunityAd, setShowCommunityAd] = useState(false);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => setShowCommunityAd(value => !value), 5000);
+        return () => window.clearInterval(interval);
+    }, []);
+
     const mutationVersion = useRef(0);
     const mutationInFlight = useRef(false);
 
@@ -114,10 +121,14 @@ export default function TournamentStage() {
     const spinning = Boolean(winner && now < revealedAt);
 
     useEffect(() => {
-        setNow(Date.now());
-        if (!revealedAt) return;
-        const timeout = setTimeout(() => setNow(Date.now()), Math.max(0, revealedAt - Date.now()));
-        return () => clearTimeout(timeout);
+        let frame = 0;
+        const update = () => {
+            const time = Date.now();
+            setNow(time);
+            if (time < revealedAt) frame = requestAnimationFrame(update);
+        };
+        update();
+        return () => cancelAnimationFrame(frame);
     }, [revealedAt]);
 
     async function act(action: string, player: Player) {
@@ -161,11 +172,11 @@ export default function TournamentStage() {
     }
 
     const wheelProviders = providers.length ? providers : placeholderProviders;
-    const segments = wheelProviders.map((_, index) =>
-        `${colors[index % colors.length]} ${index / wheelProviders.length * 100}% ${(index + 1) / wheelProviders.length * 100}%`,
-    );
     const winnerIndex = winner ? providers.indexOf(winner) : 0;
-    const rotation = winner ? 1800 - (winnerIndex + 0.5) * 360 / providers.length : 0;
+    const finalRotation = winner ? 1800 - (winnerIndex + 0.5) * 360 / providers.length : 0;
+    const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const progress = Math.min(1, Math.max(0, 1 - (revealedAt - now) / 3300));
+    const rotation = finalRotation * (motionReduced ? 1 : 1 - (1 - progress) ** 3);
     const boardRows = stage?.leaderboard?.[board] ?? [];
     const boardValue = (row: BoardRow) => board === 'overall'
         ? `${row.points ?? 0} 分`
@@ -291,13 +302,15 @@ export default function TournamentStage() {
             </section>
         </Modal>}
         <section className="tournament-stage__ad-rotator" aria-label="赛事合作信息">
-            <article className="tournament-stage__ad is-bluecat">
-                <span>OFFICIAL GAMING SERVICE</span><strong>蓝猫爽打</strong><em>专业陪练 · 快乐上分 · 全程守护</em><b>BLUECAT PLAY</b>
-            </article>
-            <article className="tournament-stage__ad is-kook">
+            {showCommunityAd ? <article key="community" className="tournament-stage__ad is-kook">
                 <span>JOIN OUR COMMUNITY</span><strong>KOOK：867867</strong><em>加入赛事语音频道 · 获取最新赛况</em><b>BLUECAT ARENA</b>
-            </article>
-            <div className="tournament-stage__ad-dots"><i /><i /></div>
+            </article> : <article key="bluecat" className="tournament-stage__ad is-bluecat">
+                <span>OFFICIAL GAMING SERVICE</span><strong>蓝猫爽打</strong><em>专业陪练 · 快乐上分 · 全程守护</em><b>BLUECAT PLAY</b>
+            </article>}
+            <div className="tournament-stage__ad-dots" aria-hidden="true">
+                <i className={showCommunityAd ? undefined : 'is-active'} />
+                <i className={showCommunityAd ? 'is-active' : undefined} />
+            </div>
         </section>
         {connectionError && <Alert type="warning" message="直播状态暂未同步，正在重连" showIcon />}
         {operationError && <Alert type="error" message={operationError} showIcon />}
@@ -367,19 +380,26 @@ export default function TournamentStage() {
                     <div className="tournament-stage__orbit tournament-stage__orbit--outer" />
                     <div className="tournament-stage__orbit tournament-stage__orbit--inner" />
                     <div className="tournament-stage__pointer" />
-                    <div className="tournament-stage__wheel" style={{
-                        background: wheelProviders.length === 1 ? colors[0] : `conic-gradient(${segments.join(',')})`,
-                        transform: `rotate(${rotation}deg)`,
-                        transitionDuration: spinning ? '3.3s' : '0s',
-                    }}>
+                    <div className="tournament-stage__wheel">
+                        <svg className="tournament-stage__wheel-segments" viewBox="0 0 100 100" aria-hidden="true">
+                            <g transform={`rotate(${rotation} 50 50)`}>
+                                {wheelProviders.length === 1 ? <circle cx="50" cy="50" r="50" fill={colors[0]} /> :
+                                    wheelProviders.map((provider, index) => {
+                                        const start = index * 2 * Math.PI / wheelProviders.length;
+                                        const end = (index + 1) * 2 * Math.PI / wheelProviders.length;
+                                        const startPoint = `${50 + 50 * Math.sin(start)} ${50 - 50 * Math.cos(start)}`;
+                                        const endPoint = `${50 + 50 * Math.sin(end)} ${50 - 50 * Math.cos(end)}`;
+                                        return <path key={provider.id} d={`M 50 50 L ${startPoint} A 50 50 0 0 1 ${endPoint} Z`}
+                                            fill={colors[index % colors.length]} />;
+                                    })}
+                            </g>
+                        </svg>
                         {wheelProviders.map((provider, index) => {
-                            const angle = (index + 0.5) * 2 * Math.PI / wheelProviders.length;
+                            const angle = ((index + 0.5) * 360 / wheelProviders.length + rotation) * Math.PI / 180;
                             const radius = wheelProviders.length === 1 ? 0 : 34;
                             return <div key={provider.id} className="tournament-stage__label" style={{
                                 left: `${50 + radius * Math.sin(angle)}%`,
                                 top: `${50 - radius * Math.cos(angle)}%`,
-                                transform: `translate(-50%, -50%) rotate(${-rotation}deg)`,
-                                transitionDuration: spinning ? '3.3s' : '0s',
                             }}><small>{String(index + 1).padStart(2, '0')}</small><strong>{wheelProviders.length > 10 ? index + 1 : provider.name || '服务者'}</strong><em>{provider.serviceRank || '候选席位'}</em></div>;
                         })}
                     </div>
