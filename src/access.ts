@@ -136,7 +136,13 @@ export default function access(initialState: { currentUser?: any } | undefined) 
     // 订单/结算
     canViewStoreDashboard,
     canViewOrderManagement: canViewStoreDashboard || has('orders:list:page') || has('service:feedback:page') || has('orders:complaints:page') || canManageOrderArchiveInstructions,
-    canOperateLiveTournament: isSuperAdmin || has('orders:detail:dispatch:button'),
+    canViewLiveTournament: isSuperAdmin || has('live-tournament:view') || has('live-tournament:operate'),
+    canOperateLiveTournament: isSuperAdmin || has('live-tournament:operate'),
+    canManageLiveTournamentScores: isSuperAdmin || (
+      has('live-tournament:operate') && has('orders:detail:confirm-complete:button') &&
+      (['CUSTOMER_SERVICE', 'FINANCE'].includes(userType) || roleName === 'FINANCE_MANAGER' ||
+        roleName.includes('客服') || roleName.includes('财务'))
+    ),
     canViewOrdersList: has('orders:list:page'),
     canManageOrderArchiveInstructions,
     canViewOrderDetail: has('orders:detail:page'),

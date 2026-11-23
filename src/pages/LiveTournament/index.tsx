@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { PageContainer } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
+import { history, useAccess } from '@umijs/max';
 import { Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd';
 import { getGameProjectOptions, getPlayerOptions, operateLiveTournament, publishLiveTournamentScore, saveLiveTournamentScore, settleLiveTournamentTicket } from '@/services/api';
 
@@ -17,6 +17,7 @@ const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN', {
 });
 
 export default function LiveTournamentPage() {
+    const { canOperateLiveTournament, canManageLiveTournamentScores } = useAccess();
     const [events, setEvents] = useState<any[]>([]);
     const [eventId, setEventId] = useState<number>();
     const [dayId, setDayId] = useState<number>();
@@ -116,8 +117,8 @@ export default function LiveTournamentPage() {
 
     return (
         <PageContainer title="直播挑战赛" extra={<Space>
-            <Button onClick={() => history.push('/ops/live-tournament/studio')}>进入主播工作台</Button>
-            <Button type="primary" onClick={() => openDialog('create')}>创建赛事</Button>
+            {canOperateLiveTournament && <Button onClick={() => history.push('/ops/live-tournament/studio')}>进入主播工作台</Button>}
+            {canOperateLiveTournament && <Button type="primary" onClick={() => openDialog('create')}>创建赛事</Button>}
         </Space>}>
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
                 <Card style={{ background: 'linear-gradient(110deg, #eef5ff, #fff 75%)' }}>
@@ -136,17 +137,17 @@ export default function LiveTournamentPage() {
                         {event && <Tag color={event.days.length ? 'blue' : 'gold'}>
                             {event.days.length ? `已排 ${event.days.length} 场 · ${event.days.reduce((sum: number, item: any) => sum + item.capacity, 0)} 个席位` : '赛期与场次待定'}
                         </Tag>}
-                        {event?.status !== 'CLOSED' && event && <Button onClick={() => openDialog('generate-days')}>批量生成场次</Button>}
-                        {event?.status === 'PUBLISHED' && !event.bookingOpenedAt && <Button type="primary"
+                        {canOperateLiveTournament && event?.status !== 'CLOSED' && event && <Button onClick={() => openDialog('generate-days')}>批量生成场次</Button>}
+                        {canOperateLiveTournament && event?.status === 'PUBLISHED' && !event.bookingOpenedAt && <Button type="primary"
                             onClick={() => { setBookingOpenReason(''); setBookingOpening(true); }}>提前开放预约</Button>}
-                        {event?.status === 'PUBLISHED' && <Popconfirm title="锁定最终榜单并结束赛事？"
+                        {canManageLiveTournamentScores && event?.status === 'PUBLISHED' && <Popconfirm title="锁定最终榜单并结束赛事？"
                             description="锁榜后将关闭录分和售票。"
                             onConfirm={() => run(async () => {
                                 await publishLiveTournamentScore({ action: 'lock', tournamentId: eventId });
                                 await loadEvents();
                                 message.success('最终榜单已锁定');
                             })}><Button disabled={busy}>锁榜并结束赛事</Button></Popconfirm>}
-                        {event?.status === 'DRAFT' && (
+                        {canOperateLiveTournament && event?.status === 'DRAFT' && (
                             <Popconfirm title="发布后将按配置的售票时间开放售票" onConfirm={() => run(async () => {
                                 await operateLiveTournament({ action: 'publish', tournamentId: eventId });
                                 await loadEvents();
@@ -164,15 +165,17 @@ export default function LiveTournamentPage() {
                         await loadEvents();
                         message.success('直播排场已刷新');
                     })}>刷新名单</Button>
-                    <Button onClick={() => {
-                        dayTimeForm.setFieldsValue({
-                            startsAt: dayjs(day.startsAt),
-                            endsAt: dayjs(day.endsAt),
-                            reason: undefined,
-                        });
-                        setDayTimeEditing(true);
-                    }}>调整直播时间</Button>
-                    <Button onClick={() => openDialog('roster')}>{day.rosterPublishedAt ? '编辑转盘名单' : '配置转盘名单'}</Button>
+                    {canOperateLiveTournament && <>
+                        <Button onClick={() => {
+                            dayTimeForm.setFieldsValue({
+                                startsAt: dayjs(day.startsAt),
+                                endsAt: dayjs(day.endsAt),
+                                reason: undefined,
+                            });
+                            setDayTimeEditing(true);
+                        }}>调整直播时间</Button>
+                        <Button onClick={() => openDialog('roster')}>{day.rosterPublishedAt ? '编辑转盘名单' : '配置转盘名单'}</Button>
+                    </>}
                 </Space>}>
                     <Select style={{ minWidth: 280, marginBottom: 20 }} value={dayId} placeholder="选择直播时段"
                         options={event?.days.map((item: any) => ({ label: `${formatTime(item.startsAt)} 开始`, value: item.id }))}
@@ -204,7 +207,7 @@ export default function LiveTournamentPage() {
                                                 : '待录入'}
                                         </Tag>
                                         {score && <Tag color={pending ? 'gold' : 'green'}>{pending ? '待发布' : '已发布'}</Tag>}
-                                        {event?.status !== 'CLOSED' && <>
+                                        {canManageLiveTournamentScores && event?.status !== 'CLOSED' && <>
                                             <Button size="small" disabled={!row.firstRoundStartedAt} onClick={() => editScore(row, roundNumber)}>录分</Button>
                                             {pending && <Button size="small" type="link" disabled={busy} onClick={() => run(async () => {
                                                 await publishLiveTournamentScore({ entryId: row.id, roundNumber });
@@ -218,7 +221,7 @@ export default function LiveTournamentPage() {
                         ) },
                         { title: '操作', width: 230, render: (_, row) => <Space wrap>
                             {row.fulfilled && <Tag color="green">整票已结算</Tag>}
-                            {row.status === 'FINISHED' && !row.fulfilled && <Popconfirm
+                            {canManageLiveTournamentScores && row.status === 'FINISHED' && !row.fulfilled && <Popconfirm
                                 title="确认整票履约并结算？"
                                 description={`向转盘锁定的服务者结算 ¥${Number(event?.providerFee ?? 0).toFixed(1)}，第二局弃权仍按整票结算。`}
                                 onConfirm={() => run(async () => {
@@ -228,15 +231,15 @@ export default function LiveTournamentPage() {
                                 })}>
                                 <Button type="primary" size="small" disabled={busy}>确认整票结算</Button>
                             </Popconfirm>}
-                            {row.status === 'BOOKED' && <Button size="small" type="primary" disabled={busy}
+                            {canOperateLiveTournament && row.status === 'BOOKED' && <Button size="small" type="primary" disabled={busy}
                                 onClick={() => queue([...queued.map(item => item.id), row.id])}>签到并排场</Button>}
-                            {row.status === 'QUEUED' && <>
+                            {canOperateLiveTournament && row.status === 'QUEUED' && <>
                                 <Button size="small" disabled={busy || queued[0]?.id === row.id} onClick={() => move(row.id, -1)}>上移</Button>
                                 <Button size="small" disabled={busy || queued[queued.length - 1]?.id === row.id} onClick={() => move(row.id, 1)}>下移</Button>
                             </>}
-                            {['BOOKED', 'QUEUED', 'ABSENT'].includes(row.status) && <Button size="small" disabled={busy}
+                            {canOperateLiveTournament && ['BOOKED', 'QUEUED', 'ABSENT'].includes(row.status) && <Button size="small" disabled={busy}
                                 onClick={() => { setRescheduling(row); setTargetDayId(undefined); }}>调整场次</Button>}
-                            {['BOOKED', 'QUEUED'].includes(row.status) && <Popconfirm title="标记缺席并移出候赛队列？"
+                            {canOperateLiveTournament && ['BOOKED', 'QUEUED'].includes(row.status) && <Popconfirm title="标记缺席并移出候赛队列？"
                                 onConfirm={() => queue(queued.filter(item => item.id !== row.id).map(item => item.id), row.id)}>
                                 <Button size="small" danger disabled={busy}>缺席</Button>
                             </Popconfirm>}
