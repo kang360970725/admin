@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { history, useLocation, useParams } from '@umijs/max';
-import { Alert, Button, Space } from 'antd';
+import { Alert, Button, Modal, Space } from 'antd';
 import { getLiveTournamentProjection, operateLiveTournament } from '@/services/api';
 import './stage.less';
 
@@ -62,6 +62,7 @@ export default function TournamentStage() {
     const [now, setNow] = useState(Date.now());
     const [view, setView] = useState(searchParams.get('view') || 'stage');
     const [board, setBoard] = useState<Board>('overall');
+    const [rulesOpen, setRulesOpen] = useState(false);
     const mutationVersion = useRef(0);
     const mutationInFlight = useRef(false);
 
@@ -158,7 +159,7 @@ export default function TournamentStage() {
     const boardRows = stage?.leaderboard?.[board] ?? [];
     const boardValue = (row: BoardRow) => board === 'overall'
         ? `${row.points ?? 0} 分`
-        : board === 'byKills' ? `${row.kills ?? 0} 杀` : `${((row.firstKillElapsedMs ?? 0) / 1000).toFixed(1)} 秒`;
+        : board === 'byKills' ? `${row.kills ?? 0} 次淘汰` : `${((row.firstKillElapsedMs ?? 0) / 1000).toFixed(1)} 秒`;
     const salesThreshold = Math.max(1, stage?.sales.threshold ?? 1);
     const salesLimit = Math.max(salesThreshold, stage?.sales.limit ?? 70);
     const salesUnlocked = Boolean(stage?.sales.booked) || (stage?.sales.paid ?? 0) >= salesThreshold;
@@ -207,6 +208,7 @@ export default function TournamentStage() {
                     {!preheatMode && <Button type={view === 'stage' ? 'primary' : 'default'} onClick={() => setView('stage')}>直播转盘</Button>}
                     <Button type={view === 'sales' ? 'primary' : 'default'} onClick={() => setView('sales')}>售票进度</Button>
                     {!preheatMode && <Button type={view === 'board' ? 'primary' : 'default'} onClick={() => setView('board')}>赛事榜单</Button>}
+                    {controlMode && !preheatMode && <Button onClick={() => setRulesOpen(true)}>比赛赛制</Button>}
                 </Space>
                 {authenticated && <Button
                     className="tournament-stage__screen-link"
@@ -221,6 +223,42 @@ export default function TournamentStage() {
                 />}
             </div>
         </header>
+        {controlMode && !preheatMode && <Modal
+            className="tournament-rules"
+            title="比赛赛制"
+            centered
+            width={640}
+            open={rulesOpen}
+            onCancel={() => setRulesOpen(false)}
+            footer={<Button type="primary" onClick={() => setRulesOpen(false)}>关闭</Button>}
+        >
+            <dl className="tournament-rules__scores">
+                <div><dt>每次有效淘汰</dt><dd>1 <small>分</small></dd></div>
+                <div><dt>单局上限</dt><dd>6 <small>分</small></dd></div>
+                <div><dt>两局上限</dt><dd>12 <small>分</small></dd></div>
+            </dl>
+            <section className="tournament-rules__section">
+                <h3>上场与对局</h3>
+                <p>主播核对并确认上场后，转盘抽取陪练。同一位陪练陪同选手打两局，全程使用「<strong>航天基地·绝密</strong>」。</p>
+                <p>陪练负责提供信息和行动路线，<strong>默认不开枪</strong>，按选手指挥行动。选手装备不限，陪练统一使用 5 套双枪 AWM。</p>
+                <p>打完第一局后缺席第二局，第二局按<strong>弃权计 0 分</strong>。</p>
+            </section>
+            <section className="tournament-rules__section">
+                <h3>有效淘汰与加分</h3>
+                <p>选手是唯一得分方。<strong>选手先击倒</strong>对手，由选手或陪练完成淘汰，分数均记给选手。<strong>陪练先击倒</strong>，即使选手完成淘汰也不计分。</p>
+                <p><strong className="tournament-rules__key">5 分钟内</strong>完成有效淘汰<strong className="tournament-rules__key">额外加 1 分</strong>，<strong className="tournament-rules__key">20 分钟以后</strong>完成的<strong className="tournament-rules__key">淘汰不计分</strong>。加分计入<strong className="tournament-rules__key">单局 6 分上限</strong>。</p>
+            </section>
+            <section className="tournament-rules__section">
+                <h3>总榜排序</h3>
+                <ol className="tournament-rules__ranking">
+                    <li><strong>总积分</strong>高者优先，<strong>至少完成一次有效淘汰</strong>才可上榜</li>
+                    <li><strong className="tournament-rules__key">单局最高有效淘汰数</strong>多者优先</li>
+                    <li><strong>最快首淘汰</strong>耗时短者优先，同耗时则先达成者优先</li>
+                    <li><strong>确认上场时间</strong>早者优先</li>
+                </ol>
+            </section>
+            <p className="tournament-rules__note">每局成绩发布后更新总榜、单局淘汰榜和最快首淘汰榜，赛后锁榜。<strong>前 32 名</strong>获奖，两局<strong>满 12 分</strong>可获「天才板板」称号。</p>
+        </Modal>}
         <section className="tournament-stage__ad-rotator" aria-label="赛事合作信息">
             <article className="tournament-stage__ad is-bluecat">
                 <span>OFFICIAL GAMING SERVICE</span><strong>蓝猫爽打</strong><em>专业陪练 · 快乐上分 · 全程守护</em><b>BLUECAT PLAY</b>
@@ -246,8 +284,8 @@ export default function TournamentStage() {
             </div>
             <Space wrap className="tournament-stage__board-tabs">
                 <Button type={board === 'overall' ? 'primary' : 'default'} onClick={() => setBoard('overall')}>总榜</Button>
-                <Button type={board === 'byKills' ? 'primary' : 'default'} onClick={() => setBoard('byKills')}>单局击杀</Button>
-                <Button type={board === 'byFirstKill' ? 'primary' : 'default'} onClick={() => setBoard('byFirstKill')}>最快首杀</Button>
+                <Button type={board === 'byKills' ? 'primary' : 'default'} onClick={() => setBoard('byKills')}>单局淘汰</Button>
+                <Button type={board === 'byFirstKill' ? 'primary' : 'default'} onClick={() => setBoard('byFirstKill')}>最快首淘汰</Button>
             </Space>
             {boardRows.length ? <>
                 <div className="tournament-stage__podium">

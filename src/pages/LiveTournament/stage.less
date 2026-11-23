@@ -457,3 +457,89 @@
   .tournament-stage__live i, .tournament-stage__ticker-track, .tournament-stage__ad, .tournament-stage__ad-dots i, .tournament-stage__wheel-aura, .tournament-stage__ticks, .tournament-stage__hub.is-actionable, .tournament-stage__progress-fill::before { animation: none; }
   .tournament-stage__ad:first-of-type { opacity: 1; transform: none; }
 }
+
+.tournament-rules {
+  max-width: calc(100vw - 24px);
+
+  .ant-modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 40px);
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #304d6c;
+    border-radius: 18px;
+    background: #101d30;
+    color: #e8f0fb;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .45);
+  }
+
+  .ant-modal-header {
+    margin: 0;
+    padding: 21px 24px 18px;
+    background: linear-gradient(110deg, #173957, #14263f 72%);
+    border-bottom: 1px solid #304d6c;
+  }
+
+  .ant-modal-title {
+    color: #f4f8ff;
+    font-size: 24px;
+    line-height: 1.3;
+  }
+
+  .ant-modal-close {
+    top: 20px;
+    inset-inline-end: 20px;
+    color: #d2dff0;
+
+    &:hover,
+    &:focus-visible { color: white; background: #274460; }
+  }
+
+  .ant-modal-body { overflow-y: auto; padding: 20px 24px 16px; }
+  .ant-modal-footer { margin: 0; padding: 12px 24px; border-top: 1px solid #2a405a; }
+  .ant-modal-footer .ant-btn { min-width: 88px; }
+
+  &__scores {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0 0 18px;
+
+    div { padding: 10px 6px; text-align: center; background: #132d46; border: 1px solid #2d516e; border-radius: 10px; }
+    dt { color: #c4d6ec; }
+    dd { margin: 2px 0 0; color: #84e4ff; font-size: 30px; line-height: 1.15; font-weight: 700; font-variant-numeric: tabular-nums; }
+    small { font-size: 13px; font-weight: 500; }
+  }
+
+  &__section {
+    margin-bottom: 16px;
+    h3 { margin: 0 0 7px; color: #f4f8ff; font-size: 16px; }
+    p { margin: 3px 0 0; color: #cfdbeb; line-height: 1.55; }
+  }
+
+  &__ranking {
+    margin: 0;
+    padding: 3px 12px 3px 32px;
+    border: 1px solid #2a405a;
+    border-radius: 10px;
+    background: #152439;
+
+    li { padding: 6px 0 6px 4px; color: #cfdbeb; }
+    li + li { border-top: 1px solid #2a405a; }
+    li::marker { color: #84e4ff; font-weight: 700; }
+    strong { margin-right: 8px; color: #f4f8ff; }
+  }
+
+  &__section p strong,
+  &__note strong { color: #f4f8ff; }
+
+  strong.tournament-rules__key { color: #84e4ff; }
+
+  &__note { margin: 0; color: #b5c7de; line-height: 1.5; }
+
+  @media (max-width: 480px) {
+    .ant-modal-header, .ant-modal-body, .ant-modal-footer { padding-inline: 14px; }
+    &__scores { gap: 6px; }
+  }
+}

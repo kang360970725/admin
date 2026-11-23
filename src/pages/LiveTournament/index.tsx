@@ -200,7 +200,7 @@ export default function LiveTournamentPage() {
                                         <Typography.Text>第{roundNumber}局</Typography.Text>
                                         <Tag color={score?.publishedAt ? 'green' : score ? 'gold' : 'default'}>
                                             {score?.forfeited ? '弃权' : score
-                                                ? `${score.kills} 杀${score.kills > 0 && score.firstKillElapsedMs != null ? ` · ${(score.firstKillElapsedMs / 1000).toFixed(3).replace(/\.?0+$/, '')} 秒首杀` : ''}`
+                                                ? `${score.kills} 次淘汰${score.kills > 0 && score.firstKillElapsedMs != null ? ` · ${(score.firstKillElapsedMs / 1000).toFixed(3).replace(/\.?0+$/, '')} 秒首淘汰` : ''}`
                                                 : '待录入'}
                                         </Tag>
                                         {score && <Tag color={pending ? 'gold' : 'green'}>{pending ? '待发布' : '已发布'}</Tag>}
@@ -354,13 +354,13 @@ export default function LiveTournamentPage() {
                     setScoring(undefined);
                     message.success('成绩已保存，可单独发布到榜单');
                 })}>
-                    <Form.Item name="kills" label="原始击杀数" extra="单局计分最多 6 分，原始击杀数仍用于排序。" rules={[{ required: true }]}>
+                    <Form.Item name="kills" label="有效淘汰数" extra="按正式赛规核对后录入，仅统计有效淘汰。此数量用于同分排序。" rules={[{ required: true }]}>
                         <InputNumber min={0} precision={0} />
                     </Form.Item>
-                    <Form.Item name="firstKillSeconds" label="首杀耗时（秒）"
-                        extra={Number(kills) > 0 ? '从本局开打到首次击杀的耗时，支持 0.001 秒精度。' : '击杀数大于 0 后填写；0 杀无需首杀时间。'}
+                    <Form.Item name="firstKillSeconds" label="首淘汰耗时（秒）"
+                        extra={Number(kills) > 0 ? '从本局开打到首次有效淘汰的耗时，支持 0.001 秒精度。' : '有效淘汰数大于 0 时填写。'}
                         rules={[{ validator: (_, value) => Number(kills) > 0 && (value === undefined || value === null)
-                            ? Promise.reject(new Error('请输入首杀耗时')) : Promise.resolve() }]}>
+                            ? Promise.reject(new Error('请输入首淘汰耗时')) : Promise.resolve() }]}>
                         <InputNumber min={0} precision={3} step={0.001} disabled={Number(kills) <= 0}
                             style={{ width: '100%' }} placeholder="例如 12.386" />
                     </Form.Item>
