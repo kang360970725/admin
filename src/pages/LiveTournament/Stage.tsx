@@ -37,6 +37,16 @@ interface StageState {
     providers: { id: number; name: string | null; serviceRank?: string }[];
 }
 
+const prizeTiers = [
+    { rank: '第 1 名', amount: '1,600' },
+    { rank: '第 2 名', amount: '1,100' },
+    { rank: '第 3 名', amount: '800' },
+    { rank: '第 4–8 名', amount: '500' },
+    { rank: '第 9–16 名', amount: '300' },
+    { rank: '第 17–24 名', amount: '150' },
+    { rank: '第 25–32 名', amount: '50' },
+];
+
 const colors = ['#0f6fff', '#7647ff', '#00a7a0', '#d7468a', '#d88317', '#2460a8'];
 const placeholderProviders = Array.from({ length: 8 }, (_, index) => ({
     id: -(index + 1),
@@ -257,7 +267,28 @@ export default function TournamentStage() {
                     <li><strong>确认上场时间</strong>早者优先</li>
                 </ol>
             </section>
-            <p className="tournament-rules__note">每局成绩发布后更新总榜、单局淘汰榜和最快首淘汰榜，赛后锁榜。<strong>前 32 名</strong>获奖，两局<strong>满 12 分</strong>可获「天才板板」称号。</p>
+            <p className="tournament-rules__note">每局成绩发布后更新总榜、单局淘汰榜和最快首淘汰榜，赛后锁榜。两局<strong>满 12 分</strong>可获「天才板板」称号。</p>
+            <section className="tournament-rules__prizes" aria-labelledby="tournament-prizes-title">
+                <header>
+                    <div>
+                        <h3 id="tournament-prizes-title">赛事奖金</h3>
+                        <p>总榜前 32 名获奖</p>
+                    </div>
+                    <div className="tournament-rules__prize-total">
+                        <span>总奖池</span>
+                        <strong>¥10,000</strong>
+                    </div>
+                </header>
+                <table aria-labelledby="tournament-prizes-title">
+                    <thead><tr><th scope="col">总榜名次</th><th scope="col">每人奖金</th></tr></thead>
+                    <tbody>
+                        {prizeTiers.map(({ rank, amount }) => <tr key={rank}>
+                            <th scope="row">{rank}</th>
+                            <td>¥{amount}</td>
+                        </tr>)}
+                    </tbody>
+                </table>
+            </section>
         </Modal>}
         <section className="tournament-stage__ad-rotator" aria-label="赛事合作信息">
             <article className="tournament-stage__ad is-bluecat">
