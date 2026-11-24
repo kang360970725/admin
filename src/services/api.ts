@@ -472,6 +472,12 @@ export async function exitStaffShop(
     });
 }
 
+export async function reverseStaffExit(id: number) {
+    return request<{ restoredDeposit: number }>(`${API_BASE}/users/${id}/staff-exit-reverse`, {
+        method: 'POST',
+    });
+}
+
 export async function getStaffExitPreview(id: number) {
     return request<StaffExitPreview>(`${API_BASE}/users/${id}/staff-exit-preview`, {
         method: 'POST',
@@ -2675,6 +2681,7 @@ export interface EquipmentRentalContract {
 export interface EquipmentRentalBill {
     id: number;
     contractId: number;
+    billingSlot?: number;
     userId: number;
     billMonth: string;
     periodStart?: string;
@@ -2687,6 +2694,7 @@ export interface EquipmentRentalBill {
     confirmedAt?: string | null;
     generatedAt?: string;
     walletTxId?: number | null;
+    walletTx?: { amount: number };
     remark?: string | null;
     totalAssets?: number;
     insufficient?: boolean;
@@ -2742,13 +2750,14 @@ export async function updateEquipmentRentalContract(data: {
     status?: 'ACTIVE' | 'INACTIVE';
     remark?: string;
 }) {
-    return request<EquipmentRentalContract>(`${API_BASE}/equipment-rental-fees/contracts/update`, {
+    return request<EquipmentRentalContract & { reconciliations?: NonNullable<Awaited<ReturnType<typeof generateEquipmentRentalBills>>['reconciliations']> }>(`${API_BASE}/equipment-rental-fees/contracts/update`, {
         method: 'POST',
         data,
     });
 }
 
 export async function listEquipmentRentalBills(data: {
+    contractId?: number;
     billMonth?: string;
     status?: string;
     userId?: number;
@@ -2774,7 +2783,7 @@ export async function listEquipmentRentalBills(data: {
     );
 }
 
-export async function generateEquipmentRentalBills(data: { month: string }) {
+export async function generateEquipmentRentalBills(data: { month: string; contractId?: number }) {
     return request<{
         month: string;
         affected: number;

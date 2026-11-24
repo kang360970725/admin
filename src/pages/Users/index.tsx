@@ -3,7 +3,7 @@ import {PageContainer, ProTable} from '@ant-design/pro-components';
 import {Alert, Badge, Button, Empty, message, Popconfirm, Space, Tag, Tooltip, Card, Statistic, Row, Col, Switch, Modal, Drawer, Descriptions, List, Form, Select, Checkbox, Input, Divider, InputNumber, Tabs, DatePicker, Collapse} from 'antd';
 import {useAccess, useLocation} from 'umi';
 import dayjs from 'dayjs';
-import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantStaffExitLoginGrace, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
+import {adminSetStaffActivityEnabled, adjustMemberLevel, clearStaffAssets, createUserMemberGameCard, deleteUser, deleteUserMemberGameCard, exitStaffShop, getAvailableRatings, getCouponTemplates, getMemberLevelConfigs, getMemberRechargeOrders, getMemberRechargePlans, getStaffExitPreview, getStaffRuleEngineConfig, getStaffWalletStatistics, getUserById, getUserMemberBenefits, getUserMemberGameCards, getUsers, grantStaffExitLoginGrace, grantUserCoupon, manualMemberRecharge, previewMemberBalanceLotRepair, repairMemberBalanceLots, reverseStaffExit, setUserMemberGameCardPrimary, updateUser, useUserMemberBenefit} from '@/services/api';
 import { formatMemberBenefitInputUnit, formatMemberBenefitQuantity } from '@/utils/memberBenefitUnit';
 import type { StaffRuleEngineConfig } from '@/services/api';
 import CreateUserModal from './components/CreateUserModal';
@@ -945,6 +945,24 @@ export default function UsersPage() {
                     <Button type={compact ? 'default' : 'link'} size="small" danger onClick={() => openStaffClear(record)}>
                         清退
                     </Button>
+                ) : null}
+                {isStaffScene && access.canStaffExit && String(record?.staffEmploymentStatus || '') === 'EXITED' ? (
+                    <Button type={compact ? 'default' : 'link'} size="small" onClick={() => Modal.confirm({
+                        title: '确认撤销退店？',
+                        content: '仅适用于符合条件的手动退店。系统会校验提现、退店费用和余额，再从可用余额恢复原保证金。',
+                        okText: '撤销退店',
+                        cancelText: '取消',
+                        onOk: async () => {
+                            try {
+                                const result = await reverseStaffExit(Number(record.id));
+                                message.success(`已恢复在店状态，原保证金 ¥${Number(result.restoredDeposit).toFixed(2)}`);
+                                actionRef.current?.reload();
+                            } catch (error: any) {
+                                message.error(error?.response?.data?.message || error?.data?.message || error?.message || '撤销退店失败');
+                                throw error;
+                            }
+                        },
+                    })}>撤销退店</Button>
                 ) : null}
                 {isStaffScene && access.canStaffExit && String(record?.staffEmploymentStatus || '') === 'EXITED' ? (
                     <Button

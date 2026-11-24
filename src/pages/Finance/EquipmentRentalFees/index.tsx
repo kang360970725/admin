@@ -1,5 +1,6 @@
+import BillingReview from './BillingReview';
 import React, { useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, List, message, Modal, Popconfirm, Row, Select, Space, Statistic, Tabs, Tag } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, List, Table, message, Modal, Popconfirm, Row, Segmented, Select, Space, Statistic, Tabs, Tag } from 'antd';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import dayjs from 'dayjs';
@@ -20,10 +21,74 @@ import {
 import { maskPhone } from '@/utils/privacy';
 
 const currentShanghaiMonth = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date());
+const latestGeneratableMonth = () => {
+  const today = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return dayjs(today).add(7, 'day').startOf('month').subtract(1, 'month').format('YYYY-MM');
+};
 const billingDate = (value?: string) => value?.slice(0, 10) || '-';
 const money = (v: any) => Number(v ?? 0).toFixed(2);
 const monthValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM') : String(value || ''));
 const dateValue = (value: any) => (dayjs.isDayjs(value) ? value.format('YYYY-MM-DD') : String(value || ''));
+
+const isVoided = (bill: EquipmentRentalBill) =>
+  !bill.walletTxId && Number(bill.amount) === 0 && /^已作废[：:]/.test(bill.remark || '');
+
+const billStatus = (bill: EquipmentRentalBill) => {
+  if (isVoided(bill)) return '已作废';
+  if (bill.status === 'WAIVED') return '已减免';
+  if (bill.status === 'PENDING') return '待确认';
+  if (bill.walletTxId) return '已扣费';
+  return Number(bill.amount) === 0 ? '零金额结清' : '已缴费';
+};
+
+function reviewContractPeriods(contract: EquipmentRentalContract, bills: EquipmentRentalBill[]) {
+  const end = contract.endDate?.slice(0, 10)
+    || (contract.endMonth ? dayjs(contract.endMonth + '-01').endOf('month').format('YYYY-MM-DD') : undefined);
+  const cutoffUnknown = contract.status === 'INACTIVE' && !end;
+  const lastClosedDay = dayjs(currentShanghaiMonth() + '-01').subtract(1, 'day').format('YYYY-MM-DD');
+  const reviewEnd = end && end < lastClosedDay ? end : lastClosedDay;
+  let cursor = contract.startDate?.slice(0, 10) || contract.startMonth + '-01';
+  const gaps: string[] = [];
+  const issues = new Map<number, string[]>();
+  const activeBills = bills.filter((bill) => !isVoided(bill) && bill.periodStart && bill.periodEnd);
+  activeBills.forEach((bill, index) => {
+    const from = billingDate(bill.periodStart);
+    const to = billingDate(bill.periodEnd);
+    const flags = [];
+    if (end && to > end) flags.push('超截止日');
+    const overlaps = activeBills.filter((other, otherIndex) => otherIndex !== index
+      && billingDate(other.periodStart) <= to && billingDate(other.periodEnd) >= from);
+    if (overlaps.length) flags.push(`与 ${overlaps.map((other) => '#' + other.id).join('、')} 重叠`);
+    if (flags.length) issues.set(bill.id, flags);
+    if (from > cursor && cursor <= reviewEnd) {
+      gaps.push(`${cursor} ~ ${from > reviewEnd ? reviewEnd : dayjs(from).subtract(1, 'day').format('YYYY-MM-DD')}`);
+    }
+    const next = dayjs(to).add(1, 'day').format('YYYY-MM-DD');
+    if (next > cursor) cursor = next;
+  });
+  if (cursor <= reviewEnd) gaps.push(`${cursor} ~ ${reviewEnd}`);
+  return { end, cutoffUnknown, gaps: cutoffUnknown ? [] : gaps, issues };
+}
+
+type BillRow = EquipmentRentalBill & { children?: EquipmentRentalBill[] };
+
+function groupBillsByProvider(bills: EquipmentRentalBill[]): BillRow[] {
+  const groups = new Map<number, EquipmentRentalBill[]>();
+  for (const bill of bills) {
+    const group = groups.get(bill.userId);
+    if (group) group.push(bill);
+    else groups.set(bill.userId, [bill]);
+  }
+  return Array.from(groups.values(), (children) => ({
+    ...children[0],
+    id: -children[0].userId,
+    amount: children.reduce((total, bill) => total + Number(bill.amount), 0),
+    remainingAmount: children.reduce((total, bill) => total + Number(bill.remainingAmount), 0),
+    children,
+  }));
+}
 
 const EquipmentRentalFeesPage: React.FC = () => {
   const contractActionRef = useRef<ActionType>();
@@ -38,9 +103,41 @@ const EquipmentRentalFeesPage: React.FC = () => {
   const [reconciliations, setReconciliations] = useState<any[]>([]);
   const [reconciliationOpen, setReconciliationOpen] = useState(false);
   const [logBill, setLogBill] = useState<EquipmentRentalBill | null>(null);
+  const [contractHistory, setContractHistory] = useState<EquipmentRentalContract | null>(null);
+  const historyRequest = useRef(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyBills, setHistoryBills] = useState<EquipmentRentalBill[]>([]);
+  const [historyError, setHistoryError] = useState(false);
+  const [exceptionsOnly, setExceptionsOnly] = useState(false);
+
+  const openContractHistory = async (contract: EquipmentRentalContract) => {
+    const requestId = ++historyRequest.current;
+    setContractHistory(contract);
+    setHistoryBills([]);
+    setHistoryError(false);
+    setExceptionsOnly(false);
+    setHistoryLoading(true);
+    try {
+      const first = await listEquipmentRentalBills({ contractId: contract.id, page: 1, limit: 100 });
+      const pages = [first];
+      for (let page = 2; page <= Math.ceil(first.total / 100); page += 1) {
+        pages.push(await listEquipmentRentalBills({ contractId: contract.id, page, limit: 100 }));
+      }
+      if (requestId !== historyRequest.current) return;
+      setHistoryBills(pages.flatMap((result) => result.list).sort((a, b) =>
+        (a.periodStart || '').localeCompare(b.periodStart || '') || a.id - b.id));
+    } catch {
+      if (requestId === historyRequest.current) setHistoryError(true);
+    } finally {
+      if (requestId === historyRequest.current) setHistoryLoading(false);
+    }
+  };
+
   const [submitting, setSubmitting] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [staffOptions, setStaffOptions] = useState<Array<{ label: string; value: number }>>([]);
+  const [reviewRevision, setReviewRevision] = useState(0);
+  const [billView, setBillView] = useState<'grouped' | 'flat'>('grouped');
   const [billStats, setBillStats] = useState({
     billAmount: 0,
     chargedAmount: 0,
@@ -135,14 +232,19 @@ const EquipmentRentalFeesPage: React.FC = () => {
       title: '操作',
       valueType: 'option',
       width: 260,
-      render: (_, row) => [<a key="edit" onClick={() => openEditContract(row)}>编辑</a>],
+      render: (_, row) => [
+        <a key="history" onClick={() => void openContractHistory(row)}>账期核对</a>,
+        <a key="edit" onClick={() => openEditContract(row)}>编辑</a>,
+      ],
     },
   ], []);
 
   const billColumns = useMemo<ProColumns<EquipmentRentalBill>[]>(() => [
-    { title: '合同 ID', dataIndex: 'contractId', width: 95, search: false },
+    { title: '计费区间', dataIndex: 'periodStart', width: 220, search: false, render: (_, row) => `${billingDate(row.periodStart)} ~ ${billingDate(row.periodEnd)}` },
+    { title: '合同 ID', dataIndex: 'contractId', width: 95, valueType: 'digit' },
     {
-      title: '月份',
+      title: '归档月份',
+      hideInTable: true,
       dataIndex: 'billMonth',
       width: 120,
       valueType: 'dateMonth',
@@ -174,27 +276,12 @@ const EquipmentRentalFeesPage: React.FC = () => {
       valueEnum: { PENDING: { text: '待确认' }, PAID: { text: '已缴费' }, WAIVED: { text: '已减免' } },
       render: (_, row) => {
         const color = row.status === 'PAID' ? 'success' : row.status === 'WAIVED' ? 'default' : 'warning';
-        const label = row.status === 'PENDING'
-          ? '待确认'
-          : row.status === 'WAIVED'
-            ? '已减免'
-            : row.walletTxId
-              ? '已扣费'
-              : '已缴费';
-        return <Tag color={color}>{label}</Tag>;
+        const label = billStatus(row);
+        return <Tag color={isVoided(row) ? 'default' : color}>{label}</Tag>;
       },
     },
     { title: '应缴', dataIndex: 'amount', width: 100, search: false, render: (_, row) => `¥${money(row.amount)}` },
-    { title: '已缴', dataIndex: 'paidAmount', width: 100, search: false, render: (_, row) => `¥${money(row.paidAmount)}` },
-    { title: '已退', dataIndex: 'refundedAmount', width: 100, search: false, render: (_, row) => Number(row.refundedAmount || 0) > 0 ? <Tag color="blue">¥{money(row.refundedAmount)}</Tag> : '-' },
-    { title: '未扣', dataIndex: 'remainingAmount', width: 100, search: false, render: (_, row) => `¥${money(row.remainingAmount)}` },
-    {
-      title: '计费周期',
-      dataIndex: 'periodStart',
-      width: 210,
-      search: false,
-      render: (_, row) => `${billingDate(row.periodStart)} ~ ${billingDate(row.periodEnd)}`,
-    },
+    { title: '待缴', dataIndex: 'remainingAmount', width: 100, search: false, render: (_, row) => `¥${money(row.remainingAmount)}` },
     {
       title: '缴费日',
       dataIndex: 'dueAt',
@@ -203,28 +290,12 @@ const EquipmentRentalFeesPage: React.FC = () => {
       render: (_, row) => row.dueAt ? dayjs(row.dueAt).format('YYYY-MM-DD') : '-',
     },
     {
-      title: '总资产',
-      dataIndex: 'totalAssets',
-      width: 120,
-      search: false,
-      render: (_, row) => (
-        <Tag color={row.insufficient ? 'red' : 'blue'}>¥{money(row.totalAssets)}</Tag>
-      ),
-    },
-    {
       title: '风险',
       dataIndex: 'onlyRisk',
       valueType: 'select',
       width: 120,
       valueEnum: { true: { text: '仅余额不足' } },
       render: (_, row) => row.insufficient ? <Tag color="red">余额不足</Tag> : <Tag>正常</Tag>,
-    },
-    {
-      title: '确认时间',
-      dataIndex: 'confirmedAt',
-      width: 160,
-      search: false,
-      render: (_, row) => row.confirmedAt ? dayjs(row.confirmedAt).format('YYYY-MM-DD HH:mm') : '-',
     },
     {
       title: '操作',
@@ -241,6 +312,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
               await payEquipmentRentalBill({ billId: row.id });
               message.success('已手动缴费');
               billActionRef.current?.reload();
+            setReviewRevision((value) => value + 1);
             } catch (e: any) {
               message.error(e?.data?.message || e?.message || '操作失败');
             }
@@ -270,6 +342,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
               await waiveEquipmentRentalBill({ billId: row.id });
               message.success('已减免');
               billActionRef.current?.reload();
+            setReviewRevision((value) => value + 1);
             } catch (e: any) {
               message.error(e?.data?.message || e?.message || '操作失败');
             }
@@ -281,13 +354,33 @@ const EquipmentRentalFeesPage: React.FC = () => {
         if (row.canRefund && Number(row.refundableAmount || 0) > 0) {
           actions.push(<a key="refund" onClick={() => openRefund(row)}>退费</a>);
         }
-        if ((row.adjustmentLogs || []).length > 0) {
-          actions.push(<a key="logs" onClick={() => setLogBill(row)}>操作记录</a>);
-        }
+        actions.unshift(<a key="details" onClick={() => setLogBill(row)}>账单明细</a>);
         return actions;
       },
     },
   ], [staffLoading, staffOptions]);
+
+  const groupedBillColumns: ProColumns<BillRow>[] = billColumns.map((column) => ({
+    ...column,
+    render: (value, row, index, action, schema) => {
+      if (!row.children) return column.render ? column.render(value, row, index, action, schema) : value;
+      switch (column.dataIndex) {
+        case 'periodStart':
+          return <strong>{row.user?.name || maskPhone(row.user?.phone) || `服务者 #${row.userId}`}</strong>;
+        case 'userId':
+          return `${row.children.length} 张账单`;
+        case 'amount':
+          return `¥${money(row.amount)}`;
+        case 'remainingAmount':
+          return `¥${money(row.remainingAmount)}`;
+        default:
+          return '—';
+      }
+    },
+  }));
+
+  const historyReview = contractHistory && !historyLoading && !historyError
+    ? reviewContractPeriods(contractHistory, historyBills) : null;
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -295,19 +388,15 @@ const EquipmentRentalFeesPage: React.FC = () => {
         type="warning"
         showIcon
         message="设备租赁费需陪玩主动确认后扣款"
-        description="系统每月自动生成账单；提前生成的未来账单不会影响提现，进入缴费日前 1 天后才会在提现时预留。扣费时允许可用余额变负，但扣费后可用余额 + 冻结余额的总资产不能小于 0。"
+        description="系统每月生成上月账单。进入缴费日前 1 天后才会在提现时预留应缴费用。"
       />
 
-      <Row gutter={[12, 12]}>
-        <Col xs={12} md={4}><Card size="small"><Statistic title="账单金额" value={billStats.billAmount} precision={2} prefix="¥" /></Card></Col>
-        <Col xs={12} md={5}><Card size="small"><Statistic title="收费累计" value={billStats.chargedAmount} precision={2} prefix="¥" /></Card></Col>
-        <Col xs={12} md={5}><Card size="small"><Statistic title="其他渠道收取" value={billStats.externalPaidAmount} precision={2} prefix="¥" /></Card></Col>
-        <Col xs={12} md={5}><Card size="small"><Statistic title="减免" value={billStats.waivedAmount} precision={2} prefix="¥" /></Card></Col>
-        <Col xs={12} md={5}><Card size="small"><Statistic title="未结清" value={billStats.remainingAmount} precision={2} prefix="¥" /></Card></Col>
-      </Row>
+
 
       <Tabs
+        defaultActiveKey="review"
         items={[
+          { key: 'review', label: '账单核对', children: <BillingReview onBill={setLogBill} revision={reviewRevision} /> },
           {
             key: 'contracts',
             label: '租赁配置',
@@ -330,15 +419,31 @@ const EquipmentRentalFeesPage: React.FC = () => {
           },
           {
             key: 'bills',
-            label: '租赁账单',
+            label: '账单明细',
             children: (
-              <ProTable<EquipmentRentalBill>
+              <Space direction="vertical" size="middle" style={{ display: 'flex' }}>
+                <Row gutter={[12, 12]}>
+                  <Col xs={12} md={4}><Card size="small"><Statistic title="账单金额" value={billStats.billAmount} precision={2} prefix="¥" /></Card></Col>
+                  <Col xs={12} md={5}><Card size="small"><Statistic title="钱包结算金额" value={billStats.chargedAmount} precision={2} prefix="¥" /></Card></Col>
+                  <Col xs={12} md={5}><Card size="small"><Statistic title="其他渠道结算" value={billStats.externalPaidAmount} precision={2} prefix="¥" /></Card></Col>
+                  <Col xs={12} md={5}><Card size="small"><Statistic title="减免" value={billStats.waivedAmount} precision={2} prefix="¥" /></Card></Col>
+                  <Col xs={12} md={5}><Card size="small"><Statistic title="未结清" value={billStats.remainingAmount} precision={2} prefix="¥" /></Card></Col>
+                </Row>
+              <ProTable<BillRow>
                 rowKey="id"
                 actionRef={billActionRef}
-                columns={billColumns}
+                columns={billView === 'grouped' ? groupedBillColumns : billColumns}
+                params={{ billView }}
+                scroll={{ x: 1250 }}
                 search={{ labelWidth: 86 }}
-                pagination={{ pageSize: 20 }}
+                pagination={billView === 'grouped' ? false : { pageSize: 20 }}
                 toolBarRender={() => [
+                  <Segmented
+                    key="view"
+                    value={billView}
+                    options={[{ label: '按服务者', value: 'grouped' }, { label: '逐张账单', value: 'flat' }]}
+                    onChange={(value) => setBillView(value as 'grouped' | 'flat')}
+                  />,
                   <Button
                     key="generate"
                     onClick={() => {
@@ -350,14 +455,26 @@ const EquipmentRentalFeesPage: React.FC = () => {
                   </Button>,
                 ]}
                 request={async (params: any) => {
-                  const res = await listEquipmentRentalBills({
-                    page: params.current,
-                    limit: params.pageSize,
+                  const grouped = params.billView === 'grouped';
+                  const query = {
                     billMonth: params.billMonth ? monthValue(params.billMonth) : undefined,
                     status: params.status,
+                    contractId: params.contractId ? Number(params.contractId) : undefined,
                     userId: params.userId ? Number(params.userId) : undefined,
                     onlyRisk: params.onlyRisk === true || params.onlyRisk === 'true',
+                  };
+                  const res = await listEquipmentRentalBills({
+                    ...query,
+                    page: grouped ? 1 : params.current,
+                    limit: grouped ? 100 : params.pageSize,
                   });
+                  const bills = res?.list || [];
+                  if (grouped) {
+                    for (let page = 2; page <= Math.ceil(Number(res?.total || 0) / 100); page += 1) {
+                      const next = await listEquipmentRentalBills({ ...query, page, limit: 100 });
+                      bills.push(...next.list);
+                    }
+                  }
                   setBillStats({
                     billAmount: Number(res?.stats?.billAmount || 0),
                     chargedAmount: Number(res?.stats?.chargedAmount || 0),
@@ -365,9 +482,11 @@ const EquipmentRentalFeesPage: React.FC = () => {
                     waivedAmount: Number(res?.stats?.waivedAmount || 0),
                     remainingAmount: Number(res?.stats?.remainingAmount || 0),
                   });
-                  return { data: res?.list || [], total: Number(res?.total || 0), success: true };
+                  const data = grouped ? groupBillsByProvider(bills) : bills;
+                  return { data, total: grouped ? data.length : Number(res?.total || 0), success: true };
                 }}
               />
+              </Space>
             ),
           },
       ]}
@@ -395,6 +514,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
             setExternalPaidOpen(false);
             setExternalPaidBill(null);
             billActionRef.current?.reload();
+            setReviewRevision((value) => value + 1);
           } catch (e: any) {
             if (!e?.errorFields) message.error(e?.data?.message || e?.message || '确认失败');
           } finally {
@@ -452,6 +572,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
             setRefundOpen(false);
             setRefundBill(null);
             billActionRef.current?.reload();
+            setReviewRevision((value) => value + 1);
           } catch (e: any) {
             if (!e?.errorFields) message.error(e?.data?.message || e?.message || '退费失败');
           } finally {
@@ -518,8 +639,56 @@ const EquipmentRentalFeesPage: React.FC = () => {
         />
       </Modal>
 
-      <Modal title={`账单 #${logBill?.id || '-'} 操作记录`} open={Boolean(logBill)} footer={null} onCancel={() => setLogBill(null)} width={720}>
+      <Modal
+        title={`合同 #${contractHistory?.id ?? ''} 账期核对`}
+        open={Boolean(contractHistory)}
+        onCancel={() => setContractHistory(null)}
+        footer={null}
+        width={880}
+      >
+        {historyError && <Alert type="error" showIcon message="账期读取失败，请关闭后重新打开。" />}
+        {historyReview && (
+          <Space direction="vertical" style={{ display: 'flex', marginBottom: 12 }}>
+            <span>合同截止日：{historyReview.end || (historyReview.cutoffUnknown ? '待确认' : '未设置')}</span>
+            {historyReview.cutoffUnknown && <Alert type="warning" showIcon message="合同已停用，缺少实际截止日，无法确认漏计区间。" />}
+            {historyReview.gaps.length > 0 && <Alert type="warning" showIcon message="已结束月份有未覆盖日期" description={historyReview.gaps.join('、')} />}
+            <Button type={exceptionsOnly ? 'primary' : 'default'} onClick={() => setExceptionsOnly(!exceptionsOnly)}>
+              {exceptionsOnly ? '查看全部账单' : '仅看异常账单'}
+            </Button>
+          </Space>
+        )}
+        <Table<EquipmentRentalBill>
+          size="small"
+          rowKey="id"
+          loading={historyLoading}
+          dataSource={exceptionsOnly ? historyBills.filter((bill) => historyReview?.issues.has(bill.id)) : historyBills}
+          columns={[
+            { title: '账单', render: (_, bill) => <a onClick={() => { setContractHistory(null); setLogBill(bill); }}>#{bill.id}</a> },
+            { title: '计费区间', render: (_, bill) => `${billingDate(bill.periodStart)} ~ ${billingDate(bill.periodEnd)}` },
+            { title: '状态', render: (_, bill) => billStatus(bill) },
+            { title: '应收', render: (_, bill) => `¥${money(bill.amount)}` },
+            { title: '异常', render: (_, bill) => historyReview?.issues.get(bill.id)?.join('、') || '-' },
+          ]}
+        />
+      </Modal>
+
+      <Modal title={`账单 #${logBill?.id || '-'} 明细`} open={Boolean(logBill)} footer={null} onCancel={() => setLogBill(null)} width={720}>
+        {logBill && <Descriptions size="small" column={2} bordered style={{ marginBottom: 16 }}>
+          <Descriptions.Item label="合同 ID">{logBill.contractId}</Descriptions.Item>
+          <Descriptions.Item label="状态">{billStatus(logBill)}</Descriptions.Item>
+          <Descriptions.Item label="归档月份">{logBill.billMonth}</Descriptions.Item>
+          <Descriptions.Item label="缴费日">{billingDate(logBill.dueAt || undefined)}</Descriptions.Item>
+          <Descriptions.Item label="计费区间" span={2}>{billingDate(logBill.periodStart)} ~ {billingDate(logBill.periodEnd)}</Descriptions.Item>
+          <Descriptions.Item label="应收">¥{money(logBill.amount)}</Descriptions.Item>
+          <Descriptions.Item label="待缴">¥{money(logBill.remainingAmount)}</Descriptions.Item>
+          <Descriptions.Item label="账单已结算">¥{money(logBill.paidAmount)}</Descriptions.Item>
+          <Descriptions.Item label="减免金额">¥{money(logBill.status === 'WAIVED' ? logBill.amount : 0)}</Descriptions.Item>
+          <Descriptions.Item label="原钱包扣款">{logBill.walletTx ? `¥${money(logBill.walletTx.amount)}` : '-'}</Descriptions.Item>
+          <Descriptions.Item label="钱包已退">¥{money(logBill.refundedAmount)}</Descriptions.Item>
+          <Descriptions.Item label="账单备注" span={2}>{logBill.remark || '-'}</Descriptions.Item>
+        </Descriptions>}
         <List
+          header="操作记录"
           dataSource={logBill?.adjustmentLogs || []}
           locale={{ emptyText: '暂无操作记录' }}
           renderItem={(item: any) => (
@@ -553,8 +722,14 @@ const EquipmentRentalFeesPage: React.FC = () => {
               remark: values.remark,
             };
             if (editingContract) {
-              await updateEquipmentRentalContract({ id: editingContract.id, ...payload });
-              message.success('配置已更新');
+              const result = await updateEquipmentRentalContract({ id: editingContract.id, ...payload });
+              billActionRef.current?.reload();
+              setReviewRevision((value) => value + 1);
+              if (result.reconciliations?.length) {
+                setReconciliations(result.reconciliations);
+                setReconciliationOpen(true);
+              }
+              message.success('配置已更新，账单已按截止日核对');
             } else {
               await createEquipmentRentalContract(payload);
               message.success('配置已创建');
@@ -614,6 +789,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
             message.success(`已生成/更新 ${res?.affected ?? 0} 条，${res?.correct ?? 0} 条已缴账单金额正确，${differences.length} 条存在差异`);
             setGenerateOpen(false);
             billActionRef.current?.reload();
+            setReviewRevision((value) => value + 1);
           } catch (e: any) {
             if (!e?.errorFields) message.error(e?.data?.message || e?.message || '生成失败');
           } finally {
@@ -623,7 +799,7 @@ const EquipmentRentalFeesPage: React.FC = () => {
       >
         <Form form={generateForm} layout="vertical">
           <Form.Item label="账单月份" name="month" rules={[{ required: true, message: '请选择月份' }]}>
-            <DatePicker picker="month" format="YYYY-MM" disabledDate={(date) => monthValue(date) >= currentShanghaiMonth()} style={{ width: '100%' }} />
+            <DatePicker picker="month" format="YYYY-MM" disabledDate={(date) => monthValue(date) > latestGeneratableMonth()} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>
