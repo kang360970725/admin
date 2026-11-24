@@ -6,6 +6,7 @@ import { Avatar, Button, Card, DatePicker, Empty, Form, Input, InputNumber, Moda
 import { getGameProjectOptions, getPlayerOptions, operateLiveTournament, publishLiveTournamentScore, saveLiveTournamentScore, settleLiveTournamentTicket } from '@/services/api';
 
 const statusLabels: Record<string, string> = {
+    UNBOOKED: '待预约',
     BOOKED: '已预约', QUEUED: '候赛中', ON_STAGE: '参赛中',
     SCORING: '成绩统计中', FINISHED: '已完赛', ABSENT: '缺席',
 };
@@ -205,16 +206,17 @@ export default function LiveTournamentPage() {
                     <Select style={{ minWidth: 280, marginBottom: 20 }} value={dayId} placeholder="选择直播时段"
                         options={event?.days.map((item: any) => ({ label: `${formatTime(item.startsAt)} 开始`, value: item.id }))}
                         onChange={setDayId} />
-                    {day ? <Table rowKey="id" pagination={false} dataSource={entries} scroll={{ x: 880 }} columns={[
+                    {day ? <Table rowKey="id" pagination={false} dataSource={entries} scroll={{ x: 1060 }} columns={[
                         { title: '出场序号', width: 100, render: (_, row) => row.appearanceSequence ?? '—' },
                         { title: '候场顺序', width: 100, render: (_, row) => row.queuePosition ?? '—' },
                         { title: '参赛会员', width: 200, render: (_, row) => {
                             const nickname = row.competitionName || row.gameNickname || '参赛会员';
                             return <Space size={10}>
-                                <Avatar src={row.memberAvatar || undefined} size={36}>{Array.from(nickname)[0]}</Avatar>
+                                <Avatar src={row.memberAvatar || undefined} size={36}>{Array.from(String(nickname))[0]}</Avatar>
                                 <Space direction="vertical" size={0}>
                                     <Typography.Text strong>{nickname}</Typography.Text>
                                     <Typography.Text type="secondary">会员 ID {row.memberCode || '—'}</Typography.Text>
+                                    {row.isRevival && <Tag color="purple">复活参赛</Tag>}
                                 </Space>
                             </Space>;
                         } },
@@ -253,18 +255,38 @@ export default function LiveTournamentPage() {
                                 })}
                             </Space>
                         ) },
-                        { title: '操作', width: 230, render: (_, row) => <Space wrap>
-                            {row.fulfilled && <Tag color="green">整票已结算</Tag>}
+                        { title: '操作', width: 300, render: (_, row) => <Space wrap>
+                            {row.fulfilled && <Tag color="green">{row.isRevival ? '复活场已结算' : '整票已结算'}</Tag>}
                             {canSettleLiveTournamentTickets && row.status === 'FINISHED' && !row.fulfilled && <Popconfirm
-                                title="确认整票履约并结算？"
+                                title={row.isRevival ? '确认复活场履约并结算？' : '确认整票履约并结算？'}
                                 description={`向转盘锁定的服务者结算 ¥${Number(event?.providerFee ?? 0).toFixed(1)}，第二局弃权仍按整票结算。`}
                                 onConfirm={() => run(async () => {
-                                    const result = await settleLiveTournamentTicket(row.orderId);
+                                    const result = await settleLiveTournamentTicket(row.orderId, row.id);
                                     await refreshEntries();
-                                    message.success(result.idempotent ? '该门票已结算' : '整票履约和结算已完成');
+                                    message.success(result.idempotent ? '该次参赛已结算' : row.isRevival ? '复活场结算已完成' : '整票履约和结算已完成');
                                 })}>
-                                <Button type="primary" size="small" disabled={busy}>确认整票结算</Button>
+                                <Button type="primary" size="small" disabled={busy}>{row.isRevival ? '结算复活场' : '确认整票结算'}</Button>
                             </Popconfirm>}
+                            {canOperateLiveTournament && !row.isRevival && row.status === 'FINISHED' && !row.activeRevival && event?.status === 'PUBLISHED' &&
+                                <Popconfirm title="允许该选手复活？" description="确认后选手可使用原门票重新预约一次完整的两局比赛。"
+                                    onConfirm={() => run(async () => {
+                                        await operateLiveTournament({ action: 'grant-revival', entryId: row.id });
+                                        await refreshEntries();
+                                        message.success('已允许复活，选手可重新预约');
+                                    })}>
+                                    <Button size="small" type="primary" ghost disabled={busy}>允许复活</Button>
+                                </Popconfirm>}
+                            {canOperateLiveTournament && !row.isRevival && row.activeRevival && <>
+                                <Tag color="purple">复活：{statusLabels[row.activeRevival.status] ?? row.activeRevival.status}</Tag>
+                                <Popconfirm title="撤销本次复活？" description="已预约时将同时释放场次席位；开赛后不可撤销。"
+                                    onConfirm={() => run(async () => {
+                                        await operateLiveTournament({ action: 'revoke-revival', entryId: row.activeRevival.id });
+                                        await Promise.all([refreshEntries(), loadEvents()]);
+                                        message.success('本次复活已撤销');
+                                    })}>
+                                    <Button size="small" danger disabled={busy || ['ON_STAGE', 'SCORING'].includes(row.activeRevival.status)}>撤销复活</Button>
+                                </Popconfirm>
+                            </>}
                             {canOperateLiveTournament && row.status === 'BOOKED' && <Button size="small" type="primary" disabled={busy}
                                 onClick={() => queue([...queued.map(item => item.id), row.id])}>签到并排场</Button>}
                             {canOperateLiveTournament && row.status === 'QUEUED' && <>
@@ -403,7 +425,7 @@ export default function LiveTournamentPage() {
                     const firstKillElapsedMs = values.kills > 0 ? Math.round(values.firstKillSeconds * 1000) : null;
                     const roundStartedAt = new Date(scoring.row.firstRoundStartedAt).getTime();
                     await saveLiveTournamentScore({
-                        orderId: scoring.row.orderId, roundNumber: scoring.roundNumber,
+                        orderId: scoring.row.orderId, entryId: scoring.row.id, roundNumber: scoring.roundNumber,
                         kills: values.kills,
                         firstKillElapsedMs,
                         firstKillAt: firstKillElapsedMs === null ? null : new Date(roundStartedAt + firstKillElapsedMs).toISOString(),
@@ -425,7 +447,7 @@ export default function LiveTournamentPage() {
                 </Form>
                 {scoring?.roundNumber === 2 && scoring.row.status !== 'ON_STAGE' && <Popconfirm
                     title="将第二局登记为弃权？" onConfirm={() => run(async () => {
-                        await saveLiveTournamentScore({ orderId: scoring.row.orderId, roundNumber: 2, kills: 0, forfeited: true });
+                        await saveLiveTournamentScore({ orderId: scoring.row.orderId, entryId: scoring.row.id, roundNumber: 2, kills: 0, forfeited: true });
                         await refreshEntries();
                         setScoring(undefined);
                         message.success('已登记弃权');

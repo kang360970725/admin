@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { history, useLocation, useParams } from '@umijs/max';
 import { Alert, Button, Modal, Space } from 'antd';
 import { getLiveTournamentProjection, operateLiveTournament } from '@/services/api';
@@ -53,6 +53,7 @@ const placeholderProviders = Array.from({ length: 8 }, (_, index) => ({
     name: `候选 ${index + 1}`,
     serviceRank: '候选席位',
 }));
+const wheelSpinDurationMs = 4000;
 
 export default function TournamentStage() {
     const { dayId: rawDayId } = useParams();
@@ -69,7 +70,9 @@ export default function TournamentStage() {
     const [busy, setBusy] = useState(false);
     const [connectionError, setConnectionError] = useState(false);
     const [operationError, setOperationError] = useState('');
-    const [now, setNow] = useState(Date.now());
+    const [spinKey, setSpinKey] = useState<string | null>(null);
+    const [drawPending, setDrawPending] = useState(false);
+    const [drawNetworkSlow, setDrawNetworkSlow] = useState(false);
     const [view, setView] = useState(searchParams.get('view') || 'stage');
     const [board, setBoard] = useState<Board>('overall');
     const [rulesOpen, setRulesOpen] = useState(false);
@@ -117,19 +120,23 @@ export default function TournamentStage() {
     const next = stage?.next;
     const providers = stage?.providers ?? [];
     const winner = providers.find(provider => provider.id === current?.providerId);
-    const revealedAt = current?.drawnAt ? new Date(current.drawnAt).getTime() + 3600 : 0;
-    const spinning = Boolean(winner && now < revealedAt);
+    const drawKey = winner && current?.drawnAt ? `${current.id}:${current.drawnAt}:${winner.id}` : null;
+    const seenDrawKey = useRef<string | null>(null);
+    const awaitingLocalSpin = Boolean(drawKey && seenDrawKey.current !== drawKey);
+    const spinning = Boolean(drawKey && (spinKey === drawKey || awaitingLocalSpin));
 
-    useEffect(() => {
-        let frame = 0;
-        const update = () => {
-            const time = Date.now();
-            setNow(time);
-            if (time < revealedAt) frame = requestAnimationFrame(update);
-        };
-        update();
-        return () => cancelAnimationFrame(frame);
-    }, [revealedAt]);
+    // The projection may receive the result later than the control page. Always
+    // start a complete local animation when this page first observes a new draw.
+    // useLayoutEffect avoids painting the final winner for one frame beforehand.
+    useLayoutEffect(() => {
+        if (!drawKey || seenDrawKey.current === drawKey) return;
+        seenDrawKey.current = drawKey;
+        setSpinKey(drawKey);
+        const timer = window.setTimeout(() => {
+            setSpinKey(value => value === drawKey ? null : value);
+        }, wheelSpinDurationMs + 150);
+        return () => window.clearTimeout(timer);
+    }, [drawKey]);
 
     async function act(action: string, player: Player) {
         if (mutationInFlight.current) return;
@@ -137,14 +144,27 @@ export default function TournamentStage() {
         mutationVersion.current += 1;
         setBusy(true);
         setOperationError('');
+        const drawing = action === 'stage-draw';
+        let slowTimer: number | undefined;
+        if (drawing) {
+            // Give immediate visual feedback while the server securely decides the
+            // winner. This is only a pending effect and never reveals a fake result.
+            setDrawPending(true);
+            setDrawNetworkSlow(false);
+            slowTimer = window.setTimeout(() => setDrawNetworkSlow(true), 1500);
+        }
         try {
             const state = await operateLiveTournament({ action, dayId, entryId: player.id });
-            setNow(Date.now());
             setStage(state);
             setConnectionError(false);
         } catch (error: any) {
             setOperationError(error?.data?.message || '操作失败，请刷新状态后重试');
         } finally {
+            if (slowTimer !== undefined) window.clearTimeout(slowTimer);
+            if (drawing) {
+                setDrawPending(false);
+                setDrawNetworkSlow(false);
+            }
             mutationInFlight.current = false;
             setBusy(false);
         }
@@ -174,9 +194,15 @@ export default function TournamentStage() {
     const wheelProviders = providers.length ? providers : placeholderProviders;
     const winnerIndex = winner ? providers.indexOf(winner) : 0;
     const finalRotation = winner ? 1800 - (winnerIndex + 0.5) * 360 / providers.length : 0;
-    const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const progress = Math.min(1, Math.max(0, 1 - (revealedAt - now) / 3300));
-    const rotation = finalRotation * (motionReduced ? 1 : 1 - (1 - progress) ** 3);
+    const wheelMotionStyle = {
+        '--wheel-final-rotation': `${finalRotation}deg`,
+        '--wheel-final-inverse': `${-finalRotation}deg`,
+        '--wheel-accel-rotation': `${finalRotation * .07}deg`,
+        '--wheel-accel-inverse': `${finalRotation * -.07}deg`,
+        '--wheel-cruise-rotation': `${finalRotation * .93}deg`,
+        '--wheel-cruise-inverse': `${finalRotation * -.93}deg`,
+        '--wheel-spin-duration': `${wheelSpinDurationMs}ms`,
+    } as React.CSSProperties;
     const boardRows = stage?.leaderboard?.[board] ?? [];
     const podiumRows = boardRows.filter(row => row.rank !== null).slice(0, 3);
     const listRows = boardRows.slice(podiumRows.length);
@@ -383,8 +409,12 @@ export default function TournamentStage() {
                     <div className="tournament-stage__orbit tournament-stage__orbit--inner" />
                     <div className="tournament-stage__pointer" />
                     <div className="tournament-stage__wheel">
-                        <svg className="tournament-stage__wheel-segments" viewBox="0 0 100 100" aria-hidden="true">
-                            <g transform={`rotate(${rotation} 50 50)`}>
+                        <div className={`tournament-stage__wheel-rotor ${spinning ? 'is-spinning' : drawPending ? 'is-pending' : ''}`}
+                            style={wheelMotionStyle}
+                            onAnimationEnd={event => {
+                                if (event.target === event.currentTarget && spinKey === drawKey) setSpinKey(null);
+                            }}>
+                            <svg className="tournament-stage__wheel-segments" viewBox="0 0 100 100" aria-hidden="true">
                                 {wheelProviders.length === 1 ? <circle cx="50" cy="50" r="50" fill={colors[0]} /> :
                                     wheelProviders.map((provider, index) => {
                                         const start = index * 2 * Math.PI / wheelProviders.length;
@@ -394,16 +424,16 @@ export default function TournamentStage() {
                                         return <path key={provider.id} d={`M 50 50 L ${startPoint} A 50 50 0 0 1 ${endPoint} Z`}
                                             fill={colors[index % colors.length]} />;
                                     })}
-                            </g>
-                        </svg>
-                        {wheelProviders.map((provider, index) => {
-                            const angle = ((index + 0.5) * 360 / wheelProviders.length + rotation) * Math.PI / 180;
-                            const radius = wheelProviders.length === 1 ? 0 : 34;
-                            return <div key={provider.id} className="tournament-stage__label" style={{
-                                left: `${50 + radius * Math.sin(angle)}%`,
-                                top: `${50 - radius * Math.cos(angle)}%`,
-                            }}><small>{String(index + 1).padStart(2, '0')}</small><strong>{wheelProviders.length > 10 ? index + 1 : provider.name || '服务者'}</strong><em>{provider.serviceRank || '候选席位'}</em></div>;
-                        })}
+                            </svg>
+                            {wheelProviders.map((provider, index) => {
+                                const angle = (index + 0.5) * 2 * Math.PI / wheelProviders.length;
+                                const radius = wheelProviders.length === 1 ? 0 : 34;
+                                return <div key={provider.id} className="tournament-stage__label" style={{
+                                    left: `${50 + radius * Math.sin(angle)}%`,
+                                    top: `${50 - radius * Math.cos(angle)}%`,
+                                }}><small>{String(index + 1).padStart(2, '0')}</small><strong>{wheelProviders.length > 10 ? index + 1 : provider.name || '服务者'}</strong><em>{provider.serviceRank || '候选席位'}</em></div>;
+                            })}
+                        </div>
                     </div>
                     <div className={`tournament-stage__hub ${controlMode && current && !current.providerId ? 'is-actionable' : ''}`}>
                         {controlMode && current && !current.providerId ? <Button
@@ -418,7 +448,12 @@ export default function TournamentStage() {
                 </div>
                 <div className={winner ? 'tournament-stage__result has-winner' : 'tournament-stage__result'} aria-live="polite">
                     <span>DRAW STATUS</span>
-                    <strong>{spinning ? '正在抽取并开始比赛…' : winner ? `比赛进行中 · ${winner.name || '服务者'}` : current ? providers.length ? '点击转盘中心开始比赛' : '发布名单后即可开始抽取' : '等待确认选手上场'}</strong>
+                    <strong>{drawPending
+                        ? drawNetworkSlow ? '网络响应较慢，抽取指令处理中，请勿重复点击…' : '抽取指令已发送，正在连接服务器…'
+                        : spinning ? '正在抽取并开始比赛…'
+                            : winner ? `比赛进行中 · ${winner.name || '服务者'}`
+                                : current ? providers.length ? '点击转盘中心开始比赛' : '发布名单后即可开始抽取'
+                                    : '等待确认选手上场'}</strong>
                 </div>
                 {controlMode && current?.providerId && !spinning && <Button className="tournament-stage__finish-button" loading={busy} onClick={() => act('stage-finish', current)}>结束当前选手比赛</Button>}
             </section>

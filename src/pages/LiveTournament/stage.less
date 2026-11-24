@@ -154,6 +154,26 @@
     height: 100%;
     pointer-events: none;
   }
+  &__wheel-rotor {
+    position: absolute;
+    inset: 0;
+    transform: translateZ(0) rotate(var(--wheel-final-rotation, 0deg));
+    transform-origin: 50% 50%;
+    backface-visibility: hidden;
+    will-change: transform;
+  }
+  &__wheel-rotor.is-spinning {
+    animation: arena-wheel-broadcast-spin var(--wheel-spin-duration, 4000ms) both;
+  }
+  &__wheel-rotor.is-spinning .tournament-stage__label {
+    animation: arena-wheel-label-counter-spin var(--wheel-spin-duration, 4000ms) both;
+  }
+  &__wheel-rotor.is-pending {
+    animation: arena-wheel-pending-spin .72s linear infinite;
+  }
+  &__wheel-rotor.is-pending .tournament-stage__label {
+    animation: arena-wheel-label-pending-counter-spin .72s linear infinite;
+  }
   &__pointer {
     position: absolute;
     top: -22px;
@@ -211,7 +231,10 @@
     text-align: center;
     overflow-wrap: anywhere;
     text-shadow: 0 2px 7px rgba(0, 0, 0, .55);
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) rotate(var(--wheel-final-inverse, 0deg));
+    transform-origin: 50% 50%;
+    backface-visibility: hidden;
+    will-change: transform;
   }
   &__label small { display: block; margin-bottom: 5px; color: rgba(255,255,255,.58); font-size: .55em; letter-spacing: .18em; }
   &__label strong { display: block; color: #fff; font-size: 1em; font-weight: 950; }
@@ -371,6 +394,46 @@
 .tournament-stage__roster span b { grid-row: 1 / span 2; align-self: center; color: #3c82df; font-size: 12px; font-style: italic; }
 .tournament-stage__roster span strong { overflow: hidden; color: #edf6ff; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .tournament-stage__roster span em { overflow: hidden; color: #d8ad59; font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+
+@keyframes arena-wheel-broadcast-spin {
+  0% {
+    transform: translateZ(0) rotate(0deg);
+    animation-timing-function: cubic-bezier(.55, .06, .68, .19);
+  }
+  12.5% {
+    transform: translateZ(0) rotate(var(--wheel-accel-rotation));
+    animation-timing-function: linear;
+  }
+  87.5% {
+    transform: translateZ(0) rotate(var(--wheel-cruise-rotation));
+    animation-timing-function: cubic-bezier(.22, .61, .36, 1);
+  }
+  100% { transform: translateZ(0) rotate(var(--wheel-final-rotation)); }
+}
+
+@keyframes arena-wheel-pending-spin {
+  to { transform: translateZ(0) rotate(360deg); }
+}
+
+@keyframes arena-wheel-label-pending-counter-spin {
+  to { transform: translate(-50%, -50%) rotate(-360deg); }
+}
+
+@keyframes arena-wheel-label-counter-spin {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+    animation-timing-function: cubic-bezier(.55, .06, .68, .19);
+  }
+  12.5% {
+    transform: translate(-50%, -50%) rotate(var(--wheel-accel-inverse));
+    animation-timing-function: linear;
+  }
+  87.5% {
+    transform: translate(-50%, -50%) rotate(var(--wheel-cruise-inverse));
+    animation-timing-function: cubic-bezier(.22, .61, .36, 1);
+  }
+  100% { transform: translate(-50%, -50%) rotate(var(--wheel-final-inverse)); }
+}
 
 @keyframes arena-live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }

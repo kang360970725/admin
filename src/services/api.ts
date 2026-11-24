@@ -4051,8 +4051,8 @@ export const saveLiveTournamentScore = (data: Record<string, unknown>) =>
 export const publishLiveTournamentScore = (data: Record<string, unknown>) =>
     request(`${API_BASE}/orders/live-tournament/score-publication`, { method: 'POST', data });
 
-export const settleLiveTournamentTicket = (orderId: number) =>
-    request<{ idempotent: boolean }>(`${API_BASE}/orders/live-tournament/settle`, { method: 'POST', data: { orderId } });
+export const settleLiveTournamentTicket = (orderId: number, entryId: number) =>
+    request<{ idempotent: boolean }>(`${API_BASE}/orders/live-tournament/settle`, { method: 'POST', data: { orderId, entryId } });
 
 export type StoreOrderCounts = Record<'EXPERIENCE' | 'GUARANTEED' | 'MODE_PLAY' | 'HOURLY' | 'OTHER', number>;
 
