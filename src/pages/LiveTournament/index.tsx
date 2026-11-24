@@ -17,7 +17,12 @@ const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN', {
 });
 
 export default function LiveTournamentPage() {
-    const { canOperateLiveTournament, canManageLiveTournamentScores } = useAccess();
+    const {
+        canOperateLiveTournament,
+        canEnterLiveTournamentScores,
+        canPublishLiveTournamentScores,
+        canSettleLiveTournamentTickets,
+    } = useAccess();
     const [events, setEvents] = useState<any[]>([]);
     const [eventId, setEventId] = useState<number>();
     const [dayId, setDayId] = useState<number>();
@@ -156,7 +161,7 @@ export default function LiveTournamentPage() {
                         {canOperateLiveTournament && event?.status !== 'CLOSED' && event && <Button onClick={() => openDialog('generate-days')}>批量生成场次</Button>}
                         {canOperateLiveTournament && event?.status === 'PUBLISHED' && !event.bookingOpenedAt && <Button type="primary"
                             onClick={() => { setBookingOpenReason(''); setBookingOpening(true); }}>提前开放预约</Button>}
-                        {canManageLiveTournamentScores && event?.status === 'PUBLISHED' && <Popconfirm title="锁定最终榜单并结束赛事？"
+                        {canPublishLiveTournamentScores && event?.status === 'PUBLISHED' && <Popconfirm title="锁定最终榜单并结束赛事？"
                             description="锁榜后将关闭录分和售票。"
                             onConfirm={() => run(async () => {
                                 await publishLiveTournamentScore({ action: 'lock', tournamentId: eventId });
@@ -236,9 +241,9 @@ export default function LiveTournamentPage() {
                                                 : '待录入'}
                                         </Tag>
                                         {score && <Tag color={pending ? 'gold' : 'green'}>{pending ? '待发布' : '已发布'}</Tag>}
-                                        {canManageLiveTournamentScores && event?.status !== 'CLOSED' && <>
-                                            <Button size="small" disabled={!row.firstRoundStartedAt} onClick={() => editScore(row, roundNumber)}>录分</Button>
-                                            {pending && <Button size="small" type="link" disabled={busy} onClick={() => run(async () => {
+                                        {event?.status !== 'CLOSED' && <>
+                                            {canEnterLiveTournamentScores && <Button size="small" disabled={!row.firstRoundStartedAt} onClick={() => editScore(row, roundNumber)}>录分</Button>}
+                                            {canPublishLiveTournamentScores && pending && <Button size="small" type="link" disabled={busy} onClick={() => run(async () => {
                                                 await publishLiveTournamentScore({ entryId: row.id, roundNumber });
                                                 await refreshEntries();
                                                 message.success('成绩已发布');
@@ -250,7 +255,7 @@ export default function LiveTournamentPage() {
                         ) },
                         { title: '操作', width: 230, render: (_, row) => <Space wrap>
                             {row.fulfilled && <Tag color="green">整票已结算</Tag>}
-                            {canManageLiveTournamentScores && row.status === 'FINISHED' && !row.fulfilled && <Popconfirm
+                            {canSettleLiveTournamentTickets && row.status === 'FINISHED' && !row.fulfilled && <Popconfirm
                                 title="确认整票履约并结算？"
                                 description={`向转盘锁定的服务者结算 ¥${Number(event?.providerFee ?? 0).toFixed(1)}，第二局弃权仍按整票结算。`}
                                 onConfirm={() => run(async () => {
