@@ -274,7 +274,11 @@
   &__result strong { margin-top: 2px; color: #b9cae0; font-size: clamp(15px, 1.55vw, 23px); }
   &__result.has-winner { border-color: rgba(255, 200, 90, .42); box-shadow: 0 0 25px rgba(255, 184, 48, .08); }
   &__result.has-winner strong { color: var(--arena-gold); }
-  &__finish-button.ant-btn { margin-top: 10px; height: 38px; border-color: rgba(255, 103, 127, .38); border-radius: 7px 2px 7px 2px; color: #ff9bae; background: rgba(75, 16, 31, .26); font-weight: 800; }
+  &__match-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 10px; }
+  &__match-actions &__finish-button.ant-btn,
+  &__match-actions &__redraw-button.ant-btn { height: 38px; border-radius: 7px 2px 7px 2px; font-weight: 800; }
+  &__finish-button.ant-btn { border-color: rgba(255, 103, 127, .38); color: #ff9bae; background: rgba(75, 16, 31, .26); }
+  &__redraw-button.ant-btn { border-color: rgba(255, 200, 90, .42); color: var(--arena-gold); background: rgba(86, 55, 8, .3); }
   &__empty { padding: 50px 24px; color: #8297b2; }
 
   .ant-alert { margin-bottom: 18px; border-color: rgba(255, 181, 71, .3); background: rgba(92, 59, 10, .52); color: #ffe4b5; }

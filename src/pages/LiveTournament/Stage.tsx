@@ -144,7 +144,7 @@ export default function TournamentStage() {
         mutationVersion.current += 1;
         setBusy(true);
         setOperationError('');
-        const drawing = action === 'stage-draw';
+        const drawing = action === 'stage-draw' || action === 'stage-redraw';
         let slowTimer: number | undefined;
         if (drawing) {
             // Give immediate visual feedback while the server securely decides the
@@ -455,7 +455,21 @@ export default function TournamentStage() {
                                 : current ? providers.length ? '点击转盘中心开始比赛' : '发布名单后即可开始抽取'
                                     : '等待确认选手上场'}</strong>
                 </div>
-                {controlMode && current?.providerId && !spinning && <Button className="tournament-stage__finish-button" loading={busy} onClick={() => act('stage-finish', current)}>结束当前选手比赛</Button>}
+                {controlMode && current?.providerId && !spinning && <div className="tournament-stage__match-actions">
+                    <Button
+                        className="tournament-stage__redraw-button"
+                        disabled={busy}
+                        onClick={() => Modal.confirm({
+                            title: '重新抽取服务者？',
+                            content: <>当前已锁定「<strong>{winner?.name || `服务者 #${current.providerId}`}</strong>」。重新抽取后，该选手后续比赛及结算均以新服务者为准。</>,
+                            okText: '确认重新抽取',
+                            cancelText: '取消',
+                            okButtonProps: { danger: true },
+                            onOk: () => act('stage-redraw', current),
+                        })}
+                    >重新抽取服务者</Button>
+                    <Button className="tournament-stage__finish-button" loading={busy} onClick={() => act('stage-finish', current)}>结束当前选手比赛</Button>
+                </div>}
             </section>
         </div>}
     </main>;
