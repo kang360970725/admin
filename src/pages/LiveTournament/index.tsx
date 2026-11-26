@@ -415,7 +415,7 @@ export default function LiveTournamentPage() {
                                 ? <Tag>首次参赛</Tag>
                                 : row.revivalRevokedAt || row.status === 'VOID'
                                     ? <Tag color="red">复活已撤销</Tag>
-                                    : <Tag color="purple">第 {row.attemptNumber} 次·复活</Tag> },
+                                    : <Tag color="purple">第 {row.revivalNumber ?? Math.max(1, Number(row.attemptNumber || 2) - 1)} 次复活</Tag> },
                         ]}
                     />
                 </Card>}
