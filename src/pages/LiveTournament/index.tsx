@@ -2,20 +2,25 @@ import React, { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { PageContainer } from '@ant-design/pro-components';
 import { history, useAccess } from '@umijs/max';
-import { Avatar, Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tag, TimePicker, Typography, message } from 'antd';
+import { Avatar, Button, Card, DatePicker, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, TimePicker, Typography, message } from 'antd';
 import { getGameProjectOptions, getPlayerOptions, operateLiveTournament, publishLiveTournamentScore, saveLiveTournamentScore, settleLiveTournamentTicket } from '@/services/api';
 
 const statusLabels: Record<string, string> = {
     UNBOOKED: '待预约',
     BOOKED: '已预约', QUEUED: '候赛中', ON_STAGE: '参赛中',
     SCORING: '成绩统计中', FINISHED: '已完赛', ABSENT: '缺席',
+    VOID: '已撤销', PENDING_PAYMENT: '待支付',
 };
 const statusColors: Record<string, string> = {
-    BOOKED: 'blue', QUEUED: 'cyan', ON_STAGE: 'green', SCORING: 'gold', FINISHED: 'green',
+    UNBOOKED: 'gold', BOOKED: 'blue', QUEUED: 'cyan', ON_STAGE: 'green', SCORING: 'gold', FINISHED: 'green',
+    ABSENT: 'red', VOID: 'red',
 };
 const formatTime = (value: string) => new Date(value).toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
 });
+const formatFullTime = (value?: string | null) => value ? new Date(value).toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+}) : '—';
 
 export default function LiveTournamentPage() {
     const {
@@ -28,6 +33,15 @@ export default function LiveTournamentPage() {
     const [eventId, setEventId] = useState<number>();
     const [dayId, setDayId] = useState<number>();
     const [entries, setEntries] = useState<any[]>([]);
+    const [section, setSection] = useState('schedule');
+    const [registrationRows, setRegistrationRows] = useState<any[]>([]);
+    const [registrationTotal, setRegistrationTotal] = useState(0);
+    const [registrationLoading, setRegistrationLoading] = useState(false);
+    const [registrationPage, setRegistrationPage] = useState(1);
+    const [registrationKeyword, setRegistrationKeyword] = useState('');
+    const [registrationFilters, setRegistrationFilters] = useState({
+        keyword: '', bookingStatus: 'ALL', entryStatus: 'ALL', revivalStatus: 'ALL',
+    });
     const [busy, setBusy] = useState(false);
     const [dialog, setDialog] = useState<'create' | 'generate-days' | 'roster'>();
     const [form] = Form.useForm();
@@ -67,6 +81,21 @@ export default function LiveTournamentPage() {
             .catch(() => { if (current) message.error('参赛名单加载失败'); });
         return () => { current = false; };
     }, [dayId]);
+    useEffect(() => {
+        let current = true;
+        if (!eventId || section !== 'registrations') return () => { current = false; };
+        setRegistrationLoading(true);
+        void operateLiveTournament({
+            action: 'registrations', tournamentId: eventId, page: registrationPage, pageSize: 20, ...registrationFilters,
+        }).then(result => {
+            if (!current) return;
+            setRegistrationRows(result?.list ?? []);
+            setRegistrationTotal(Number(result?.total ?? 0));
+        }).catch(() => {
+            if (current) message.error('报名列表加载失败');
+        }).finally(() => { if (current) setRegistrationLoading(false); });
+        return () => { current = false; };
+    }, [eventId, section, registrationPage, registrationFilters]);
 
     async function run(action: () => Promise<void>) {
         setBusy(true);
@@ -147,7 +176,13 @@ export default function LiveTournamentPage() {
                     <Space wrap align="center" size="middle">
                         <Select style={{ minWidth: 240 }} value={eventId} placeholder="选择赛事"
                             options={events.map(item => ({ label: item.title, value: item.id }))}
-                            onChange={value => { setDayId(undefined); setEventId(value); }} />
+                            onChange={value => {
+                                setDayId(undefined);
+                                setRegistrationRows([]);
+                                setRegistrationTotal(0);
+                                setRegistrationPage(1);
+                                setEventId(value);
+                            }} />
                         {event && <Tag color={event.status === 'PUBLISHED' ? 'green' : 'default'}>
                             {event.status === 'PUBLISHED' ? '已发布' : event.status === 'CLOSED' ? '已结束' : '草稿'}
                         </Tag>}
@@ -180,7 +215,11 @@ export default function LiveTournamentPage() {
                         )}
                     </Space>
                 </Card>
-                <Card title="直播排场" extra={day && <Space wrap>
+                <Tabs activeKey={section} onChange={setSection} items={[
+                    { key: 'schedule', label: '直播排场' },
+                    { key: 'registrations', label: `参赛报名${registrationTotal ? ` (${registrationTotal})` : ''}` },
+                ]} />
+                {section === 'schedule' && <Card title="直播排场" extra={day && <Space wrap>
                     <Typography.Text type="secondary">容量 {day.capacity} 人 · 候赛 {queued.length} 人</Typography.Text>
                     <Button loading={busy} onClick={() => run(async () => {
                         await refreshEntries();
@@ -301,7 +340,85 @@ export default function LiveTournamentPage() {
                             </Popconfirm>}
                         </Space> },
                     ]} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择直播时段查看预约和候赛名单" />}
-                </Card>
+                </Card>}
+                {section === 'registrations' && <Card title={`${event?.title || '当前赛事'} · 参赛报名列表`}
+                    extra={<Typography.Text type="secondary">已报名与复活参赛记录统一查询</Typography.Text>}>
+                    <Space wrap style={{ marginBottom: 18 }}>
+                        <Input.Search
+                            allowClear
+                            style={{ width: 320 }}
+                            value={registrationKeyword}
+                            placeholder="会员ID / 昵称 / 订单编号"
+                            onChange={e => setRegistrationKeyword(e.target.value)}
+                            onSearch={keyword => {
+                                setRegistrationPage(1);
+                                setRegistrationFilters(current => ({ ...current, keyword: keyword.trim() }));
+                            }}
+                        />
+                        <Select value={registrationFilters.bookingStatus} style={{ width: 140 }} options={[
+                            { value: 'ALL', label: '全部预约状态' }, { value: 'UNBOOKED', label: '未预约' }, { value: 'BOOKED', label: '已预约' },
+                        ]} onChange={bookingStatus => {
+                            setRegistrationPage(1);
+                            setRegistrationFilters(current => ({ ...current, bookingStatus }));
+                        }} />
+                        <Select value={registrationFilters.entryStatus} style={{ width: 150 }} options={[
+                            { value: 'ALL', label: '全部参赛状态' },
+                            ...['UNBOOKED', 'BOOKED', 'QUEUED', 'ON_STAGE', 'SCORING', 'FINISHED', 'ABSENT', 'VOID']
+                                .map(value => ({ value, label: statusLabels[value] })),
+                        ]} onChange={entryStatus => {
+                            setRegistrationPage(1);
+                            setRegistrationFilters(current => ({ ...current, entryStatus }));
+                        }} />
+                        <Select value={registrationFilters.revivalStatus} style={{ width: 150 }} options={[
+                            { value: 'ALL', label: '全部复活状态' }, { value: 'ORIGINAL', label: '首次参赛' },
+                            { value: 'REVIVAL', label: '复活参赛' }, { value: 'REVOKED', label: '复活已撤销' },
+                        ]} onChange={revivalStatus => {
+                            setRegistrationPage(1);
+                            setRegistrationFilters(current => ({ ...current, revivalStatus }));
+                        }} />
+                        <Button onClick={() => {
+                            setRegistrationKeyword('');
+                            setRegistrationPage(1);
+                            setRegistrationFilters({ keyword: '', bookingStatus: 'ALL', entryStatus: 'ALL', revivalStatus: 'ALL' });
+                        }}>重置筛选</Button>
+                    </Space>
+                    <Table
+                        rowKey="id"
+                        loading={registrationLoading}
+                        dataSource={registrationRows}
+                        scroll={{ x: 1420 }}
+                        pagination={{
+                            current: registrationPage, pageSize: 20, total: registrationTotal, showSizeChanger: false,
+                            showTotal: total => `共 ${total} 条参赛记录`,
+                            onChange: setRegistrationPage,
+                        }}
+                        columns={[
+                            { title: '报名会员', width: 230, fixed: 'left', render: (_, row) => <Space size={10}>
+                                <Avatar src={row.memberAvatar || undefined} size={40}>{Array.from(String(row.memberNickname || '会'))[0]}</Avatar>
+                                <Space direction="vertical" size={0}>
+                                    <Typography.Text strong>{row.memberNickname}</Typography.Text>
+                                    <Typography.Text type="secondary">会员ID {row.memberCode || row.memberId}</Typography.Text>
+                                    {row.memberCode && <Typography.Text type="secondary" style={{ fontSize: 12 }}>系统ID {row.memberId}</Typography.Text>}
+                                </Space>
+                            </Space> },
+                            { title: '关联订单编号', width: 180, render: (_, row) => <Typography.Text copyable={Boolean(row.orderNo)}>{row.orderNo || `#${row.orderId}`}</Typography.Text> },
+                            { title: '报名时间（派单时间）', width: 190, render: (_, row) => formatFullTime(row.registeredAt) },
+                            { title: '预约时间', width: 190, render: (_, row) => row.bookedAt
+                                ? formatFullTime(row.bookedAt)
+                                : row.booked ? <Typography.Text type="secondary">历史数据未单独记录</Typography.Text> : '—' },
+                            { title: '是否预约', width: 110, render: (_, row) => <Tag color={row.booked ? 'green' : 'gold'}>{row.booked ? '已预约' : '未预约'}</Tag> },
+                            { title: '预约场次', width: 190, render: (_, row) => row.day
+                                ? <Space direction="vertical" size={0}><span>{formatFullTime(row.day.startsAt)}</span><Typography.Text type="secondary">场次 ID {row.dayId}</Typography.Text></Space>
+                                : '—' },
+                            { title: '参赛状态', width: 130, render: (_, row) => <Tag color={statusColors[row.status]}>{statusLabels[row.status] ?? row.status}</Tag> },
+                            { title: '复活状态', width: 150, render: (_, row) => !row.isRevival
+                                ? <Tag>首次参赛</Tag>
+                                : row.revivalRevokedAt || row.status === 'VOID'
+                                    ? <Tag color="red">复活已撤销</Tag>
+                                    : <Tag color="purple">第 {row.attemptNumber} 次·复活</Tag> },
+                        ]}
+                    />
+                </Card>}
             </Space>
             <Modal title="调整人数上限" open={capacityEditing} okText="保存" cancelText="取消"
                 confirmLoading={busy} onCancel={() => { if (!busy) setCapacityEditing(false); }}
