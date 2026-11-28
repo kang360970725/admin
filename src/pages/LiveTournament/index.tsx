@@ -306,14 +306,14 @@ export default function LiveTournamentPage() {
                                 })}>
                                 <Button type="primary" size="small" disabled={busy}>{row.isRevival ? '结算复活场' : '确认整票结算'}</Button>
                             </Popconfirm>}
-                            {canOperateLiveTournament && !row.isRevival && row.status === 'FINISHED' && !row.activeRevival && event?.status === 'PUBLISHED' &&
-                                <Popconfirm title="允许该选手复活？" description="确认后选手可使用原门票重新预约一次完整的两局比赛。"
+                            {canOperateLiveTournament && row.canGrantRevival && event?.status === 'PUBLISHED' &&
+                                <Popconfirm title={row.isRevival ? '允许该选手再次复活？' : '允许该选手复活？'} description="确认后选手可使用原门票重新预约一次完整的两局比赛。"
                                     onConfirm={() => run(async () => {
                                         await operateLiveTournament({ action: 'grant-revival', entryId: row.id });
                                         await refreshEntries();
-                                        message.success('已允许复活，选手可重新预约');
+                                        message.success(row.isRevival ? '已允许再次复活，选手可重新预约' : '已允许复活，选手可重新预约');
                                     })}>
-                                    <Button size="small" type="primary" ghost disabled={busy}>允许复活</Button>
+                                    <Button size="small" type="primary" ghost disabled={busy}>{row.isRevival ? '再次复活' : '允许复活'}</Button>
                                 </Popconfirm>}
                             {canOperateLiveTournament && !row.isRevival && row.activeRevival && <>
                                 <Tag color="purple">复活：{statusLabels[row.activeRevival.status] ?? row.activeRevival.status}</Tag>
